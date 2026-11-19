@@ -1,0 +1,53 @@
+import { Card, EmptyState } from '@/components/ui';
+import type { CustomerRow, Redemption } from '@/lib/contracts';
+import { ago } from '@/lib/format';
+import { redeemAction } from '@/app/panel/caja/actions';
+import { ActionButton } from './ActionButton';
+
+/** "Listos para canjear" y últimos canjes. Ancla #premios. */
+export function RewardsSection({ redeemable, redemptions, stampsRequired, rewardTitle, vocab, staffNames }: {
+  redeemable: CustomerRow[]; redemptions: Redemption[]; stampsRequired: number; rewardTitle: string;
+  vocab: { customer: string; customers: string; reward: string }; staffNames: Record<string, string>;
+}) {
+  return (
+    <section id="premios" aria-labelledby="premios-h" className="scroll-mt-6">
+      <h2 id="premios-h" className="mb-3 font-display text-lg font-semibold text-navy">Listos para canjear</h2>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <h3 className="mb-1 text-sm font-semibold text-navy">{rewardTitle}</h3>
+          <p className="mb-3 text-xs text-muted">{redeemable.length === 1 ? '1 ' + vocab.customer + ' completó' : redeemable.length + ' ' + vocab.customers + ' completaron'} su tarjeta de {stampsRequired} sellos.</p>
+          {redeemable.length === 0 ? (
+            <EmptyState title={'Ningún ' + vocab.reward + ' pendiente'} text={'Cuando un ' + vocab.customer + ' llegue a ' + stampsRequired + ' sellos, aparece aquí para entregarle su ' + vocab.reward + '.'} />
+          ) : (
+            <ul className="divide-y divide-line">
+              {redeemable.map((c) => (
+                <li key={c.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-[15px] font-semibold text-navy">{c.name}</p>
+                    <p className="text-xs text-muted">{c.stamps} de {stampsRequired} sellos</p>
+                  </div>
+                  <ActionButton action={redeemAction} fields={{ customerId: c.id }} label="Canjear" pendingText="Canjeando…" />
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+        <Card>
+          <h3 className="mb-3 text-sm font-semibold text-navy">Últimos canjes</h3>
+          {redemptions.length === 0 ? (
+            <p className="rounded-xl bg-surface px-4 py-6 text-center text-sm text-muted">Todavía no se canjea ningún {vocab.reward}.</p>
+          ) : (
+            <ul className="divide-y divide-line">
+              {redemptions.map((r) => (
+                <li key={r.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                  <span className="min-w-0 truncate font-medium text-navy">{r.customerName}</span>
+                  <span className="shrink-0 text-xs text-muted">{ago(r.at)}{staffNames[r.staffId] ? ' · ' + staffNames[r.staffId] : ''}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
+    </section>
+  );
+}
