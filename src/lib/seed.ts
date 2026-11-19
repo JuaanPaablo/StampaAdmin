@@ -15,6 +15,8 @@ import { getTemplate } from './templates';
  *   cuadran exactamente con los reclamos y canjes registrados.
  */
 
+/** Contraseña común de las cuentas de ejemplo (solo repo en memoria). */
+export const DEMO_PASSWORD = 'Stampa-Demo-2026';
 export const DEMO_PINS = { owner: '1234', manager: '2345', cashier: '1111' } as const;
 export const SEED_BUSINESS_IDS = ['biz_esquina', 'biz_pulso', 'biz_petalo', 'biz_mesa', 'biz_donlucho'] as const;
 
@@ -189,6 +191,7 @@ function buildBusiness(cfg: BizCfg, now: number, out: SeedData): void {
   const staff: SeedStaff[] = cfg.staff.map((s) => ({
     id: `emp_${short}_${s.key}`, businessId: cfg.id, name: s.name, role: s.role, active: true,
     locationId: s.loc !== undefined ? locs[s.loc]?.id : undefined, hasPin: true,
+    email: `${foldText(s.name.split(' ')[0])}@${short}.demo`,
     createdAt: new Date(s.key === 'pedro' ? now - 27 * DAY_MS : bizCreated + rng.int(1, 5) * 3_600_000).toISOString(),
     pin: DEMO_PINS[s.role === 'owner' ? 'owner' : s.role === 'manager' ? 'manager' : 'cashier']
   }));

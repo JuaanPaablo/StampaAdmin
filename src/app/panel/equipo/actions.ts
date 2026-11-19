@@ -88,5 +88,5 @@ export async function resetStaffPin(_prev: StaffFormState, formData: FormData): 
   }
   revalidatePath('/panel/equipo');
   revalidatePath(`/panel/equipo/${id}`);
-  return { ok: true, message: `PIN restablecido. ${target.name} ya puede entrar con el PIN nuevo.`, at: Date.now() };
+  return { ok: true, message: `PIN restablecido. ${target.name} ya puede usar el PIN nuevo para aprobaciones.`, at: Date.now() };
 }

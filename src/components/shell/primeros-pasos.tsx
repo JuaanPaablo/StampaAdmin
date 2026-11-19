@@ -12,7 +12,7 @@ const STEPS = [
 ];
 
 /**
- * Banner "Primeros pasos". Aparece cuando la URL trae ?bienvenida=1 (lo fija /registro al terminar).
+ * Banner "Primeros pasos". Aparece cuando la URL trae ?bienvenida=1 (la fija quien da de alta la cuenta).
  * Usa useSearchParams: renderízalo dentro de <Suspense>. El layout del panel ya lo hace.
  */
 export function PrimerosPasos() {

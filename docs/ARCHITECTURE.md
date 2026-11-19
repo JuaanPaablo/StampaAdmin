@@ -23,7 +23,7 @@ Sin servicios externos en tiempo de ejecución para desarrollo: la app corre con
 | Agente | Es dueño de | No toca |
 |---|---|---|
 | A · Datos y reglas | `src/lib/domain/**`, `src/lib/repo/memory.ts`, `src/lib/repo/supabase.ts`, `supabase/**`, `src/lib/seed.ts` | páginas y componentes |
-| B · Acceso, onboarding y shell | `src/app/panel/layout.tsx`, `src/app/panel/loading.tsx`, `src/app/panel/error.tsx`, `src/app/ingresar/**`, `src/app/registro/**`, `src/app/panel/ajustes/**`, `src/components/shell/**`, `src/lib/auth.ts` | módulos de otros |
+| B · Acceso, onboarding y shell | `src/app/panel/layout.tsx`, `src/app/panel/loading.tsx`, `src/app/panel/error.tsx`, `src/app/ingresar/**`, `src/app/panel/ajustes/**`, `src/components/shell/**`, `src/lib/auth.ts` | módulos de otros |
 | C · Resumen y clientes | `src/app/panel/page.tsx`, `src/app/panel/clientes/**`, `src/components/dashboard/**`, `src/components/customers/**` | |
 | D · Caja y control antifraude | `src/app/panel/caja/**`, `src/app/panel/control/**`, `src/components/register/**`, `src/components/control/**` | |
 | E · Tarjeta y equipo | `src/app/panel/tarjeta/**`, `src/app/panel/equipo/**`, `src/components/card/**`, `src/components/team/**` | |

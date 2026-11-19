@@ -12,7 +12,10 @@ import {
   buildCustomerHistory, buildDashboard, buildStaffReport, deriveAlerts, filterCustomers,
   type AnalyticsInput, type Rejection
 } from '../domain/analytics';
-import { buildSeed } from '../seed';
+import { buildSeed, DEMO_PASSWORD } from '../seed';
+import { normalizeEmail, validateEmail } from '../credentials';
+import { hashPassword, hashPasswordSync, validatePassword, verifyPassword } from '../password';
+import { AttemptLimiter, LOCK_MS, MAX_FAILED_LOGINS } from '../login-throttle';
 import { getTemplate } from '../templates';
 import type { Repo } from './index';
 
@@ -31,7 +34,10 @@ export interface MemoryRepoOptions {
   clock?: () => number;
 }
 
-interface StaffRec extends Staff { pinHash?: string }
+interface StaffRec extends Staff { pinHash?: string; passwordHash?: string; failedLogins?: number; lockedUntil?: number }
+
+/** Un solo hash para todas las cuentas de ejemplo (misma contraseña de demo); se calcula una vez por proceso. */
+let demoPasswordHash: string | undefined;
 
 const hashPin = (pin: string): string => {
   const salt = randomBytes(8).toString('hex');
@@ -46,7 +52,7 @@ const checkPin = (pin: string, stored?: string): boolean => {
 };
 
 const clone = <T>(v: T): T => structuredClone(v);
-const strip = (s: StaffRec): Staff => { const { pinHash: _p, ...rest } = s; return { ...rest, hasPin: !!s.pinHash }; };
+const strip = (s: StaffRec): Staff => { const { pinHash: _p, passwordHash: _h, failedLogins: _f, lockedUntil: _l, ...rest } = s; return { ...rest, hasPin: !!s.pinHash }; };
 const fail = (msg: string): never => { throw new Error(msg); };
 
 export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
@@ -62,12 +68,15 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
   const redemptions: Redemption[] = [];
   const audit: AuditEntry[] = [];
   const rejections: Rejection[] = [];
+  /** Fallos de correos que no existen: bloquean igual que los de cuentas reales para no revelar cuáles existen. */
+  const unknownEmails = new AttemptLimiter(MAX_FAILED_LOGINS, LOCK_MS);
 
   if (opts.seed !== false) {
     const seed = buildSeed(clock());
     businesses.push(...seed.businesses);
     locations.push(...seed.locations);
-    for (const s of seed.staff) { const { pin, ...rest } = s; staff.push({ ...rest, pinHash: hashPin(pin) }); }
+    demoPasswordHash ??= hashPasswordSync(DEMO_PASSWORD);
+    for (const s of seed.staff) { const { pin, ...rest } = s; staff.push({ ...rest, pinHash: hashPin(pin), passwordHash: demoPasswordHash }); }
     programs.push(...seed.programs);
     customers.push(...seed.customers);
     codes.push(...seed.codes);
@@ -199,6 +208,46 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
     async verifyStaffPin(businessId, staffId, pin) {
       const s = staff.find((x) => x.id === staffId && x.businessId === businessId);
       return !!s && s.active && /^\d{4}$/.test(pin ?? '') && checkPin(pin, s.pinHash);
+    },
+
+    /* ---------- Acceso ---------- */
+    async verifyCredentials(rawEmail, password) {
+      const email = normalizeEmail(rawEmail);
+      const now = clock();
+      const rec = email ? staff.find((s) => s.email === email) : undefined;
+      if (!rec) {
+        await verifyPassword(password, null); // iguala tiempos
+        if (!unknownEmails.lockedFor(email, now)) unknownEmails.fail(email, now);
+        return null;
+      }
+      const locked = !!rec.lockedUntil && rec.lockedUntil > now;
+      const ok = await verifyPassword(password, rec.passwordHash);
+      if (locked) return null;
+      if (!ok) {
+        rec.failedLogins = (rec.failedLogins ?? 0) + 1;
+        if (rec.failedLogins >= MAX_FAILED_LOGINS) { rec.lockedUntil = now + LOCK_MS; rec.failedLogins = 0; }
+        return null;
+      }
+      rec.failedLogins = 0; rec.lockedUntil = undefined;
+      if (!rec.active) return null;
+      return { businessId: rec.businessId, staffId: rec.id };
+    },
+
+    async isLoginLocked(rawEmail) {
+      const email = normalizeEmail(rawEmail);
+      const rec = email ? staff.find((s) => s.email === email) : undefined;
+      return rec ? !!rec.lockedUntil && rec.lockedUntil > clock() : unknownEmails.lockedFor(email, clock()) > 0;
+    },
+
+    async setStaffCredentials(staffId, rawEmail, password) {
+      const email = normalizeEmail(rawEmail);
+      const err = validateEmail(email) ?? validatePassword(password);
+      if (err) fail(err);
+      const rec = staff.find((s) => s.id === staffId) ?? fail('No encontramos a esa persona del equipo.');
+      if (staff.some((s) => s.id !== staffId && s.email === email)) fail('Ese correo ya está en uso.');
+      rec.passwordHash = await hashPassword(password);
+      rec.email = email; rec.failedLogins = 0; rec.lockedUntil = undefined;
+      log(rec.businessId, undefined, 'staff.credentials', `Se configuró el acceso por correo de ${rec.name}.`);
     },
 
     /* ---------- Programa ---------- */

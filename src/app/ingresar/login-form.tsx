@@ -1,114 +1,116 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useId, useRef, useState, useTransition, type FormEvent } from 'react';
-import { Field, Select, btnClass } from '@/components/ui';
-import { signInAction } from './actions';
+import { useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useFormState, useFormStatus } from 'react-dom';
+import { signIn, type LoginState } from '@/lib/auth';
 
-export interface LoginBusiness {
-  id: string; name: string; typeLabel: string;
-  staff: { id: string; name: string; role: string; pin?: string }[];
+const label = 'text-sm font-semibold text-navy';
+const field = 'h-12 w-full rounded-xl border-[1.5px] bg-white px-3.5 text-base text-navy placeholder:text-[#5A6F86] focus:border-navy focus:outline-none focus:ring-4 focus:ring-sun/50';
+
+function Submit() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      aria-busy={pending}
+      className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-sun text-[15px] font-semibold text-navy transition hover:bg-sun-2 active:scale-[.99] disabled:cursor-wait disabled:opacity-70"
+    >
+      {pending && <span className="h-4 w-4 animate-spin rounded-full border-2 border-navy/30 border-t-navy motion-reduce:animate-none" aria-hidden="true" />}
+      {pending ? 'Ingresando…' : 'Iniciar sesión'}
+    </button>
+  );
 }
 
-const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
-const keyCls = 'h-14 rounded-xl bg-surface text-xl font-semibold text-navy ring-1 ring-inset ring-[#C9D6E3] transition hover:bg-[#E6EDF5] active:scale-95';
+export function LoginForm({ next }: { next?: string }) {
+  const [state, action] = useFormState<LoginState, FormData>(signIn, {});
+  const [show, setShow] = useState(false);
+  const [caps, setCaps] = useState(false);
+  const [help, setHelp] = useState(false);
+  const [local, setLocal] = useState<{ email?: string; password?: string } | null>(null);
 
-export function LoginForm({ businesses }: { businesses: LoginBusiness[] }) {
-  const router = useRouter();
-  const uid = useId();
-  const [businessId, setBusinessId] = useState(businesses[0]?.id ?? '');
-  const [staffId, setStaffId] = useState('');
-  const [pin, setPin] = useState('');
-  const [error, setError] = useState<{ field?: 'business' | 'staff' | 'pin'; text: string } | null>(null);
-  const [pending, start] = useTransition();
-  const pinRef = useRef<HTMLInputElement>(null);
-
-  const business = businesses.find((b) => b.id === businessId);
-  const demoRows = (business?.staff ?? []).filter((s) => s.pin);
-
-  function press(d: string) { setError(null); setPin((p) => (p.length < 4 ? p + d : p)); }
-  function erase() { setError(null); setPin((p) => p.slice(0, -1)); }
-
-  function submit(e: FormEvent) {
-    e.preventDefault();
-    if (pending) return;
-    if (!staffId) { setError({ field: 'staff', text: 'Elige quién eres.' }); return; }
-    if (pin.length !== 4) { setError({ field: 'pin', text: 'El PIN tiene 4 dígitos.' }); pinRef.current?.focus(); return; }
-    setError(null);
-    start(async () => {
-      const r = await signInAction({ businessId, staffId, pin });
-      if (r.ok) { router.push(r.redirectTo); router.refresh(); return; }
-      setError({ field: r.field, text: r.error });
-      if (r.field === 'pin') { setPin(''); pinRef.current?.focus(); }
-    });
+  function validate(e: FormEvent<HTMLFormElement>) {
+    const fd = new FormData(e.currentTarget);
+    const errs: { email?: string; password?: string } = {};
+    const email = String(fd.get('email') ?? '').trim();
+    if (!email) errs.email = 'Escribe tu correo electrónico.';
+    else if (!/^\S+@\S+\.\S+$/.test(email)) errs.email = 'Revisa el correo: parece incompleto.';
+    if (!String(fd.get('password') ?? '')) errs.password = 'Escribe tu contraseña.';
+    if (errs.email || errs.password) {
+      e.preventDefault();
+      setLocal(errs);
+      (e.currentTarget.elements.namedItem(errs.email ? 'email' : 'password') as HTMLInputElement | null)?.focus();
+    } else setLocal(null);
   }
 
-  const errFor = (f: 'business' | 'staff' | 'pin') => (error?.field === f ? error.text : undefined);
-  const generic = error && !error.field ? error.text : undefined;
+  const keyCaps = (e: KeyboardEvent<HTMLInputElement>) => setCaps(e.getModifierState('CapsLock'));
+  const serverError = !local ? state.error : undefined;
 
   return (
-    <form onSubmit={submit} noValidate className="flex flex-col gap-5">
-      <Field label="Negocio" htmlFor={uid + 'biz'} error={errFor('business')}>
-        <Select id={uid + 'biz'} value={businessId} onChange={(e) => { setBusinessId(e.target.value); setStaffId(''); setPin(''); setError(null); }}>
-          {businesses.map((b) => <option key={b.id} value={b.id}>{b.name} · {b.typeLabel}</option>)}
-        </Select>
-      </Field>
+    <form action={action} onSubmit={validate} noValidate className="flex flex-col gap-5">
+      {next && <input type="hidden" name="next" value={next} />}
 
-      <Field label="¿Quién eres?" htmlFor={uid + 'staff'} error={errFor('staff')}>
-        <Select id={uid + 'staff'} value={staffId} onChange={(e) => { setStaffId(e.target.value); setError(null); }} aria-invalid={error?.field === 'staff'}>
-          <option value="">Elige tu nombre</option>
-          {(business?.staff ?? []).map((s) => <option key={s.id} value={s.id}>{s.name} · {s.role}</option>)}
-        </Select>
-      </Field>
-
-      <div className="flex flex-col gap-2">
-        <label htmlFor={uid + 'pin'} className="text-xs font-semibold tracking-wide text-muted">PIN de 4 dígitos</label>
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="email" className={label}>Correo electrónico</label>
         <input
-          ref={pinRef}
-          id={uid + 'pin'}
-          type="password"
-          inputMode="numeric"
-          autoComplete="off"
-          maxLength={4}
-          value={pin}
-          onChange={(e) => { setError(null); setPin(e.target.value.replace(/\D/g, '').slice(0, 4)); }}
-          aria-invalid={error?.field === 'pin'}
-          aria-describedby={uid + 'pin-msg'}
-          className="h-12 w-full rounded-xl border-[1.5px] border-[#C9D6E3] bg-white px-4 text-center font-mono text-2xl tracking-[0.6em] text-navy focus:border-navy focus:outline-none focus:ring-4 focus:ring-sun/50"
+          id="email" name="email" type="email" autoComplete="username" autoFocus required
+          defaultValue={state.email ?? ''} key={state.email ?? 'e'}
+          placeholder="nombre@tunegocio.com" inputMode="email" autoCapitalize="none" spellCheck={false}
+          aria-invalid={!!local?.email} aria-describedby={local?.email ? 'email-err' : undefined}
+          className={field + (local?.email ? ' border-bad' : ' border-[#B7C6D6]')}
+          onChange={() => local && setLocal(null)}
         />
-        <div className="flex justify-center gap-2" aria-hidden="true">
-          {[0, 1, 2, 3].map((i) => <span key={i} className={'h-2.5 w-2.5 rounded-full ' + (i < pin.length ? 'bg-navy' : 'bg-[#C9D6E3]')} />)}
-        </div>
-        <p id={uid + 'pin-msg'} className="min-h-[1.25rem] text-center text-xs text-bad" role="alert">{errFor('pin')}</p>
-
-        <div role="group" aria-label="Teclado numérico" className="mx-auto grid w-full max-w-[280px] grid-cols-3 gap-2">
-          {KEYS.map((k) => <button key={k} type="button" onClick={() => press(k)} className={keyCls} aria-label={k}>{k}</button>)}
-          <button type="button" onClick={() => { setPin(''); setError(null); }} className={keyCls + ' text-sm'} aria-label="Borrar todo">Limpiar</button>
-          <button type="button" onClick={() => press('0')} className={keyCls} aria-label="0">0</button>
-          <button type="button" onClick={erase} className={keyCls + ' text-sm'} aria-label="Borrar el último dígito">Borrar</button>
-        </div>
+        <p id="email-err" role="alert" className="min-h-[1.1rem] text-[13px] text-bad">{local?.email}</p>
       </div>
 
-      {generic && <p role="alert" className="rounded-xl bg-[#FBE0DE] px-3 py-2 text-sm text-[#9B2A22]">{generic}</p>}
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-baseline justify-between gap-3">
+          <label htmlFor="password" className={label}>Contraseña</label>
+          <button type="button" onClick={() => setHelp((v) => !v)} aria-expanded={help} aria-controls="ayuda-clave" className="-my-3 rounded px-1 py-3 text-[13px] font-medium text-navy underline underline-offset-2">
+            ¿Olvidaste tu contraseña?
+          </button>
+        </div>
+        <div className="relative">
+          <input
+            id="password" name="password" type={show ? 'text' : 'password'} autoComplete="current-password" required
+            aria-invalid={!!local?.password} aria-describedby={local?.password ? 'pw-err' : caps ? 'caps' : undefined}
+            className={field + ' pr-24' + (local?.password ? ' border-bad' : ' border-[#B7C6D6]')}
+            onKeyUp={keyCaps} onKeyDown={keyCaps} onBlur={() => setCaps(false)}
+            onChange={() => local && setLocal(null)}
+          />
+          <button
+            type="button" onClick={() => setShow((v) => !v)} aria-pressed={show} aria-controls="password"
+            className="absolute right-1.5 top-1/2 h-10 -translate-y-1/2 rounded-lg px-3 text-[13px] font-semibold text-navy hover:bg-surface"
+          >
+            {show ? 'Ocultar' : 'Mostrar'}
+            <span className="sr-only"> contraseña</span>
+          </button>
+        </div>
+        <p id="pw-err" role="alert" className="min-h-[1.1rem] text-[13px] text-bad">{local?.password}</p>
+        <p id="caps" className="min-h-[1.1rem] text-[13px] text-[#7A5A00]" aria-live="polite">{caps ? 'Bloq Mayús está activado.' : ''}</p>
+        {help && (
+          <p id="ayuda-clave" className="rounded-xl bg-surface px-3.5 py-3 text-sm leading-snug text-navy">
+            Escríbenos a <a href="mailto:soporte@stampa.app" className="rounded font-semibold underline underline-offset-2">soporte@stampa.app</a> y restablecemos tu acceso.
+          </p>
+        )}
+      </div>
 
-      <button type="submit" disabled={pending} className={btnClass('primary') + ' w-full'}>
-        {pending ? 'Verificando…' : 'Entrar'}
-      </button>
+      <label className="flex min-h-[44px] cursor-pointer items-center gap-3 text-sm text-navy">
+        <input type="checkbox" name="remember" className="h-5 w-5 rounded border-[#8DA2B8] accent-[#001D3D]" />
+        Mantener sesión iniciada
+      </label>
 
-      {demoRows.length > 0 && (
-        <details className="rounded-xl bg-surface px-4 py-3 text-sm">
-          <summary className="cursor-pointer font-semibold text-navy">Credenciales de prueba</summary>
-          <p className="mt-2 text-xs text-muted">Solo para negocios de demostración. Los negocios que crees tú no aparecen aquí.</p>
-          <ul className="mt-2 divide-y divide-line">
-            {demoRows.map((s) => (
-              <li key={s.id} className="flex items-center justify-between gap-3 py-2">
-                <span className="min-w-0"><span className="block truncate font-medium text-navy">{s.name}</span><span className="text-xs text-muted">{s.role}</span></span>
-                <span className="font-mono text-base font-semibold text-navy">{s.pin}</span>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
+      {/* Reserva de altura fija: el mensaje no mueve el formulario */}
+      <div className="min-h-[3.25rem]" aria-live="polite">
+        {serverError && (
+          <p role="alert" className="flex items-start gap-2 rounded-xl bg-[#FBE0DE] px-3.5 py-3 text-sm leading-snug text-[#9B2A22]">
+            <svg viewBox="0 0 20 20" className="mt-0.5 h-4 w-4 shrink-0" fill="currentColor" aria-hidden="true"><path d="M10 1.5a8.5 8.5 0 100 17 8.5 8.5 0 000-17zM9.2 5.5h1.6v5.6H9.2V5.5zm0 7.3h1.6v1.7H9.2v-1.7z" /></svg>
+            {serverError}
+          </p>
+        )}
+      </div>
+
+      <Submit />
     </form>
   );
 }

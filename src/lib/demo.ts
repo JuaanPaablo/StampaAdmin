@@ -1,6 +1,6 @@
 /**
- * Modo demostración: conmutador de negocio/persona sin PIN, credenciales de prueba en /ingresar, panel
- * "Probar en la demo" en Caja y acceso sin sesión al negocio demo.
+ * Herramientas de demostración del panel: solo la sección "Probar en la demo" de cada código (simular escaneos de clientes).
+ * NO afecta al acceso: iniciar sesión siempre requiere correo y contraseña.
  *
  * - Desarrollo (`npm run dev`): activo por defecto.
  * - Producción (`next start`): apagado por defecto. Actívalo con STAMPA_DEMO=on solo en despliegues de demostración.

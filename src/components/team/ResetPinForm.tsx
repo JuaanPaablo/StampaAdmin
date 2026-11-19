@@ -19,7 +19,7 @@ export function ResetPinForm({ staffId, name, hasPin }: { staffId: string; name:
       <div>
         <h2 className="font-display text-lg font-semibold text-navy">Restablecer PIN</h2>
         <p className="mt-1 text-sm text-muted">
-          {hasPin ? `Define un PIN nuevo para ${name}. El anterior deja de funcionar al instante.` : `${name} aún no tiene PIN. Defínelo para que pueda entrar.`}
+          {hasPin ? `Define un PIN nuevo para ${name}. El anterior deja de funcionar al instante.` : `${name} aún no tiene PIN. Defínelo para que pueda aprobar cupos.`}
         </p>
       </div>
       <form ref={ref} action={formAction} className="space-y-4" noValidate autoComplete="off">

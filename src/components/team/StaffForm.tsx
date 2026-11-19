@@ -53,7 +53,7 @@ export function StaffForm({ staff, locations, vocab, soleOwner }: {
 
         {isNew ? (
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField id="pin" label="PIN de 4 dígitos" error={err.pin} help="Lo usará para entrar y dar sellos. Evita fechas o números seguidos.">
+            <FormField id="pin" label="PIN de 4 dígitos" error={err.pin} help="Lo usará para aprobar acciones dentro del panel (no sirve para entrar). Evita fechas o números seguidos.">
               <Input id="pin" name="pin" type="password" inputMode="numeric" pattern="\d{4}" maxLength={4} autoComplete="new-password" required
                 aria-invalid={!!err.pin} aria-describedby={describedBy('pin', 'x', err.pin)} />
             </FormField>

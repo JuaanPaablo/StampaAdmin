@@ -27,7 +27,19 @@ export interface Repo {
   listStaff(businessId: string): Promise<Staff[]>;
   /** pin: si viene, se reemplaza. Debe tener 4 dígitos. */
   upsertStaff(businessId: string, s: Partial<Staff> & { name: string; role: Role }, pin?: string, actorId?: string): Promise<Staff>;
+  /** El PIN ya NO es credencial de entrada: solo se usa para aprobaciones dentro del panel. */
   verifyStaffPin(businessId: string, staffId: string, pin: string): Promise<boolean>;
+
+  /* Acceso (correo + contraseña) */
+  /**
+   * Valida correo (minúsculas, sin espacios) y contraseña de una persona ACTIVA. Siempre ejecuta una verificación de hash,
+   * exista o no el correo. Cuenta los fallos: 5 seguidos bloquean la cuenta 15 minutos. Devuelve null ante cualquier fallo.
+   */
+  verifyCredentials(email: string, password: string): Promise<{ businessId: string; staffId: string } | null>;
+  /** true si el correo está bloqueado por intentos fallidos (igual para correos que no existen). */
+  isLoginLocked(email: string): Promise<boolean>;
+  /** Provisión por el equipo de Stampa: fija correo y contraseña (mínimo 10 caracteres) y limpia bloqueos. */
+  setStaffCredentials(staffId: string, email: string, password: string): Promise<void>;
 
   /* Programa y tarjeta */
   getProgram(businessId: string): Promise<Program>;

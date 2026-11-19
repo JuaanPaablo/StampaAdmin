@@ -30,7 +30,7 @@ export default async function EquipoPage({ searchParams }: { searchParams?: { ok
         actions={<Link href="/panel/equipo/nuevo" className={btnClass('primary')}>Agregar persona</Link>}
       />
       {sp.ok === 'creado' && (
-        <p role="status" className="mb-5 rounded-xl bg-[#DDF3E8] px-4 py-3 text-sm font-medium text-[#12683F]">Persona agregada. Ya puede entrar con su PIN.</p>
+        <p role="status" className="mb-5 rounded-xl bg-[#DDF3E8] px-4 py-3 text-sm font-medium text-[#12683F]">Persona agregada. Para que pueda entrar al panel, el equipo de Stampa debe crearle su cuenta de acceso.</p>
       )}
 
       <div className="space-y-6">

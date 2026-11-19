@@ -1,8 +1,7 @@
-import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import { isDemoMode } from './demo';
-import { DEMO_BUSINESS_ID, type Business, type Program, type Staff } from './contracts';
+import type { Business, Program, Staff } from './contracts';
 import { getRepo, type Repo } from './repo';
+import { readSession } from './session';
 import { getTemplate, type BusinessTemplate } from './templates';
 
 export interface PanelContext {
@@ -10,28 +9,29 @@ export interface PanelContext {
   business: Business;
   program: Program;
   template: BusinessTemplate;
-  /** Persona que opera el panel. En modo demo es el dueño del negocio. */
+  /** Persona que opera el panel (la de la sesión). */
   staff: Staff;
 }
 
 /**
- * Contexto de cada página del panel (solo en servidor). Lee las cookies 'stampa_biz' y 'stampa_staff'.
- * Sin cookies usa el negocio demo. El agente B puede endurecer esta función (login real) SIN cambiar su firma.
+ * Contexto de la sesión actual, o null si no hay sesión válida (cookie firmada y vigente) o la persona ya no existe,
+ * fue desactivada o no pertenece al negocio de la sesión. Úsala (y no readSession) para decidir si alguien "ya entró".
  */
-export async function getContext(): Promise<PanelContext> {
+export async function getSessionContext(): Promise<PanelContext | null> {
+  const session = await readSession();
+  if (!session) return null;
   const repo = getRepo();
-  const jar = await Promise.resolve(cookies());
-  const demo = isDemoMode();
-  const bizCookie = jar.get('stampa_biz')?.value;
-  const staffId = jar.get('stampa_staff')?.value;
-  // Fuera del modo demo no hay sesión implícita: sin cookies se pide ingresar.
-  if (!bizCookie && !demo) redirect('/ingresar');
-  const business = (await repo.getBusiness(bizCookie ?? DEMO_BUSINESS_ID)) ?? (demo ? (await repo.listBusinesses())[0] : null);
-  if (!business) redirect('/ingresar');
+  const business = await repo.getBusiness(session.businessId);
+  if (!business) return null;
   const [program, staffList] = await Promise.all([repo.getProgram(business.id), repo.listStaff(business.id)]);
-  // Una persona que no pertenece a este negocio (o fue desactivada) invalida la sesión; nunca se degrada a dueño.
-  const found = staffList.find((s) => s.id === staffId && s.active);
-  if (!found && (staffId || !demo)) redirect('/ingresar');
-  const staff = found ?? staffList.find((s) => s.role === 'owner') ?? staffList[0];
+  const staff = staffList.find((s) => s.id === session.staffId && s.active);
+  if (!staff) return null;
   return { repo, business, program, template: getTemplate(business.type), staff };
+}
+
+/** Contexto de cada página del panel (solo servidor). Sin sesión válida redirige a /ingresar, también en desarrollo. */
+export async function getContext(): Promise<PanelContext> {
+  const ctx = await getSessionContext();
+  if (!ctx) redirect('/ingresar');
+  return ctx;
 }

@@ -16,24 +16,47 @@ npm run build && npm start
 
 El repositorio en memoria vive en `globalThis`, así que sobrevive entre rutas y recargas, pero se reinicia al reiniciar el proceso.
 
-Modo demostración (`STAMPA_DEMO`): conmutador de negocio y persona sin PIN, credenciales de prueba en `/ingresar`, panel "Probar en la demo" en cada código y acceso sin sesión al negocio demo. Está activo en `npm run dev` y apagado en `npm start`; para una demo desplegada usa `STAMPA_DEMO=on`. Con el modo apagado, sin sesión válida todo redirige a `/ingresar`.
+Acceso: correo + contraseña (ver "Autenticación"). Con el repo en memoria usa las cuentas de la sección "Cuentas de demo". `STAMPA_DEMO` solo activa las herramientas "Probar en la demo" de cada código (simular escaneos); activo en `npm run dev`, apagado en `npm start`, `STAMPA_DEMO=on` para una demo desplegada. No afecta al inicio de sesión.
 
-### Credenciales de demostración
+## Autenticación
 
-| Rol | PIN |
-|---|---|
-| Dueño | 1234 |
-| Gerente | 2345 |
-| Cajeros | 1111 |
+- Sin registro público: las cuentas las crea el equipo de Stampa (ver "Crear cuentas"). El script crea personas en negocios que ya existen; los negocios nuevos se crean en la base (por ejemplo con la función `create_business`).
+- Sesión: cookie `stampa_session` (httpOnly, Secure en producción, SameSite=Lax) firmada con HMAC-SHA256 y `AUTH_SECRET`. Dura 12 h (30 días con "Recordarme"). En producción `AUTH_SECRET` es obligatorio (mínimo 32 caracteres; `openssl rand -base64 32`); sin él la app falla con un error claro. Sin sesión válida todo `/panel` redirige a `/ingresar`, también en `next dev`.
+- Contraseñas: scrypt con sal aleatoria (`scrypt$N$r$p$salt$hash`), mínimo 10 caracteres. El hash nunca sale del repo.
+- Anti fuerza bruta: 5 fallos seguidos bloquean la cuenta 15 minutos (en Supabase en las columnas de `staff`; los correos inexistentes se bloquean igual para no revelar cuáles existen) y un límite por IP en memoria del proceso (best effort).
+- El PIN de 4 dígitos ya no sirve para entrar: solo aprueba acciones dentro del panel (más cupos de los permitidos).
+- Una persona agregada desde `/panel/equipo` no puede entrar hasta que el equipo de Stampa le cree su cuenta.
 
-Negocios: `biz_esquina` (cafetería, predeterminado), `biz_pulso` (gimnasio, sin monto), `biz_petalo` (floristería), `biz_mesa` (restaurante), `biz_donlucho` (barbería). Los nombres de cada equipo salen en `/ingresar`. Cookies de sesión: `stampa_biz` y `stampa_staff`.
+### Cuentas de demo
+
+Solo aplican con el repo en memoria (`STAMPA_REPO` sin definir o `memory`); no existen en Supabase. Contraseña común: `Stampa-Demo-2026`. Correo: `<nombre>@<negocio>.demo`. PIN de aprobaciones: dueño 1234, gerente 2345, cajeros 1111.
+
+| Negocio | Dueño | Gerente | Cajeros |
+|---|---|---|---|
+| Café La Esquina (`biz_esquina`) | andrea@esquina.demo | ricardo@esquina.demo | pedro@esquina.demo, marco@esquina.demo, lucia@esquina.demo |
+| Gimnasio Pulso (`biz_pulso`) | fernando@pulso.demo | gabriela@pulso.demo | kevin@pulso.demo, sofia@pulso.demo |
+| Floristería Pétalo (`biz_petalo`) | marcela@petalo.demo | paola@petalo.demo | daniela@petalo.demo, joselyn@petalo.demo |
+| La Mesa de Ana (`biz_mesa`) | ana@mesa.demo | luis@mesa.demo | carla@mesa.demo, jorge@mesa.demo |
+| Barbería Don Lucho (`biz_donlucho`) | luis@donlucho.demo | byron@donlucho.demo | wilson@donlucho.demo, cristian@donlucho.demo |
+
+### Crear cuentas
+
+Requiere `STAMPA_REPO=supabase`, `NEXT_PUBLIC_SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` (en el entorno o en `.env.local`):
+
+```bash
+npm run account:create -- --business biz_esquina --name "Andrea Zambrano" --role owner --email andrea@cafe.com
+# --business: id o slug · --role: owner | manager | cashier
+# --password "..." (opcional, mínimo 10): si falta, genera una aleatoria y la imprime UNA sola vez
+# --staff emp_xxx : en lugar de --name/--role, pone credenciales a una persona que ya existe (también para restablecer la contraseña)
+```
+
+Comparte la contraseña por un canal seguro. La migración `0003_auth.sql` debe estar aplicada antes.
 
 ## Mapa de rutas
 
 | Ruta | Qué hace | Roles |
 |---|---|---|
-| `/ingresar` | Acceso por negocio, persona y PIN de 4 dígitos | público |
-| `/registro` | Alta de negocio en 3 pasos (tipo, datos, vista previa) | público |
+| `/ingresar` | Inicio de sesión con correo y contraseña (las cuentas las crea el equipo de Stampa; `/registro` redirige aquí) | público |
 | `/panel` | Resumen: KPI, gráficos, mejores clientes, cumpleaños, listos para canjear, alertas | dueño, gerente |
 | `/panel/caja` | Crear código de sello (ticket, monto, cupos), últimos códigos, canjes (`#premios`) | todos |
 | `/panel/caja/[id]` | Pantalla en vivo del código: QR, cupos, quién reclamó, anular sello, cancelar, panel de demo | todos (anular: dueño, gerente) |
@@ -56,15 +79,16 @@ Los permisos se definen en `src/lib/nav.ts` y se aplican en servidor con `requir
 - `src/lib/repo/`: interfaz `Repo`, implementación en memoria y Supabase. Todo acceso a datos pasa por `getRepo()`.
 - `src/lib/context.ts`: `getContext()` devuelve negocio, programa, plantilla y persona activa.
 - `src/lib/templates.ts`: vocabulario y valores iniciales por tipo de negocio.
-- `src/lib/demo.ts`: `isDemoMode()`.
+- `src/lib/auth.ts`, `auth-actions.ts`, `session.ts`, `session-token.ts`, `password.ts`: acceso, sesión firmada y contraseñas.
+- `src/lib/demo.ts`: `isDemoMode()` (solo herramientas de demostración).
 - `docs/ARCHITECTURE.md`: capas y reglas de negocio.
 
 ## Cambiar a Supabase
 
-1. Crea el proyecto y aplica `supabase/migrations/0001_schema.sql` y `0002_functions.sql` en orden (`supabase db push`, o el editor SQL). `supabase/seed.sql` es opcional. Detalles en `supabase/README.md`.
-2. Define variables de servidor (ver `.env.example`): `STAMPA_REPO=supabase`, `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`. La service role salta RLS: nunca al navegador.
+1. Crea el proyecto y aplica `supabase/migrations/0001_schema.sql`, `0002_functions.sql` y `0003_auth.sql` en orden (`supabase db push`, o el editor SQL). `supabase/seed.sql` es opcional. Detalles en `supabase/README.md`.
+2. Define variables de servidor (ver `.env.example`): `STAMPA_REPO=supabase`, `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `AUTH_SECRET`. La service role salta RLS: nunca al navegador.
 3. `getRepo()` ya elige la implementación según `STAMPA_REPO`.
-4. Reemplaza la sesión de cookies por Supabase Auth (ver "Falta para producción") y deja `STAMPA_DEMO` apagado.
+4. Crea las cuentas con `npm run account:create` y deja `STAMPA_DEMO` apagado.
 
 ## Agregar un tipo de negocio
 
@@ -75,8 +99,9 @@ Los permisos se definen en `src/lib/nav.ts` y se aplican en servidor con `requir
 
 ## Falta para producción
 
-- Autenticación real con Supabase Auth (hoy la sesión son dos cookies sin firma) y sesión por usuario.
-- Límite de intentos de PIN persistente: el actual vive en memoria del proceso y se pierde al reiniciar o con varias instancias.
+- Recuperación y cambio de contraseña por la propia persona (hoy lo hace el equipo de Stampa con el script), y revocación de sesiones abiertas (la cookie firmada solo vence por tiempo o al desactivar a la persona).
+- Límites persistentes: el límite por IP y el de correos inexistentes viven en memoria del proceso; el bloqueo por cuenta en Supabase sí es persistente.
+- Límite de intentos del PIN de aprobaciones.
 - Pruebas del repositorio de Supabase (hoy solo el repo en memoria tiene pruebas) y de las funciones SQL.
 - Escáner del cliente y página pública de alta `/u/<slug>`: el QR del póster y del código apuntan a `stampa.example`, que es un marcador.
 - Integración con Apple Wallet y Google Wallet (la vista previa es ilustrativa).
@@ -87,7 +112,6 @@ Los permisos se definen en `src/lib/nav.ts` y se aplican en servidor con `requir
 
 ## Limitaciones conocidas
 
-- La sesión de demostración no está firmada: quien edite las cookies `stampa_biz` y `stampa_staff` puede elegir un negocio y una persona. Hay una defensa parcial: si la persona no pertenece al negocio de la cookie, o está desactivada, la sesión se invalida y se redirige a `/ingresar`. Es una limitación documentada, no un diseño final.
 - Los datos en memoria se pierden al reiniciar el servidor.
 - Los textos generados por el sistema (alertas, auditoría) se adaptan al vocabulario solo en la palabra "ticket"; el resto está redactado de forma neutra.
 - `next build` necesita red para Google Fonts; sin red muestra una advertencia y usa fuentes del sistema.

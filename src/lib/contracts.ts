@@ -42,7 +42,9 @@ export interface Staff {
   role: Role;
   active: boolean;
   locationId?: string;
-  hasPin: boolean;          // el PIN nunca sale del repo
+  /** Correo de acceso al panel (minúsculas). El hash de la contraseña nunca sale del repo. */
+  email?: string;
+  hasPin: boolean;          // el PIN nunca sale del repo (solo sirve para aprobaciones dentro del panel)
   createdAt: string;
 }
 

@@ -11,6 +11,9 @@ import {
   type AnalyticsInput, type Rejection
 } from '../domain/analytics';
 import { getTemplate } from '../templates';
+import { normalizeEmail, validateEmail } from '../credentials';
+import { hashPassword, validatePassword, verifyPassword } from '../password';
+import { AttemptLimiter, LOCK_MS, MAX_FAILED_LOGINS } from '../login-throttle';
 import type { Repo } from './index';
 
 /**
@@ -78,7 +81,7 @@ export function createSupabaseRepo(): Repo {
   const toLocation = (r: Row): Location => ({ id: r.id, businessId: r.business_id, name: r.name, address: nn(r.address), active: r.active });
   const toStaff = (r: Row): Staff => ({
     id: r.id, businessId: r.business_id, name: r.name, role: r.role, active: r.active, locationId: nn(r.location_id),
-    hasPin: !!r.has_pin, createdAt: iso(r.created_at)!
+    email: nn(r.email), hasPin: !!r.has_pin, createdAt: iso(r.created_at)!
   });
   const toProgram = (r: Row): Program => ({
     businessId: r.business_id, name: r.name, stampsRequired: r.stamps_required, rewardTitle: r.reward_title,
@@ -126,7 +129,7 @@ export function createSupabaseRepo(): Repo {
     return toProgram(row);
   };
   const listStaffRows = async (businessId: string): Promise<Staff[]> =>
-    (must(await db.from('staff').select('id,business_id,name,role,active,location_id,has_pin,created_at').eq('business_id', businessId).order('created_at'), 'Equipo') as Row[]).map(toStaff);
+    (must(await db.from('staff').select('id,business_id,name,role,active,location_id,email,has_pin,created_at').eq('business_id', businessId).order('created_at'), 'Equipo') as Row[]).map(toStaff);
   const getCode = async (businessId: string, id: string): Promise<StampCode | null> => {
     const row = must(await db.from('stamp_codes').select(CODE_SELECT).eq('business_id', businessId).eq('id', id).maybeSingle(), 'Código');
     return row ? toCode(row) : null;
@@ -152,6 +155,16 @@ export function createSupabaseRepo(): Repo {
       business, now: new Date(now), offsetMin: tzOffsetMinutes(business.timezone, now), customers, codes, redemptions,
       staff: staff.map((s) => ({ id: s.id, name: s.name, active: s.active, role: s.role }))
     };
+  }
+
+  /** Fallos de correos que no existen (por proceso): bloquean igual que una cuenta real para no revelar cuáles existen. */
+  const unknownEmails = new AttemptLimiter(MAX_FAILED_LOGINS, LOCK_MS);
+
+  async function authLookup(email: string): Promise<Row | null> {
+    const { data, error } = await db.rpc('auth_lookup', { p_email: email });
+    if (error) throw new Error(error.message);
+    const row = Array.isArray(data) ? data[0] : data;
+    return row ?? null;
   }
 
   /* ---------- Implementación ---------- */
@@ -229,6 +242,43 @@ export function createSupabaseRepo(): Repo {
       const { data, error } = await db.rpc('verify_staff_pin', { p_business_id: businessId, p_staff_id: staffId, p_pin: pin });
       if (error) throw new Error(error.message);
       return data === true;
+    },
+
+    async verifyCredentials(rawEmail, password) {
+      const email = normalizeEmail(rawEmail);
+      const row = email ? await authLookup(email) : null;
+      if (!row) {
+        await verifyPassword(password, null); // iguala tiempos
+        if (!unknownEmails.lockedFor(email)) unknownEmails.fail(email);
+        return null;
+      }
+      const locked = !!row.locked_until && Date.parse(row.locked_until) > Date.now();
+      const ok = await verifyPassword(password, row.password_hash);
+      if (locked) return null;
+      if (!ok) { await rpc('auth_record_failure', { p_staff_id: row.id }); return null; }
+      if (!row.active) return null;
+      await rpc('auth_record_success', { p_staff_id: row.id });
+      return { businessId: row.business_id as string, staffId: row.id as string };
+    },
+
+    async isLoginLocked(rawEmail) {
+      const email = normalizeEmail(rawEmail);
+      const row = email ? await authLookup(email) : null;
+      if (!row) return unknownEmails.lockedFor(email) > 0;
+      return !!row.locked_until && Date.parse(row.locked_until) > Date.now();
+    },
+
+    async setStaffCredentials(staffId, rawEmail, password) {
+      const email = normalizeEmail(rawEmail);
+      const err = validateEmail(email) ?? validatePassword(password);
+      if (err) throw new Error(err);
+      const hash = await hashPassword(password);
+      const { data, error } = await db.from('staff')
+        .update({ email, password_hash: hash, failed_logins: 0, locked_until: null }).eq('id', staffId).select('id,business_id,name');
+      if (error) throw new Error(error.code === '23505' ? 'Ese correo ya está en uso.' : `Equipo: ${error.message}`);
+      const row = (data ?? [])[0] as Row | undefined;
+      if (!row) throw new Error('No encontramos a esa persona del equipo.');
+      await db.from('audit_log').insert({ business_id: row.business_id, staff_id: null, action: 'staff.credentials', detail: `Se configuró el acceso por correo de ${row.name}.` });
     },
 
     async getProgram(businessId) { return getProg(businessId); },
