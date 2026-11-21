@@ -50,7 +50,8 @@ const locationSchema = z.object({
 
 /** Crea o edita una sucursal. Si viene el campo "active" ('true' o 'false') también la activa o desactiva. */
 export async function saveLocationAction(fd: FormData): Promise<ActionResult> {
-  const ctx = await getContext();
+  // También la usa el asistente de bienvenida (paso "Tus sucursales"): el dueño de un negocio en configuración pasa.
+  const ctx = await getContext({ allowSetup: true });
   if (!hasRole(ctx, ['owner'])) return NO_PERMISSION;
   const parsed = locationSchema.safeParse({ id: String(fd.get('id') ?? '') || undefined, name: String(fd.get('name') ?? ''), address: String(fd.get('address') ?? '') });
   if (!parsed.success) return errors(parsed.error);
@@ -71,5 +72,6 @@ export async function saveLocationAction(fd: FormData): Promise<ActionResult> {
     return { ok: false, error: 'No pudimos guardar la sucursal. Inténtalo de nuevo.' };
   }
   revalidatePath('/panel/ajustes');
+  revalidatePath('/bienvenida');
   return { ok: true, message: activeRaw === null ? (parsed.data.id ? 'Sucursal guardada.' : 'Sucursal agregada.') : 'Listo.' };
 }

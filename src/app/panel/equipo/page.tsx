@@ -5,8 +5,10 @@ import { Badge, EmptyState, PageHeader, Table, Td, Th, btnClass } from '@/compon
 import { RoleMatrix } from '@/components/team/RoleMatrix';
 import { roleLabel, roleTone } from '@/components/team/roles';
 import type { Role } from '@/lib/contracts';
+import { ACCESS_LABEL, ACCESS_TONE, accessStatus } from '@/components/team/schema';
 
 export const dynamic = 'force-dynamic';
+export const metadata = { title: 'Equipo · Stampa' };
 
 const ORDER: Record<Role, number> = { owner: 0, manager: 1, cashier: 2 };
 
@@ -26,25 +28,29 @@ export default async function EquipoPage({ searchParams }: { searchParams?: { ok
     <>
       <PageHeader
         title="Equipo"
-        subtitle={`Las personas que atienden y administran ${business.name}. Cada una entra con su propio PIN, así sabes quién dio cada sello.`}
+        subtitle={`Quienes atienden y administran ${business.name}. Cada persona entra con su correo y su contraseña, así sabes quién dio cada sello.`}
         actions={<Link href="/panel/equipo/nuevo" className={btnClass('primary')}>Agregar persona</Link>}
       />
       {sp.ok === 'creado' && (
-        <p role="status" className="mb-5 rounded-xl bg-[#DDF3E8] px-4 py-3 text-sm font-medium text-[#12683F]">Persona agregada. Para que pueda entrar al panel, el equipo de Stampa debe crearle su cuenta de acceso.</p>
+        <p role="status" className="mb-5 rounded-xl bg-[#DDF3E8] px-4 py-3 text-sm font-medium text-[#12683F]">Persona agregada. Agrega su correo y envíale la invitación para que entre al panel.</p>
       )}
 
       <div className="space-y-6">
         <Table>
           <caption className="sr-only">Personas del equipo</caption>
           <thead>
-            <tr><Th>Nombre</Th><Th>Rol</Th><Th>Sucursal</Th><Th>Estado</Th><Th>PIN</Th><Th><span className="sr-only">Acciones</span></Th></tr>
+            <tr><Th>Nombre</Th><Th>Rol</Th><Th>Sucursal</Th><Th>Acceso al panel</Th><Th>Estado</Th><Th>PIN</Th><Th><span className="sr-only">Acciones</span></Th></tr>
           </thead>
           <tbody>
             {sorted.map((p) => (
               <tr key={p.id} className={p.active ? '' : 'bg-surface/60'}>
-                <Td className="font-semibold">{p.name}{p.id === me.id && <span className="ml-1.5 text-xs font-normal text-muted">(tú)</span>}</Td>
+                <Td className="font-semibold">
+                  {p.name}{p.id === me.id && <span className="ml-1.5 text-xs font-normal text-muted">(tú)</span>}
+                  {p.email && <span className="block max-w-[220px] truncate text-xs font-normal text-muted">{p.email}</span>}
+                </Td>
                 <Td><Badge tone={roleTone[p.role]}>{roleLabel(p.role, v)}</Badge></Td>
                 <Td className="text-muted">{p.locationId ? locName.get(p.locationId) ?? 'Sucursal eliminada' : 'Todas'}</Td>
+                <Td><Badge tone={ACCESS_TONE[accessStatus(p)]}>{ACCESS_LABEL[accessStatus(p)]}</Badge></Td>
                 <Td><Badge tone={p.active ? 'ok' : 'neutral'}>{p.active ? 'Activo' : 'Desactivado'}</Badge></Td>
                 <Td><Badge tone={p.hasPin ? 'ok' : 'warn'}>{p.hasPin ? 'Con PIN' : 'Sin PIN'}</Badge></Td>
                 <Td className="text-right">
@@ -60,7 +66,7 @@ export default async function EquipoPage({ searchParams }: { searchParams?: { ok
         {onlyOwner && (
           <EmptyState
             title="Aún no tienes equipo"
-            text={`Agrega a tu ${v.staffRole} para que dé sellos con su propio PIN. Así el control antifraude puede comparar a cada persona.`}
+            text={`Agrega a tu ${v.staffRole} e invítalo con su correo. Así cada sello queda a nombre de quien lo dio.`}
             action={<Link href="/panel/equipo/nuevo" className={btnClass('primary', 'sm')}>Agregar la primera persona</Link>}
           />
         )}

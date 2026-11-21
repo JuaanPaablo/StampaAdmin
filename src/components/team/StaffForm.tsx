@@ -27,10 +27,18 @@ export function StaffForm({ staff, locations, vocab, soleOwner }: {
     <form action={formAction} className="space-y-5" noValidate autoComplete="off">
       <input type="hidden" name="id" value={staff?.id ?? ''} />
       <Card as="section" className="space-y-4">
-        <h2 className="font-display text-lg font-semibold text-navy">{isNew ? 'Datos de la persona' : 'Datos y acceso'}</h2>
+        <h2 className="font-display text-lg font-semibold text-navy">{isNew ? 'Datos de la persona' : 'Datos y rol'}</h2>
         <FormField id="name" label="Nombre completo" error={err.name}>
           <Input id="name" name="name" defaultValue={staff?.name ?? ''} maxLength={60} required autoComplete="off"
             aria-invalid={!!err.name} aria-describedby={describedBy('name', undefined, err.name)} />
+        </FormField>
+
+        <FormField id="email" label="Correo" optional error={err.email}
+          help={isNew
+            ? 'Con su correo puede entrar al panel. Después de agregarla, le envías la invitación para que cree su contraseña.'
+            : staff?.email ? 'Es su correo para entrar al panel.' : 'Agrégalo para invitarla al panel.'}>
+          <Input id="email" name="email" type="email" inputMode="email" defaultValue={staff?.email ?? ''} maxLength={254} autoComplete="off" spellCheck={false}
+            placeholder="nombre@correo.com" aria-invalid={!!err.email} aria-describedby={describedBy('email', 'x', err.email)} />
         </FormField>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -53,7 +61,7 @@ export function StaffForm({ staff, locations, vocab, soleOwner }: {
 
         {isNew ? (
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField id="pin" label="PIN de 4 dígitos" error={err.pin} help="Lo usará para aprobar acciones dentro del panel (no sirve para entrar). Evita fechas o números seguidos.">
+            <FormField id="pin" label="PIN de 4 dígitos" error={err.pin} help="Sirve para aprobar acciones dentro del panel, no para entrar. Evita fechas o números seguidos.">
               <Input id="pin" name="pin" type="password" inputMode="numeric" pattern="\d{4}" maxLength={4} autoComplete="new-password" required
                 aria-invalid={!!err.pin} aria-describedby={describedBy('pin', 'x', err.pin)} />
             </FormField>

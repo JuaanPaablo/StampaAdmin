@@ -5,7 +5,7 @@ import type { CustomerQuery, CustomerSegment } from '@/lib/contracts';
 import { ago, num } from '@/lib/format';
 import { cn } from '@/lib/cn';
 import { Button, EmptyState, Input, Meter, PageHeader, Select, Table, Td, Th, btnClass } from '@/components/ui';
-import { NewCustomerForm, SegmentBadge, SEGMENTS, SEGMENT_KEYS, SORTS, contactLabel } from '@/components/customers';
+import { NewCustomerForm, SegmentBadge, SEGMENTS, SEGMENT_KEYS, SORTS, birthdayLabel, contactLabel } from '@/components/customers';
 import { cap } from '@/components/dashboard';
 
 export const dynamic = 'force-dynamic';
@@ -115,6 +115,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: SP 
                     <Td>
                       <Link href={`/panel/clientes/${c.id}`} className="font-semibold text-navy underline-offset-2 hover:underline">{c.name}</Link>
                       <div className="text-xs text-muted">{contactLabel(c.contactKind)}: {c.contact}</div>
+                      {birthdayLabel(c) && <div className="text-xs text-muted">Cumpleaños: {birthdayLabel(c)}</div>}
                     </Td>
                     <Td><SegmentBadge segment={c.segment} /></Td>
                     <Td className="w-48">
@@ -136,6 +137,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: SP 
                   <div className="min-w-0">
                     <Link href={`/panel/clientes/${c.id}`} className="block truncate font-semibold text-navy underline-offset-2 hover:underline">{c.name}</Link>
                     <p className="truncate text-xs text-muted">{contactLabel(c.contactKind)}: {c.contact}</p>
+                    {birthdayLabel(c) && <p className="truncate text-xs text-muted">Cumpleaños: {birthdayLabel(c)}</p>}
                   </div>
                   <SegmentBadge segment={c.segment} />
                 </div>
