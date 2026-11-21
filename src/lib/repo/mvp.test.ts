@@ -438,7 +438,7 @@ describe('cuentas de administrador', () => {
     expect(await repo.verifyAdminCredentials(ADMIN, PASSWORD)).toEqual({ adminId: id });
     // El equipo de los negocios no entra al panel de administrador.
     expect(await repo.verifyAdminCredentials('pub@a.ec', PASSWORD)).toBeNull();
-  });
+  }, 20_000); // varios hash scrypt seguidos: con todas las pruebas en paralelo puede pasar de 5 s
 
   it('upsertAdmin valida correo y contraseña', async () => {
     const { repo } = setup();
