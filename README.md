@@ -1,6 +1,6 @@
 # Stampa Admin
 
-Panel administrativo de Stampa: tarjetas de sellos digitales de fidelización para negocios (restaurantes, cafeterías, gimnasios, floristerías, barberías y más). Un solo panel multi-negocio; el tipo de negocio cambia el vocabulario ("Caja" / "Recepción", "cliente" / "socio" / "comensal", "ticket" / "ficha" / "factura") y los valores iniciales de la tarjeta.
+Stampa: tarjetas de sellos digitales de fidelización para negocios (restaurantes, cafeterías, gimnasios, floristerías, barberías y más). Esta app tiene tres partes: el panel de administrador de Stampa (`/admin`), el panel del dueño y su equipo (`/panel`) y la tarjeta del cliente (`/u/<negocio>`). Producto, flujo y reglas del MVP: `docs/MVP.md`. Un solo panel multi-negocio; el tipo de negocio cambia el vocabulario ("Caja" / "Recepción", "cliente" / "socio" / "comensal", "ticket" / "ficha" / "factura") y los valores iniciales de la tarjeta.
 
 Stack: Next.js 14 (App Router, server actions), TypeScript estricto, Tailwind, Supabase (producción), Vitest. Español de Ecuador, USD.
 
@@ -20,16 +20,19 @@ Acceso: correo + contraseña (ver "Autenticación"). Con el repo en memoria usa 
 
 ## Autenticación
 
-- Sin registro público: las cuentas las crea el equipo de Stampa (ver "Crear cuentas"). El script crea personas en negocios que ya existen; los negocios nuevos se crean en la base (por ejemplo con la función `create_business`).
+- Sin registro público. Stampa da acceso desde `/admin/negocios/nuevo` (correo del dueño, plan, vencimiento, nota). El dueño recibe un enlace de invitación (72 h, un solo uso) en `/invitacion/<token>`, crea su contraseña y configura su negocio en `/bienvenida`. El dueño invita a su equipo desde `/panel/equipo`.
+- Recuperar contraseña: `/ingresar/olvide` envía un enlace de 60 minutos a `/restablecer/<token>`. Los tokens se guardan solo como hash SHA-256.
+- Administrador de Stampa: tabla `platform_admins`, cookie `stampa_admin` (12 h). Crear o cambiar su contraseña: `npm run admin:create -- --email administrador@stampa.com` o desde `/admin/cuenta`.
+- Clientes: confirman su correo con un código de 6 dígitos (10 min, 5 intentos, 5 por hora). Cookie `stampa_cliente` (365 días). El mismo código sirve para recuperar la tarjeta en otro teléfono.
+- Correos: Resend (`RESEND_API_KEY`, `EMAIL_FROM`). Sin clave y con `STAMPA_EMAIL_PREVIEW=on`, la pantalla muestra el enlace o código con el aviso "Modo de prueba".
 - Sesión: cookie `stampa_session` (httpOnly, Secure en producción, SameSite=Lax) firmada con HMAC-SHA256 y `AUTH_SECRET`. Dura 12 h (30 días con "Recordarme"). En producción `AUTH_SECRET` es obligatorio (mínimo 32 caracteres; `openssl rand -base64 32`); sin él la app falla con un error claro. Sin sesión válida todo `/panel` redirige a `/ingresar`, también en `next dev`.
 - Contraseñas: scrypt con sal aleatoria (`scrypt$N$r$p$salt$hash`), mínimo 10 caracteres. El hash nunca sale del repo.
 - Anti fuerza bruta: 5 fallos seguidos bloquean la cuenta 15 minutos (en Supabase en las columnas de `staff`; los correos inexistentes se bloquean igual para no revelar cuáles existen) y un límite por IP en memoria del proceso (best effort).
 - El PIN de 4 dígitos ya no sirve para entrar: solo aprueba acciones dentro del panel (más cupos de los permitidos).
-- Una persona agregada desde `/panel/equipo` no puede entrar hasta que el equipo de Stampa le cree su cuenta.
 
 ### Cuentas de demo
 
-Solo aplican con el repo en memoria (`STAMPA_REPO` sin definir o `memory`); no existen en Supabase. Contraseña común: `Stampa-Demo-2026`. Correo: `<nombre>@<negocio>.demo`. PIN de aprobaciones: dueño 1234, gerente 2345, cajeros 1111.
+Admin de ejemplo: `administrador@stampa.com` / `Stampa-Demo-2026`. Solo aplican con el repo en memoria (`STAMPA_REPO` sin definir o `memory`); no existen en Supabase. Contraseña común: `Stampa-Demo-2026`. Correo: `<nombre>@<negocio>.demo`. PIN de aprobaciones: dueño 1234, gerente 2345, cajeros 1111.
 
 | Negocio | Dueño | Gerente | Cajeros |
 |---|---|---|---|
@@ -56,7 +59,15 @@ Comparte la contraseña por un canal seguro. La migración `0003_auth.sql` debe 
 
 | Ruta | Qué hace | Roles |
 |---|---|---|
-| `/ingresar` | Inicio de sesión con correo y contraseña (las cuentas las crea el equipo de Stampa; `/registro` redirige aquí) | público |
+| `/admin/**` | Panel de Stampa: resumen, negocios, dar acceso, suspender/reactivar, plan y vencimiento, reenviar acceso, mi cuenta | administrador |
+| `/ingresar`, `/ingresar/olvide` | Inicio de sesión y recuperar contraseña (`/registro` redirige aquí) | público |
+| `/invitacion/[token]`, `/restablecer/[token]` | Crear o cambiar la contraseña con el enlace | público con enlace |
+| `/bienvenida` | Asistente de 5 pasos mientras el negocio está en configuración | dueño |
+| `/suspendido` | Cuenta pausada, con botón de WhatsApp | equipo |
+| `/u/[slug]` | Tarjeta del cliente: alta, ingreso con código, su tarjeta | público |
+| `/u/[slug]/sello?c=` | Destino del QR de caja: reclama el sello | público |
+| `/mis-tarjetas` | Todas las tarjetas del cliente | público |
+| `/privacidad`, `/terminos` | Textos legales (faltan razón social, RUC y correo) | público |
 | `/panel` | Resumen: KPI, gráficos, mejores clientes, cumpleaños, listos para canjear, alertas | dueño, gerente |
 | `/panel/caja` | Crear código de sello (ticket, monto, cupos), últimos códigos, canjes (`#premios`) | todos |
 | `/panel/caja/[id]` | Pantalla en vivo del código: QR, cupos, quién reclamó, anular sello, cancelar, panel de demo | todos (anular: dueño, gerente) |
@@ -85,10 +96,10 @@ Los permisos se definen en `src/lib/nav.ts` y se aplican en servidor con `requir
 
 ## Cambiar a Supabase
 
-1. Crea el proyecto y aplica `supabase/migrations/0001_schema.sql`, `0002_functions.sql` y `0003_auth.sql` en orden (`supabase db push`, o el editor SQL). `supabase/seed.sql` es opcional. Detalles en `supabase/README.md`.
-2. Define variables de servidor (ver `.env.example`): `STAMPA_REPO=supabase`, `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `AUTH_SECRET`. La service role salta RLS: nunca al navegador.
+1. Crea el proyecto y aplica `supabase/migrations/0001` a `0005` en orden (`supabase db push`, o el editor SQL). `supabase/seed.sql` es opcional. Detalles en `supabase/README.md`.
+2. Define variables de servidor (ver `.env.example`): `STAMPA_REPO=supabase`, `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `AUTH_SECRET`, `NEXT_PUBLIC_APP_URL` (p. ej. `https://app.stampaec.app`), `RESEND_API_KEY` y `EMAIL_FROM` (o `STAMPA_EMAIL_PREVIEW=on` mientras no haya clave). En producción de Vercel la app se niega a usar el repo en memoria. La service role salta RLS: nunca al navegador.
 3. `getRepo()` ya elige la implementación según `STAMPA_REPO`.
-4. Crea las cuentas con `npm run account:create` y deja `STAMPA_DEMO` apagado.
+4. Crea la cuenta de administrador con `npm run admin:create` y deja `STAMPA_DEMO` apagado. Las cuentas de los dueños se crean desde `/admin`.
 
 ## Agregar un tipo de negocio
 
@@ -99,14 +110,13 @@ Los permisos se definen en `src/lib/nav.ts` y se aplican en servidor con `requir
 
 ## Falta para producción
 
-- Recuperación y cambio de contraseña por la propia persona (hoy lo hace el equipo de Stampa con el script), y revocación de sesiones abiertas (la cookie firmada solo vence por tiempo o al desactivar a la persona).
+- Revocación de sesiones abiertas: la cookie firmada solo vence por tiempo o al desactivar a la persona; cambiar la contraseña no cierra otras sesiones.
 - Límites persistentes: el límite por IP y el de correos inexistentes viven en memoria del proceso; el bloqueo por cuenta en Supabase sí es persistente.
 - Límite de intentos del PIN de aprobaciones.
 - Pruebas del repositorio de Supabase (hoy solo el repo en memoria tiene pruebas) y de las funciones SQL.
-- Escáner del cliente y página pública de alta `/u/<slug>`: el QR del póster y del código apuntan a `stampa.example`, que es un marcador.
 - Integración con Apple Wallet y Google Wallet (la vista previa es ilustrativa).
-- Facturación de planes (la pantalla de plan es informativa).
-- Políticas de privacidad, términos, y cumplimiento de la Ley Orgánica de Protección de Datos Personales de Ecuador (consentimiento, acceso, rectificación y borrado; la exportación de datos de clientes desde Ajustes está pendiente).
+- Cobro de planes: fuera de la app, por WhatsApp (+593 99 091 6553). Vencer el plan no suspende solo: el admin suspende a mano.
+- Datos legales en `/privacidad` y `/terminos` (constante `LEGAL` en `src/components/customer/legal.tsx`): razón social, RUC y correo de contacto; confirmar retención de 24 meses y respuesta en 15 días. Cumplimiento de la Ley Orgánica de Protección de Datos Personales de Ecuador (acceso, rectificación y borrado se atienden por correo).
 - Fuentes autoalojadas: `app/layout.tsx` carga Sora, Inter y JetBrains Mono desde Google Fonts.
 - Pruebas end to end automatizadas (el recorrido con Playwright de esta revisión fue manual y no está en el repositorio).
 

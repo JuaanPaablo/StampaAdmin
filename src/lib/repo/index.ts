@@ -145,6 +145,10 @@ const g = globalThis as unknown as { __stampaRepo?: Repo };
 
 /** Singleton por proceso. STAMPA_REPO=supabase cambia a la implementación real. */
 export function getRepo(): Repo {
+  // En producción de Vercel el repo en memoria perdería datos reales entre instancias: mejor fallar a la vista.
+  if (!g.__stampaRepo && process.env.VERCEL_ENV === 'production' && process.env.STAMPA_REPO !== 'supabase') {
+    throw new Error('Producción sin base de datos: define STAMPA_REPO=supabase y SUPABASE_SERVICE_ROLE_KEY en Vercel.');
+  }
   if (!g.__stampaRepo) g.__stampaRepo = process.env.STAMPA_REPO === 'supabase' ? createSupabaseRepo() : createMemoryRepo();
   return g.__stampaRepo;
 }
