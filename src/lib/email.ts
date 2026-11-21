@@ -29,7 +29,7 @@ export function emailPreviewEnabled(): boolean {
 export async function sendEmail(msg: EmailMessage): Promise<EmailResult> {
   const key = process.env.RESEND_API_KEY?.trim();
   if (!key) {
-    if (process.env.NODE_ENV !== 'production') console.info(`[correo de prueba] a ${msg.to}: ${msg.subject}\n${msg.text}`);
+    if (process.env.NODE_ENV !== 'production') console.info(`[correo de prueba] a ${msg.to}: ${msg.subject}`);
     return { sent: false, preview: emailPreviewEnabled() };
   }
   try {
