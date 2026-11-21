@@ -3,6 +3,7 @@
 import { useId, useState } from 'react';
 import { alpha, contrastRatio, normalizeHex, readableOn } from './contrast';
 import { Isotype, StampGrid } from './StampGrid';
+import { safeImageUrl } from './images';
 
 export interface PreviewData {
   businessName: string;
@@ -12,6 +13,8 @@ export interface PreviewData {
   bg: string; accent: string; ink: string;
   logoText: string;
   logoUrl?: string;
+  /** Foto de portada (opcional). */
+  coverUrl?: string;
 }
 
 type Mode = 'tarjeta' | 'apple' | 'google';
@@ -31,7 +34,8 @@ export function remainingMessage(remaining: number, reward: string): string {
 
 function Logo({ text, url, accent, size }: { text: string; url?: string; accent: string; size: number }) {
   const [failed, setFailed] = useState<string | null>(null);
-  const showImg = !!url && failed !== url;
+  const safe = safeImageUrl(url);
+  const showImg = !!safe && failed !== safe;
   return (
     <span
       className="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-display font-bold"
@@ -40,7 +44,7 @@ function Logo({ text, url, accent, size }: { text: string; url?: string; accent:
     >
       {showImg
         // eslint-disable-next-line @next/next/no-img-element
-        ? <img src={url} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" onError={() => setFailed(url ?? null)} />
+        ? <img src={safe} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" onError={() => setFailed(safe ?? null)} />
         : (text || '?').slice(0, 3).toUpperCase()}
     </span>
   );
@@ -78,6 +82,7 @@ export function CardPreview({ data }: { data: PreviewData }) {
   const accent = normalizeHex(data.accent) ?? '#FFC301';
   const ink = normalizeHex(data.ink) ?? '#FFFFFF';
   const remaining = total - filled;
+  const cover = safeImageUrl(data.coverUrl);
   const message = remainingMessage(remaining, data.rewardTitle);
   const onKey = (e: React.KeyboardEvent, i: number) => {
     if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
@@ -102,7 +107,12 @@ export function CardPreview({ data }: { data: PreviewData }) {
 
       <div id={`${uid}-panel`} role="tabpanel" aria-labelledby={`${uid}-tab-${mode}`} className="mt-4">
         {mode === 'tarjeta' && (
-          <div className="rounded-3xl p-5 shadow-card" style={{ background: bg, color: ink }}>
+          <div className="overflow-hidden rounded-3xl shadow-card" style={{ background: bg, color: ink }}>
+            {cover && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={cover} alt="" referrerPolicy="no-referrer" className="aspect-[3/1] w-full object-cover" />
+            )}
+            <div className="p-5">
             <div className="flex items-center gap-3">
               <Logo text={data.logoText} url={data.logoUrl} accent={accent} size={44} />
               <div className="min-w-0">
@@ -118,6 +128,7 @@ export function CardPreview({ data }: { data: PreviewData }) {
             <div className="mt-4 flex items-center justify-between border-t pt-3 text-[11px]" style={{ borderColor: alpha(ink, 0.2), color: alpha(ink, 0.75) }}>
               <span>{filled} de {total} sellos</span>
               <span className="inline-flex items-center gap-1.5"><Isotype color={accent} className="h-4 w-4" /> con Stampa</span>
+            </div>
             </div>
           </div>
         )}

@@ -1,20 +1,23 @@
 import { getContext } from '@/lib/context';
 import { requireRole } from '@/lib/auth';
 import { BUSINESS_TYPES } from '@/lib/templates';
-import { Badge, Button, Card, PageHeader } from '@/components/ui';
+import { PLAN_LABEL, daysToExpiry } from '@/lib/mvp-rules';
+import { STAMPA_WHATSAPP_DISPLAY, customerUrl, stampaWhatsappUrl } from '@/lib/urls';
+import { Badge, Card, PageHeader, btnClass } from '@/components/ui';
 import { ActionForm, FormField } from '@/components/shell/action-form';
-import { PLAN_LABEL, TIMEZONES } from '@/components/shell/labels';
-import type { Plan } from '@/lib/contracts';
+import { TIMEZONES } from '@/components/shell/labels';
 import { saveLocationAction, updateBusinessAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Ajustes · Stampa' };
 
-const PLANS: { id: Plan; name: string; forWho: string; points: string[] }[] = [
-  { id: 'gratis', name: 'Gratis', forWho: 'Para empezar con tu tarjeta de sellos.', points: ['Tarjeta de sellos y códigos de un solo uso', 'Clientes y premios', 'Un equipo básico'] },
-  { id: 'negocio', name: 'Negocio', forWho: 'Para negocios que ya operan con un equipo.', points: ['Todo lo de Gratis', 'Más sucursales y personas en el equipo', 'Reportes y control antifraude ampliados'] },
-  { id: 'pro', name: 'Pro', forWho: 'Para varias sucursales y necesidades avanzadas.', points: ['Todo lo de Negocio', 'Pensado para operaciones más grandes', 'Funciones avanzadas a medida'] }
-];
+function longDate(iso: string, timeZone: string): string {
+  try {
+    return new Date(iso).toLocaleDateString('es-EC', { day: 'numeric', month: 'long', year: 'numeric', timeZone });
+  } catch {
+    return new Date(iso).toLocaleDateString('es-EC', { day: 'numeric', month: 'long', year: 'numeric' });
+  }
+}
 
 export default async function AjustesPage() {
   const ctx = await getContext();
@@ -23,6 +26,8 @@ export default async function AjustesPage() {
   const locations = await repo.listLocations(business.id);
   const tzOptions = TIMEZONES.some((t) => t.value === business.timezone) ? TIMEZONES : [{ value: business.timezone, label: business.timezone }, ...TIMEZONES];
   const typeOptions = BUSINESS_TYPES.map((t) => ({ value: t.type, label: t.label }));
+  const publicUrl = customerUrl(business.slug);
+  const expiry = daysToExpiry(business.planExpiresAt);
 
   return (
     <div className="flex flex-col gap-6">
@@ -30,6 +35,11 @@ export default async function AjustesPage() {
 
       <Card className="sm:p-6">
         <h2 className="font-display text-lg font-bold text-navy">Datos del negocio</h2>
+        <div className="mt-3 rounded-xl bg-surface px-4 py-3">
+          <p className="text-xs font-semibold text-muted">Tu dirección pública</p>
+          <a href={publicUrl} target="_blank" rel="noopener noreferrer" className="mt-0.5 block break-all text-sm font-semibold text-navy underline underline-offset-4">{publicUrl}</a>
+          <p className="mt-1 text-xs text-muted">Es la que abre el QR de tu póster. No cambia aunque cambies el nombre.</p>
+        </div>
         <ActionForm action={updateBusinessAction} submitLabel="Guardar cambios" className="mt-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField name="name" label="Nombre del negocio" defaultValue={business.name} maxLength={60} required />
@@ -87,44 +97,42 @@ export default async function AjustesPage() {
       </Card>
 
       <Card className="sm:p-6">
-        <div className="flex flex-wrap items-center gap-3">
-          <h2 className="font-display text-lg font-bold text-navy">Plan</h2>
-          <Badge tone="sun">Tu plan: {PLAN_LABEL[business.plan]}</Badge>
-        </div>
-        <p className="mt-1 text-sm text-muted">Así se piensan los planes de Stampa. Los precios y los límites exactos de cada uno se publicarán antes de habilitar el cambio.</p>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          {PLANS.map((p) => {
-            const current = p.id === business.plan;
-            return (
-              <div key={p.id} className={'flex flex-col rounded-xl p-4 ring-1 ring-inset ' + (current ? 'bg-white ring-2 ring-navy' : 'bg-surface ring-line')}>
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="font-display text-base font-bold text-navy">{p.name}</h3>
-                  {current && <Badge tone="info">Actual</Badge>}
-                </div>
-                <p className="mt-1 text-sm text-muted">{p.forWho}</p>
-                <ul className="mt-3 flex flex-col gap-1.5 text-sm text-navy">
-                  {p.points.map((pt) => (
-                    <li key={pt} className="flex gap-2"><span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-navy" />{pt}</li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
-        </div>
-        <div className="mt-4">
-          <Button type="button" variant="ghost" disabled aria-disabled="true">Cambiar plan (próximamente)</Button>
+        <h2 className="font-display text-lg font-bold text-navy">Plan</h2>
+        <dl className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="rounded-xl bg-surface p-4">
+            <dt className="text-xs font-semibold text-muted">Tu plan</dt>
+            <dd className="mt-1 font-display text-2xl font-bold text-navy">{PLAN_LABEL[business.plan]}</dd>
+          </div>
+          <div className="rounded-xl bg-surface p-4">
+            <dt className="text-xs font-semibold text-muted">Vence el</dt>
+            <dd className="mt-1 font-display text-2xl font-bold text-navy">{business.planExpiresAt ? longDate(business.planExpiresAt, business.timezone) : 'Sin fecha de vencimiento'}</dd>
+          </div>
+        </dl>
+        {expiry !== null && expiry <= 7 && (
+          <p role="status" className={'mt-4 rounded-xl px-4 py-3 text-sm font-medium ' + (expiry < 0 ? 'bg-[#FBE0DE] text-[#9B2A22]' : 'bg-[#FFF3CC] text-[#7A5A00]')}>
+            {expiry < 0
+              ? 'Tu plan ya venció. Escríbenos para renovarlo y seguir sin interrupciones.'
+              : expiry === 0 ? 'Tu plan vence hoy. Escríbenos para renovarlo.'
+              : `Tu plan vence en ${expiry} ${expiry === 1 ? 'día' : 'días'}. Escríbenos para renovarlo.`}
+          </p>
+        )}
+        <p className="mt-4 text-sm text-muted">¿Quieres renovar o cambiar de plan? Escríbenos y te ayudamos.</p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <a href={stampaWhatsappUrl(`Hola, quiero renovar/cambiar mi plan de Stampa para ${business.name}`)} target="_blank" rel="noopener noreferrer" className={btnClass('primary')}>
+            Escríbenos por WhatsApp
+          </a>
+          <span className="text-sm font-semibold text-navy">{STAMPA_WHATSAPP_DISPLAY}</span>
         </div>
       </Card>
 
       <Card className="sm:p-6">
         <h2 className="font-display text-lg font-bold text-navy">Privacidad y datos</h2>
         <div className="mt-2 max-w-3xl space-y-3 text-sm text-navy">
-          <p>De cada {template.vocab.customer} Stampa guarda lo mínimo para que la tarjeta funcione: su nombre, un contacto (WhatsApp o correo), su cumpleaños si decide darlo y la fecha en que aceptó participar. Además guarda los sellos y los premios canjeados.</p>
-          <p>Estos datos pertenecen a tu negocio. Tú eres responsable de usarlos solo para lo que tus {template.vocab.customers} aceptaron, por ejemplo avisarles de sus sellos y premios, y de atender cuando alguien pida corregir o borrar su información.</p>
+          <p>De cada {template.vocab.customer} Stampa guarda lo mínimo para que la tarjeta funcione: su nombre, su correo, su fecha de nacimiento y la fecha en que aceptó participar. También guarda sus sellos y los premios que canjeó.</p>
+          <p>Estos datos son de tu negocio. Úsalos solo para lo que tus {template.vocab.customers} aceptaron, como avisarles de sus sellos y premios. Si alguien pide corregir o borrar sus datos, atiéndelo.</p>
         </div>
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <Button type="button" variant="ghost" disabled aria-disabled="true">Exportar datos de {template.vocab.customers} (pendiente)</Button>
-          <span className="text-xs text-muted">La exportación estará disponible pronto.</span>
+        <div className="mt-4">
+          <a href="/panel/clientes/exportar" className={btnClass('ghost')}>Descargar mis {template.vocab.customers} (CSV)</a>
         </div>
       </Card>
     </div>

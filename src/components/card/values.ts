@@ -5,7 +5,7 @@ import { money, parseMoney } from '@/lib/format';
 /** Valores editables del formulario (todo texto o número simple) y su traducción a/desde Program. */
 export interface FormValues {
   name: string; stampsRequired: number; rewardTitle: string; rewardDescription: string;
-  bg: string; accent: string; ink: string; logoText: string; logoUrl: string;
+  bg: string; accent: string; ink: string; logoText: string;
   birthdayReward: string; rewardExpiresDays: string; terms: string;
   requireAmount: boolean; minSpend: string;
   codeTtlSeconds: number; maxSeatsWithoutApproval: number; cooldownMinutes: number;
@@ -16,7 +16,7 @@ export const centsToInput = (c: number) => (c / 100).toFixed(2).replace('.', ','
 export function valuesFromProgram(p: Program): FormValues {
   return {
     name: p.name, stampsRequired: p.stampsRequired, rewardTitle: p.rewardTitle, rewardDescription: p.rewardDescription ?? '',
-    bg: p.colors.bg, accent: p.colors.accent, ink: p.colors.ink, logoText: p.logoText, logoUrl: p.logoUrl ?? '',
+    bg: p.colors.bg, accent: p.colors.accent, ink: p.colors.ink, logoText: p.logoText,
     birthdayReward: p.birthdayReward ?? '', rewardExpiresDays: p.rewardExpiresDays ? String(p.rewardExpiresDays) : '', terms: p.terms ?? '',
     requireAmount: p.requireAmount, minSpend: centsToInput(p.minSpendCentsPerStamp),
     codeTtlSeconds: p.codeTtlSeconds, maxSeatsWithoutApproval: p.maxSeatsWithoutApproval, cooldownMinutes: p.cooldownMinutes
@@ -53,7 +53,6 @@ export function describeChanges(base: Program, v: FormValues, vocab: Vocabulary)
   const colorChanged = base.colors.bg.toLowerCase() !== v.bg.toLowerCase() || base.colors.accent.toLowerCase() !== v.accent.toLowerCase() || base.colors.ink.toLowerCase() !== v.ink.toLowerCase();
   if (colorChanged) out.push({ key: 'colors', label: 'Colores de la tarjeta', from: 'anteriores', to: 'nuevos' });
   text('logoText', 'Iniciales del logo', base.logoText, v.logoText);
-  text('logoUrl', 'Logo (URL)', base.logoUrl ?? '', v.logoUrl);
   text('birthdayReward', 'Regalo de cumpleaños', base.birthdayReward ?? '', v.birthdayReward);
   text('rewardExpiresDays', 'Vigencia del premio (días)', base.rewardExpiresDays ? String(base.rewardExpiresDays) : '', v.rewardExpiresDays);
   text('terms', 'Términos y condiciones', base.terms ?? '', v.terms);

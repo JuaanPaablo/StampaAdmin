@@ -5,8 +5,7 @@ import { requireRole } from '@/lib/auth';
 import { ago, dateShort, dateTime } from '@/lib/format';
 import { cn } from '@/lib/cn';
 import { Badge, Card, PageHeader } from '@/components/ui';
-import { NotesForm, RedeemButton, SegmentBadge, StampDots, contactHref, contactLabel } from '@/components/customers';
-import { MONTHS_FULL } from '@/components/dashboard';
+import { NotesForm, RedeemButton, SegmentBadge, StampDots, birthdayLabel, contactHref, contactLabel } from '@/components/customers';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Ficha del cliente · Stampa' };
@@ -68,12 +67,13 @@ export default async function ClienteDetallePage({ params }: { params: { id: str
                     {c.contact}
                   </a>
                   <span className="ml-2 font-normal text-muted">{c.contactKind === 'whatsapp' ? '(abre WhatsApp)' : '(abre tu correo)'}</span>
+                  {c.emailVerifiedAt && <span className="mt-0.5 block text-xs font-normal text-[#12683F]">Correo confirmado el {dateShort(c.emailVerifiedAt)}</span>}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-muted">Cumpleaños</dt>
+                <dt className="text-xs text-muted">{c.birthdayYear ? 'Fecha de nacimiento' : 'Cumpleaños'}</dt>
                 <dd className="font-semibold text-navy">
-                  {c.birthday ? `${c.birthday.d} de ${MONTHS_FULL[c.birthday.m]}` : 'No registrado'}
+                  {birthdayLabel(c) ?? 'No registrado'}
                   {c.birthday && program.birthdayReward && <span className="block text-xs font-normal text-muted">Regalo: {program.birthdayReward}</span>}
                 </dd>
               </div>

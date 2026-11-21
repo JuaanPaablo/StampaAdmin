@@ -22,8 +22,6 @@ export const programSchema = z.object({
   rewardDescription: optText(120, 'Máximo 120 caracteres.'),
   bg: hex, accent: hex, ink: hex,
   logoText: z.string().trim().min(1, 'Escribe de 1 a 3 letras.').max(3, 'Máximo 3 letras.'),
-  logoUrl: z.string().trim().max(500, 'La dirección es muy larga.').default('')
-    .refine((v) => v === '' || /^https?:\/\/[^\s]+$/i.test(v), 'Usa una dirección que empiece con https://'),
   birthdayReward: optText(80, 'Máximo 80 caracteres.'),
   rewardExpiresDays: z.string().trim().default('')
     .refine((v) => v === '' || (/^\d+$/.test(v) && Number(v) >= 1 && Number(v) <= 730), 'Indica de 1 a 730 días o déjalo vacío.'),

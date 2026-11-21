@@ -21,3 +21,12 @@ export function contactHref(kind: ContactKind, contact: string): string {
 }
 
 export const contactLabel = (k: ContactKind) => (k === 'whatsapp' ? 'WhatsApp' : 'Correo');
+
+const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+/** "3 de mayo de 1990" si hay año; "3 de mayo" si no; null sin cumpleaños. */
+export function birthdayLabel(c: { birthday?: { d: number; m: number }; birthdayYear?: number }): string | null {
+  if (!c.birthday) return null;
+  const base = `${c.birthday.d} de ${MONTHS[c.birthday.m] ?? ''}`;
+  return c.birthdayYear ? `${base} de ${c.birthdayYear}` : base;
+}

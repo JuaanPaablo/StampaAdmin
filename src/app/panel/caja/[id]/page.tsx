@@ -18,11 +18,10 @@ import { SeatPips } from '@/components/register/SeatPips';
 import { StatusBadge } from '@/components/register/StatusBadge';
 import { clock, groupCode } from '@/components/register/time';
 import type { CodeStatus } from '@/lib/contracts';
+import { stampUrl } from '@/lib/urls';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Código de sello · Stampa' };
-
-const BASE_URL = 'https://stampa.example/s/';
 
 export default async function CodePage({ params }: { params: { id: string } }) {
   const { repo, business, program, template, staff } = await getContext();
@@ -50,7 +49,7 @@ export default async function CodePage({ params }: { params: { id: string } }) {
   const canCancel = active;
 
   const qrSvg = active
-    ? await QRCode.toString(BASE_URL + code.code, { type: 'svg', margin: 1, errorCorrectionLevel: 'M', color: { dark: '#001D3D', light: '#FFFFFF' } })
+    ? await QRCode.toString(stampUrl(business.slug, code.code), { type: 'svg', margin: 1, errorCorrectionLevel: 'M', color: { dark: '#001D3D', light: '#FFFFFF' } })
     : '';
 
   let reason = '';
@@ -91,8 +90,11 @@ export default async function CodePage({ params }: { params: { id: string } }) {
               El QR ya no está disponible porque el código se quemó.
             </div>
           )}
-          <p className={'font-mono text-5xl font-bold tracking-wider tabular-nums sm:text-6xl ' + (active ? 'text-navy' : 'text-muted line-through')} aria-label={'Código ' + code.code.split('').join(' ')}>{grouped}</p>
-          <p className="text-center text-xs text-muted">{active ? 'Escanea el QR o digita este código en el teléfono.' : 'Código fuera de uso.'}</p>
+          <div className="flex flex-col items-center gap-1">
+            {active && <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted">O escribe este código</p>}
+            <p className={'font-display text-6xl font-extrabold tracking-[0.12em] tabular-nums sm:text-7xl ' + (active ? 'text-navy' : 'text-muted line-through')} aria-label={'Código ' + code.code.split('').join(' ')}>{grouped}</p>
+          </div>
+          <p className="text-center text-sm text-muted">{active ? `Tu ${v.customer} escanea el QR con la cámara o escribe el código en su tarjeta.` : 'Código fuera de uso.'}</p>
           <Countdown expiresAt={code.expiresAt} createdAt={code.createdAt} active={active} />
         </Card>
 
