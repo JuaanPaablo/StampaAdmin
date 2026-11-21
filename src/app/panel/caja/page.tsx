@@ -30,7 +30,7 @@ export default async function CajaPage() {
       <Card as="section" className="p-5 sm:p-7">
         <h2 className="mb-1 font-display text-xl font-semibold text-navy">Dar un sello</h2>
         <p className="mb-5 text-sm text-muted">
-          Ingresa los datos del {v.ticket.toLowerCase()} y entrega el código al {v.customer}. Si vienen varios juntos, agrega un cupo por persona: cada uno escanea con su teléfono.
+          Ingresa los datos del comprobante y entrega el código al {v.customer}. Si vienen varios juntos, agrega un cupo por persona: cada uno escanea con su teléfono.
         </p>
         <CodeForm program={program} vocab={{ ticket: v.ticket, people: v.people, customers: v.customers }} />
       </Card>

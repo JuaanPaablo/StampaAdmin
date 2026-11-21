@@ -14,7 +14,7 @@ export function RecentCodes({ codes, statuses, ticketWord, showAmount, excludeId
     <section aria-labelledby="ultimos-h">
       <h2 id="ultimos-h" className="mb-3 font-display text-lg font-semibold text-navy">Últimos códigos</h2>
       {rows.length === 0 ? (
-        <EmptyState title="Aún no generas códigos" text={'Cada código es de un solo uso. Empieza con el formulario: ingresa el ' + ticketWord.toLowerCase() + ' y los cupos.'} />
+        <EmptyState title="Aún no generas códigos" text={'Cada código es de un solo uso. Empieza con el formulario: ingresa los datos del comprobante y los cupos.'} />
       ) : (
         <Card className="p-0">
           <ul className="divide-y divide-line">
