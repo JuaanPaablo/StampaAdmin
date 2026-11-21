@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 import { signIn, type LoginState } from '@/lib/auth';
@@ -26,7 +27,6 @@ export function LoginForm({ next }: { next?: string }) {
   const [state, action] = useFormState<LoginState, FormData>(signIn, {});
   const [show, setShow] = useState(false);
   const [caps, setCaps] = useState(false);
-  const [help, setHelp] = useState(false);
   const [local, setLocal] = useState<{ email?: string; password?: string } | null>(null);
 
   function validate(e: FormEvent<HTMLFormElement>) {
@@ -66,9 +66,9 @@ export function LoginForm({ next }: { next?: string }) {
       <div className="flex flex-col gap-1.5">
         <div className="flex items-baseline justify-between gap-3">
           <label htmlFor="password" className={label}>Contraseña</label>
-          <button type="button" onClick={() => setHelp((v) => !v)} aria-expanded={help} aria-controls="ayuda-clave" className="-my-3 rounded px-1 py-3 text-[13px] font-medium text-navy underline underline-offset-2">
+          <Link href="/ingresar/olvide" className="-my-3 rounded px-1 py-3 text-[13px] font-medium text-navy underline underline-offset-2">
             ¿Olvidaste tu contraseña?
-          </button>
+          </Link>
         </div>
         <div className="relative">
           <input
@@ -88,11 +88,6 @@ export function LoginForm({ next }: { next?: string }) {
         </div>
         <p id="pw-err" role="alert" className="min-h-[1.1rem] text-[13px] text-bad">{local?.password}</p>
         <p id="caps" className="min-h-[1.1rem] text-[13px] text-[#7A5A00]" aria-live="polite">{caps ? 'Bloq Mayús está activado.' : ''}</p>
-        {help && (
-          <p id="ayuda-clave" className="rounded-xl bg-surface px-3.5 py-3 text-sm leading-snug text-navy">
-            Escríbenos a <a href="mailto:soporte@stampa.app" className="rounded font-semibold underline underline-offset-2">soporte@stampa.app</a> y restablecemos tu acceso.
-          </p>
-        )}
       </div>
 
       <label className="flex min-h-[44px] cursor-pointer items-center gap-3 text-sm text-navy">
