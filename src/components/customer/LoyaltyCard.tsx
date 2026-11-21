@@ -28,7 +28,7 @@ export function BusinessHeader({ business, program, children }: { business: Pick
         <BusinessLogo url={program?.logoUrl} initials={initials} bg={accent} ink={readableOn(accent)} />
         <div className="min-w-0">
           <h1 className="font-display text-xl font-bold leading-tight">{business.name}</h1>
-          {program && <p className="mt-0.5 truncate text-sm" style={{ opacity: 0.85 }}>Tarjeta de sellos · {program.name}</p>}
+          {program && <p className="mt-0.5 truncate text-sm" style={{ opacity: 0.85 }}>{/^tarjeta de sellos$/i.test(program.name.trim()) ? 'Tarjeta de sellos' : `Tarjeta de sellos · ${program.name}`}</p>}
         </div>
       </div>
       {children}
