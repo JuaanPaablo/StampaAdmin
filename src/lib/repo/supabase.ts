@@ -5,7 +5,7 @@ import type {
   DashboardData, Location, NewBusinessInput, NewStampCodeInput, Program, RangeKey, Redemption, Role, Staff,
   StaffReportRow, StampClaim, StampCode
 } from '../contracts';
-import { DAY_MS, initials, rangeDays, tzOffsetMinutes, validateBirthday, validateContact, validateName, validatePin, validateProgramPatch } from '../domain';
+import { DAY_MS, initials, rangeDays, slugify, tzOffsetMinutes, validateBirthday, validateContact, validateName, validatePin, validateProgramPatch } from '../domain';
 import {
   buildCustomerHistory, buildDashboard, buildStaffReport, deriveAlerts, filterCustomers,
   type AnalyticsInput, type Rejection
@@ -15,12 +15,18 @@ import { normalizeEmail, validateEmail } from '../credentials';
 import { hashPassword, validatePassword, verifyPassword } from '../password';
 import { AttemptLimiter, LOCK_MS, MAX_FAILED_LOGINS } from '../login-throttle';
 import type { Repo } from './index';
+import type { AccessTokenInfo, AdminAccount, AdminBusinessRow, BusinessSetupInput, CustomerCard, IssuedToken, PlatformSummary } from '../contracts';
+import { INVITE_TTL_HOURS, RESET_TTL_MINUTES } from '../contracts';
+import { generateOtp, generateToken, hashOtp, hashToken, isTokenShape } from '../tokens';
+import {
+  OTP_MAX_ATTEMPTS, OTP_MAX_PER_HOUR, OTP_TTL_MINUTES, PLACEHOLDER_BUSINESS_NAME, PLANS, provisionalSlug, validateBirthYear, validateBusinessImage
+} from '../mvp-rules';
 
 /**
  * Repositorio de producción sobre Supabase (Postgres). Mismo contrato que memory.ts.
  *
  * CÓMO ACTIVARLO (no está conectado todavía en getRepo; lo hace el integrador):
- *   1. Aplicar supabase/migrations/0001_schema.sql y 0002_functions.sql (ver supabase/README.md).
+ *   1. Aplicar supabase/migrations/0001..0004 en orden (ver supabase/README.md).
  *   2. Variables de entorno de servidor: NEXT_PUBLIC_SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY, y STAMPA_REPO=supabase.
  *   3. En src/lib/repo/index.ts:
  *        g.__stampaRepo = process.env.STAMPA_REPO === 'supabase' ? createSupabaseRepo() : createMemoryRepo();
@@ -29,6 +35,8 @@ import type { Repo } from './index';
  *   - Usa la service role (salta RLS), así que SOLO debe ejecutarse en servidor. Cada método filtra por business_id.
  *   - Las operaciones atómicas (crear código, reclamar, anular, cancelar, canjear, crear negocio) son funciones RPC de Postgres
  *     con las mismas reglas y mensajes que src/lib/domain. Devuelven jsonb {ok, error, field}.
+ *   - MVP: alta de negocio + invitación, enlaces de un solo uso, correo del equipo y códigos de verificación también son
+ *     funciones RPC (0004_mvp.sql). Tokens y códigos viajan a la base SOLO como hash (src/lib/tokens.ts).
  *   - La analítica trae filas acotadas por fecha y agrega en TypeScript con src/lib/domain/analytics (idéntico al repo en memoria).
  */
 
@@ -76,25 +84,28 @@ export function createSupabaseRepo(): Repo {
 
   const toBusiness = (r: Row): Business => ({
     id: r.id, name: r.name, slug: r.slug, type: r.type, city: nn(r.city), country: r.country, currency: 'USD',
-    timezone: r.timezone, plan: r.plan, createdAt: iso(r.created_at)!
+    timezone: r.timezone, plan: r.plan, createdAt: iso(r.created_at)!,
+    status: r.status ?? 'active', planExpiresAt: iso(r.plan_expires_at), suspendedAt: iso(r.suspended_at),
+    setupCompletedAt: iso(r.setup_completed_at)
   });
   const toLocation = (r: Row): Location => ({ id: r.id, businessId: r.business_id, name: r.name, address: nn(r.address), active: r.active });
   const toStaff = (r: Row): Staff => ({
     id: r.id, businessId: r.business_id, name: r.name, role: r.role, active: r.active, locationId: nn(r.location_id),
-    email: nn(r.email), hasPin: !!r.has_pin, createdAt: iso(r.created_at)!
+    email: nn(r.email), hasPin: !!r.has_pin, createdAt: iso(r.created_at)!, invitePending: !!r.email && !r.has_password
   });
   const toProgram = (r: Row): Program => ({
     businessId: r.business_id, name: r.name, stampsRequired: r.stamps_required, rewardTitle: r.reward_title,
     rewardDescription: nn(r.reward_description), requireAmount: r.require_amount, minSpendCentsPerStamp: r.min_spend_cents_per_stamp,
     codeTtlSeconds: r.code_ttl_seconds, maxSeatsWithoutApproval: r.max_seats_without_approval, cooldownMinutes: r.cooldown_minutes,
     colors: r.colors, logoText: r.logo_text, logoUrl: nn(r.logo_url), terms: nn(r.terms), birthdayReward: nn(r.birthday_reward),
-    rewardExpiresDays: nn(r.reward_expires_days)
+    rewardExpiresDays: nn(r.reward_expires_days), coverUrl: nn(r.cover_url)
   });
   const toCustomer = (r: Row): Customer => ({
     id: r.id, businessId: r.business_id, name: r.name, contact: r.contact, contactKind: r.contact_kind,
     birthday: r.birthday_d != null && r.birthday_m != null ? { d: r.birthday_d, m: r.birthday_m } : undefined,
     consentAt: iso(r.consent_at)!, createdAt: iso(r.created_at)!, stamps: r.stamps, totalStamps: r.total_stamps,
-    rewardsRedeemed: r.rewards_redeemed, lastVisitAt: iso(r.last_visit_at), wallet: nn(r.wallet), notes: nn(r.notes)
+    rewardsRedeemed: r.rewards_redeemed, lastVisitAt: iso(r.last_visit_at), wallet: nn(r.wallet), notes: nn(r.notes),
+    birthdayYear: nn(r.birthday_y), emailVerifiedAt: iso(r.email_verified_at)
   });
   const toClaim = (r: Row): StampClaim => ({
     id: r.id, codeId: r.code_id, customerId: r.customer_id, customerName: r.customer_name, at: iso(r.at)!,
@@ -118,6 +129,8 @@ export function createSupabaseRepo(): Repo {
   /* ---------- Lecturas reutilizadas ---------- */
 
   const CODE_SELECT = '*, stamp_claims(*)';
+  /** Columnas públicas del equipo: nunca password_hash ni pin_hash. */
+  const STAFF_COLS = 'id,business_id,name,role,active,location_id,email,has_pin,has_password,created_at';
   const getBiz = async (id: string): Promise<Business> => {
     const row = must(await db.from('businesses').select('*').eq('id', id).maybeSingle(), 'Negocio');
     if (!row) throw new Error('No encontramos ese negocio.');
@@ -129,7 +142,7 @@ export function createSupabaseRepo(): Repo {
     return toProgram(row);
   };
   const listStaffRows = async (businessId: string): Promise<Staff[]> =>
-    (must(await db.from('staff').select('id,business_id,name,role,active,location_id,email,has_pin,created_at').eq('business_id', businessId).order('created_at'), 'Equipo') as Row[]).map(toStaff);
+    (must(await db.from('staff').select(STAFF_COLS).eq('business_id', businessId).order('created_at'), 'Equipo') as Row[]).map(toStaff);
   const getCode = async (businessId: string, id: string): Promise<StampCode | null> => {
     const row = must(await db.from('stamp_codes').select(CODE_SELECT).eq('business_id', businessId).eq('id', id).maybeSingle(), 'Código');
     return row ? toCode(row) : null;
@@ -167,11 +180,77 @@ export function createSupabaseRepo(): Repo {
     return row ?? null;
   }
 
+  /* ---------- Auxiliares del MVP ---------- */
+
+  const DAY = 86_400_000;
+  const fail = (msg: string): never => { throw new Error(msg); };
+  const logAudit = async (businessId: string, staffId: string | null | undefined, action: string, detail: string) => {
+    await db.from('audit_log').insert({ business_id: businessId, staff_id: staffId ?? null, action, detail });
+  };
+  const IMAGE_EXT: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
+
+  /** Valores de la plantilla (templates.ts) como columnas de programs. */
+  const templateProgramRow = (p: ReturnType<typeof getTemplate>['program']): Row => ({
+    name: p.name, stamps_required: p.stampsRequired, reward_title: p.rewardTitle, reward_description: p.rewardDescription ?? null,
+    require_amount: p.requireAmount, min_spend_cents_per_stamp: p.minSpendCentsPerStamp, code_ttl_seconds: p.codeTtlSeconds,
+    max_seats_without_approval: p.maxSeatsWithoutApproval, cooldown_minutes: p.cooldownMinutes, colors: p.colors,
+    birthday_reward: p.birthdayReward ?? null
+  });
+
+  const toAdmin = (r: Row): AdminAccount => ({ id: r.id, email: r.email, createdAt: iso(r.created_at)!, lastLoginAt: iso(r.last_login_at) });
+  const adminLookup = async (email: string): Promise<Row | null> =>
+    must(await db.from('platform_admins').select('id,email,password_hash,locked_until,created_at,last_login_at').eq('email', email).maybeSingle(), 'Administrador') as Row | null;
+  /** Fallos de admins que no existen (por proceso): bloquean igual que una cuenta real. */
+  const unknownAdmins = new AttemptLimiter(MAX_FAILED_LOGINS, LOCK_MS);
+
+  /** Filas del panel de administrador (id = un solo negocio). */
+  async function adminRows(id?: string): Promise<AdminBusinessRow[]> {
+    const [bizRows, owners, stats] = await Promise.all([
+      fetchAll((f, t) => {
+        const q = db.from('businesses').select('*');
+        return (id ? q.eq('id', id) : q).order('created_at', { ascending: false }).order('id').range(f, t);
+      }, 'Negocios'),
+      fetchAll((f, t) => {
+        const q = db.from('staff').select(STAFF_COLS).eq('role', 'owner');
+        return (id ? q.eq('business_id', id) : q).order('created_at').order('id').range(f, t);
+      }, 'Dueños'),
+      fetchAll((f, t) => db.rpc('admin_business_stats', { p_business_id: id ?? null }).range(f, t), 'Métricas')
+    ]);
+    const ownerOf = new Map<string, Staff>();
+    for (const o of owners.map(toStaff)) if (!ownerOf.has(o.businessId)) ownerOf.set(o.businessId, o);   // el dueño más antiguo
+    const statsOf = new Map(stats.map((s) => [s.biz_id as string, s]));
+    return bizRows.map((r) => {
+      const o = ownerOf.get(r.id);
+      const s = statsOf.get(r.id);
+      return {
+        business: toBusiness(r),
+        owner: o ? { staffId: o.id, name: o.name, email: o.email, invitePending: !!o.invitePending } : undefined,
+        note: nn(r.admin_note) ?? undefined,
+        stats: {
+          customers: Number(s?.n_customers ?? 0), stamps30d: Number(s?.n_stamps_30d ?? 0),
+          redemptions30d: Number(s?.n_redemptions_30d ?? 0), lastActivityAt: iso(s?.last_activity_at)
+        }
+      };
+    });
+  }
+
+  /** Tarjeta del cliente: negocio, programa, cliente y sus últimos 10 movimientos (sellos no anulados y canjes). */
+  async function cardOf(business: Business, customer: Customer): Promise<CustomerCard> {
+    const [program, claims, reds] = await Promise.all([
+      getProg(business.id),
+      db.from('stamp_claims').select('at').eq('business_id', business.id).eq('customer_id', customer.id).is('voided_at', null).order('at', { ascending: false }).limit(10),
+      db.from('redemptions').select('at').eq('business_id', business.id).eq('customer_id', customer.id).order('at', { ascending: false }).limit(10)
+    ]);
+    const recent: CustomerCard['recent'] = [
+      ...(must(claims, 'Sellos') as Row[]).map((r) => ({ at: iso(r.at)!, kind: 'stamp' as const })),
+      ...(must(reds, 'Canjes') as Row[]).map((r) => ({ at: iso(r.at)!, kind: 'redeem' as const }))
+    ].sort((x, y) => Date.parse(y.at) - Date.parse(x.at)).slice(0, 10);
+    return { business, program, customer, recent };
+  }
+
   /* ---------- Implementación ---------- */
 
   const repo: Repo = {
-    // PENDIENTE (agente de datos): reemplazar por la implementación real de los métodos del MVP.
-    ...mvpPending(),
     async listBusinesses() {
       return (must(await db.from('businesses').select('*').order('created_at'), 'Negocios') as Row[]).map(toBusiness);
     },
@@ -291,7 +370,8 @@ export function createSupabaseRepo(): Repo {
         name: 'name', stampsRequired: 'stamps_required', rewardTitle: 'reward_title', rewardDescription: 'reward_description',
         requireAmount: 'require_amount', minSpendCentsPerStamp: 'min_spend_cents_per_stamp', codeTtlSeconds: 'code_ttl_seconds',
         maxSeatsWithoutApproval: 'max_seats_without_approval', cooldownMinutes: 'cooldown_minutes', colors: 'colors',
-        logoText: 'logo_text', logoUrl: 'logo_url', terms: 'terms', birthdayReward: 'birthday_reward', rewardExpiresDays: 'reward_expires_days'
+        logoText: 'logo_text', logoUrl: 'logo_url', terms: 'terms', birthdayReward: 'birthday_reward', rewardExpiresDays: 'reward_expires_days',
+        coverUrl: 'cover_url'
       };
       const upd: Row = {};
       const changed: string[] = [];
@@ -432,29 +512,333 @@ export function createSupabaseRepo(): Repo {
     async listAudit(businessId, limit = 50) {
       const rows = must(await db.from('audit_log').select('*').eq('business_id', businessId).order('at', { ascending: false }).limit(limit), 'Auditoría') as Row[];
       return rows.map(toAudit);
+    },
+
+    /* =============================== MVP (ver docs/MVP.md) =============================== */
+
+    async createBusinessAccess(input) {
+      const email = normalizeEmail(input.ownerEmail);
+      const err = validateEmail(email);
+      if (err) fail(err);
+      if (await authLookup(email)) fail('Ese correo ya tiene acceso a Stampa.');
+      if (!PLANS.includes(input.plan)) fail('Elige un plan válido.');
+      if (input.planExpiresAt && Number.isNaN(Date.parse(input.planExpiresAt))) fail('La fecha de vencimiento no es válida.');
+      const token = generateToken();
+      // Todo en una transacción (create_business_access): si algo falla no queda un negocio a medias.
+      const r = await rpcOrThrow('create_business_access', {
+        p_email: email, p_plan: input.plan, p_plan_expires_at: input.planExpiresAt ? new Date(input.planExpiresAt).toISOString() : null,
+        p_note: input.note?.trim() ? input.note.trim().slice(0, 500) : null, p_business_name: PLACEHOLDER_BUSINESS_NAME,
+        p_slug: provisionalSlug(), p_owner_name: email.split('@')[0].slice(0, 80) || 'Dueño', p_program: getTemplate('otro').program,
+        p_token_hash: hashToken(token), p_invite_ttl_seconds: INVITE_TTL_HOURS * 3600
+      });
+      const invite: IssuedToken = { token, kind: 'invite', expiresAt: iso(r.expires_at)! };
+      return { business: await getBiz(r.business_id), ownerId: r.owner_id as string, invite };
+    },
+
+    async listAdminBusinesses() { return adminRows(); },
+
+    async getAdminBusiness(id) { return (await adminRows(id))[0] ?? null; },
+
+    async getPlatformSummary(): Promise<PlatformSummary> {
+      const now = Date.now();
+      const [rows, totals] = await Promise.all([
+        fetchAll((f, t) => db.from('businesses').select('id,status,plan_expires_at').order('id').range(f, t), 'Negocios'),
+        rpc('platform_stats', {})
+      ]);
+      const st = (r: Row) => (r.status ?? 'active') as string;
+      const exp = (r: Row) => (r.plan_expires_at ? Date.parse(r.plan_expires_at) : Infinity);
+      return {
+        businesses: {
+          total: rows.length,
+          active: rows.filter((r) => st(r) === 'active').length,
+          setup: rows.filter((r) => st(r) === 'setup').length,
+          suspended: rows.filter((r) => st(r) === 'suspended').length,
+          expiringSoon: rows.filter((r) => st(r) !== 'suspended' && exp(r) >= now && exp(r) - now <= 7 * DAY).length,
+          expired: rows.filter((r) => st(r) !== 'suspended' && exp(r) < now).length
+        },
+        customers: Number(totals.customers ?? 0),
+        stampsTotal: Number(totals.stamps_total ?? 0),
+        stamps30d: Number(totals.stamps_30d ?? 0),
+        redemptionsTotal: Number(totals.redemptions_total ?? 0),
+        redemptions30d: Number(totals.redemptions_30d ?? 0)
+      };
+    },
+
+    async setBusinessStatus(id, status) {
+      const b = await getBiz(id);
+      if (status === 'suspended') {
+        if (b.status !== 'suspended') {
+          const upd: Row = { status: 'suspended', suspended_at: new Date().toISOString() };
+          // Un negocio activo ya terminó su configuración (los anteriores al MVP no tienen la fecha): al reactivarlo vuelve a 'active'.
+          if (b.status === 'active' && !b.setupCompletedAt) upd.setup_completed_at = b.createdAt;
+          must(await db.from('businesses').update(upd).eq('id', id), 'Negocio');
+        }
+        await logAudit(id, null, 'business.suspend', 'Stampa suspendió el negocio.');
+      } else {
+        const next = b.setupCompletedAt || b.status === 'active' ? 'active' : 'setup';
+        must(await db.from('businesses').update({ status: next, suspended_at: null }).eq('id', id), 'Negocio');
+        await logAudit(id, null, 'business.reactivate', 'Stampa reactivó el negocio.');
+      }
+      return getBiz(id);
+    },
+
+    async updateBusinessPlan(id, plan, planExpiresAt, note) {
+      await getBiz(id);
+      if (!PLANS.includes(plan)) fail('Elige un plan válido.');
+      if (planExpiresAt && Number.isNaN(Date.parse(planExpiresAt))) fail('La fecha de vencimiento no es válida.');
+      const exp = planExpiresAt ? new Date(planExpiresAt).toISOString() : null;
+      const upd: Row = { plan, plan_expires_at: exp };
+      if (note !== undefined) upd.admin_note = note.trim() ? note.trim().slice(0, 500) : null;
+      must(await db.from('businesses').update(upd).eq('id', id), 'Negocio');
+      await logAudit(id, null, 'business.plan', `Plan ${plan}${exp ? ` hasta ${exp.slice(0, 10)}` : ' sin vencimiento'}.`);
+      return getBiz(id);
+    },
+
+    /* ---------- Administradores ---------- */
+    async verifyAdminCredentials(rawEmail, password) {
+      const email = normalizeEmail(rawEmail);
+      const rec = email ? await adminLookup(email) : null;
+      if (!rec) {
+        await verifyPassword(password, null); // iguala tiempos
+        if (!unknownAdmins.lockedFor(email)) unknownAdmins.fail(email);
+        return null;
+      }
+      const locked = !!rec.locked_until && Date.parse(rec.locked_until) > Date.now();
+      const ok = await verifyPassword(password, rec.password_hash);
+      if (locked) return null;
+      if (!ok) { await rpc('admin_record_failure', { p_admin_id: rec.id }); return null; }
+      await rpc('admin_record_success', { p_admin_id: rec.id });
+      return { adminId: rec.id as string };
+    },
+
+    async isAdminLoginLocked(rawEmail) {
+      const email = normalizeEmail(rawEmail);
+      const rec = email ? await adminLookup(email) : null;
+      if (!rec) return unknownAdmins.lockedFor(email) > 0;
+      return !!rec.locked_until && Date.parse(rec.locked_until) > Date.now();
+    },
+
+    async getAdmin(id) {
+      const row = must(await db.from('platform_admins').select('id,email,created_at,last_login_at').eq('id', id).maybeSingle(), 'Administrador') as Row | null;
+      return row ? toAdmin(row) : null;
+    },
+
+    async upsertAdmin(rawEmail, password) {
+      const email = normalizeEmail(rawEmail);
+      const err = validateEmail(email) ?? validatePassword(password);
+      if (err) fail(err);
+      const passwordHash = await hashPassword(password);
+      const row = must<Row>(await db.from('platform_admins')
+        .upsert({ email, password_hash: passwordHash, failed_logins: 0, locked_until: null }, { onConflict: 'email' })
+        .select('id,email,created_at,last_login_at').single(), 'Administrador');
+      return toAdmin(row);
+    },
+
+    async changeAdminPassword(adminId, currentPassword, newPassword) {
+      const row = must(await db.from('platform_admins').select('id,password_hash').eq('id', adminId).maybeSingle(), 'Administrador') as Row | null;
+      if (!row) return fail('No encontramos esa cuenta.');
+      if (!(await verifyPassword(currentPassword, row.password_hash))) fail('La contraseña actual no es correcta.');
+      const err = validatePassword(newPassword);
+      if (err) fail(err);
+      if (newPassword === currentPassword) fail('La contraseña nueva debe ser distinta de la actual.');
+      must(await db.from('platform_admins').update({ password_hash: await hashPassword(newPassword) }).eq('id', adminId), 'Administrador');
+    },
+
+    /* ---------- Enlaces de un solo uso ---------- */
+    async issueAccessToken(staffId, kind) {
+      const token = generateToken();
+      const r = await rpcOrThrow('issue_access_token', {
+        p_staff_id: staffId, p_kind: kind, p_token_hash: hashToken(token),
+        p_ttl_seconds: kind === 'invite' ? INVITE_TTL_HOURS * 3600 : RESET_TTL_MINUTES * 60
+      });
+      const out: IssuedToken = { token, kind, expiresAt: iso(r.expires_at)! };
+      return out;
+    },
+
+    async peekAccessToken(token) {
+      if (!isTokenShape(token)) return null;
+      const { data, error } = await db.rpc('peek_access_token', { p_hash: hashToken(token) });
+      if (error) throw new Error(error.message);
+      if (!data) return null;
+      const r = data as Row;
+      const info: AccessTokenInfo = {
+        kind: r.kind, staffId: r.staff_id, businessId: r.business_id, email: r.email, staffName: r.staff_name,
+        businessName: r.business_name, businessStatus: r.business_status ?? 'active', expiresAt: iso(r.expires_at)!
+      };
+      return info;
+    },
+
+    async consumeAccessToken(token, password, name) {
+      // Mismo orden de errores que memory.ts: primero el enlace, luego la contraseña y el nombre.
+      if (!(await repo.peekAccessToken(token))) fail('Este enlace ya no es válido. Pide uno nuevo.');
+      const err = validatePassword(password);
+      if (err) fail(err);
+      if (name !== undefined) { const e = validateName(name); if (e) fail(e); }
+      const r = await rpcOrThrow('consume_access_token', {
+        p_hash: hashToken(token), p_password_hash: await hashPassword(password), p_name: name === undefined ? null : name.trim()
+      });
+      return { businessId: r.business_id as string, staffId: r.staff_id as string };
+    },
+
+    async findStaffByEmail(rawEmail) {
+      const email = normalizeEmail(rawEmail);
+      if (!email) return null;
+      const row = must(await db.from('staff').select(STAFF_COLS).eq('email', email).eq('active', true).maybeSingle(), 'Equipo') as Row | null;
+      return row ? toStaff(row) : null;
+    },
+
+    async setStaffEmail(businessId, staffId, rawEmail, actorId) {
+      const email = normalizeEmail(rawEmail);
+      const err = validateEmail(email);
+      if (err) fail(err);
+      await rpcOrThrow('set_staff_email', { p_business_id: businessId, p_staff_id: staffId, p_email: email, p_actor_id: actorId ?? null });
+      const row = must<Row>(await db.from('staff').select(STAFF_COLS).eq('business_id', businessId).eq('id', staffId).single(), 'Equipo');
+      return toStaff(row);
+    },
+
+    /* ---------- Asistente del dueño ---------- */
+    async saveBusinessSetup(businessId, input: BusinessSetupInput, actorId) {
+      const b = await getBiz(businessId);
+      const name = input.name?.trim() ?? '';
+      if (name.length < 2) fail('Escribe el nombre de tu negocio.');
+      if (name.length > 80) fail('El nombre es demasiado largo (máximo 80 letras).');
+      if (name.toLowerCase() === PLACEHOLDER_BUSINESS_NAME.toLowerCase()) fail('Escribe el nombre real de tu negocio.');
+      const typeChanged = b.type !== input.type;
+      const upd: Row = { name, type: input.type, city: input.city?.trim() || null };
+      if (b.status === 'setup') {
+        // Mientras no esté activo, el slug sigue al nombre (-2, -3... si ya existe). Después ya no cambia: el QR impreso depende de él.
+        const base = slugify(name);
+        for (let n = 1; ; n++) {
+          if (n > 500) fail('No pudimos generar el enlace del negocio. Prueba con otro nombre.');
+          const slug = n === 1 ? base : `${base}-${n}`;
+          const taken = must(await db.from('businesses').select('id').eq('slug', slug).neq('id', businessId).limit(1), 'Negocio') as Row[];
+          if (taken.length) continue;
+          const res = await db.from('businesses').update({ ...upd, slug }).eq('id', businessId);
+          if (res.error?.code === '23505') continue;   // otro negocio tomó ese slug en este instante
+          must(res, 'Negocio');
+          break;
+        }
+        const prog: Row = { logo_text: initials(name) };
+        if (typeChanged) Object.assign(prog, templateProgramRow(getTemplate(input.type).program));   // conserva logo y portada
+        must(await db.from('programs').update(prog).eq('business_id', businessId), 'Programa');
+      } else {
+        must(await db.from('businesses').update(upd).eq('id', businessId), 'Negocio');
+      }
+      await logAudit(businessId, actorId, 'business.update', 'Se guardaron los datos del negocio.');
+      return getBiz(businessId);
+    },
+
+    async completeBusinessSetup(businessId, actorId) {
+      const b = await getBiz(businessId);
+      if (b.status === 'suspended') fail('Tu cuenta está suspendida. Escríbenos por WhatsApp.');
+      if (b.name === PLACEHOLDER_BUSINESS_NAME) fail('Primero escribe el nombre de tu negocio.');
+      const locs = must(await db.from('locations').select('id').eq('business_id', businessId).eq('active', true).limit(1), 'Sucursales') as Row[];
+      if (!locs.length) fail('Agrega al menos una sucursal.');
+      if (b.status === 'setup') {
+        must(await db.from('businesses').update({ status: 'active', setup_completed_at: new Date().toISOString() }).eq('id', businessId).eq('status', 'setup'), 'Negocio');
+      }
+      await logAudit(businessId, actorId, 'business.ready', `${b.name} terminó su configuración.`);
+      return getBiz(businessId);
+    },
+
+    async uploadBusinessImage(businessId, kind, file) {
+      await getBiz(businessId);
+      const err = validateBusinessImage(file);
+      if (err) fail(err);
+      const k = kind === 'logo' ? 'logo' : 'cover';
+      const path = `${businessId}/${k}-${Date.now()}.${IMAGE_EXT[file.contentType]}`;
+      const bucket = db.storage.from('branding');
+      const up = await bucket.upload(path, file.bytes, { contentType: file.contentType, upsert: false, cacheControl: '31536000' });
+      if (up.error) throw new Error(`Imagen: ${up.error.message}`);
+      const url = bucket.getPublicUrl(path).data.publicUrl;
+      must(await db.from('programs').update(k === 'logo' ? { logo_url: url } : { cover_url: url }).eq('business_id', businessId), 'Programa');
+      return url;
+    },
+
+    /* ---------- Clientes (página pública) ---------- */
+    async getBusinessBySlug(slug) {
+      if (!slug) return null;
+      const row = must(await db.from('businesses').select('*').eq('slug', slug).maybeSingle(), 'Negocio');
+      return row ? toBusiness(row) : null;
+    },
+
+    async findCustomerByEmail(businessId, rawEmail) {
+      const email = normalizeEmail(rawEmail);
+      if (!email) return null;
+      const row = must(await db.from('customers').select('*').eq('business_id', businessId).eq('contact_kind', 'email').eq('contact', email).maybeSingle(), 'Cliente');
+      return row ? toCustomer(row) : null;
+    },
+
+    async listCustomerCards(rawEmail) {
+      const email = normalizeEmail(rawEmail);
+      if (!email) return [];
+      const rows = must(await db.from('customers').select('*, businesses!inner(*)')
+        .eq('contact_kind', 'email').eq('contact', email).neq('businesses.status', 'setup'), 'Tarjetas') as Row[];
+      const cards = await Promise.all(rows.map((r) => cardOf(toBusiness(r.businesses), toCustomer(r))));
+      const when = (c: CustomerCard) => Date.parse(c.customer.lastVisitAt ?? c.customer.createdAt);
+      return cards.sort((a, b) => when(b) - when(a));
+    },
+
+    async getCustomerCard(businessId, customerId) {
+      const [b, c] = await Promise.all([
+        repo.getBusiness(businessId),
+        db.from('customers').select('*').eq('business_id', businessId).eq('id', customerId).maybeSingle()
+      ]);
+      const row = must(c, 'Cliente');
+      return b && row ? cardOf(b, toCustomer(row)) : null;
+    },
+
+    async registerVerifiedCustomer(businessId, input) {
+      const b = await getBiz(businessId);
+      if ((b.status ?? 'active') !== 'active') fail('Este negocio no está recibiendo clientes nuevos por ahora.');
+      const v = validateContact('email', input.email);
+      if (!v.ok) return fail(v.error);
+      const contact = v.contact;
+      const findExisting = async () => must(await db.from('customers').select('*').eq('business_id', businessId).eq('contact', contact).maybeSingle(), 'Cliente') as Row | null;
+      const markVerified = async (row: Row): Promise<Customer> => {
+        if (row.email_verified_at) return toCustomer(row);
+        const upd = must<Row>(await db.from('customers').update({ email_verified_at: new Date().toISOString() }).eq('id', row.id).select('*').single(), 'Cliente');
+        return toCustomer(upd);
+      };
+      const existing = await findExisting();
+      if (existing) return markVerified(existing);
+      const nameErr = validateName(input.name);
+      if (nameErr) fail(nameErr);
+      const bErr = validateBirthday(input.birthday) ?? validateBirthYear(input.birthdayYear);
+      if (bErr) fail(bErr);
+      const at = new Date().toISOString();
+      const res = await db.from('customers').insert({
+        business_id: businessId, name: input.name.trim(), contact, contact_kind: 'email',
+        birthday_d: input.birthday?.d ?? null, birthday_m: input.birthday?.m ?? null, birthday_y: input.birthdayYear ?? null,
+        consent_at: at, created_at: at, email_verified_at: at
+      }).select('*').single();
+      if (res.error?.code === '23505') {   // se registró en paralelo (doble toque): devuelve el existente
+        const again = await findExisting();
+        if (again) return markVerified(again);
+      }
+      return toCustomer(must(res, 'Cliente') as Row);
+    },
+
+    async requestEmailOtp(rawEmail) {
+      const email = normalizeEmail(rawEmail);
+      const err = validateEmail(email);
+      if (err) return { ok: false, error: err };
+      const code = generateOtp();
+      const r = await rpc('request_email_otp', {
+        p_email: email, p_code_hash: hashOtp(email, code), p_ttl_seconds: OTP_TTL_MINUTES * 60, p_max_per_hour: OTP_MAX_PER_HOUR
+      });
+      if (!r.ok) return { ok: false, error: (r.error as string) ?? 'No pudimos generar el código. Inténtalo de nuevo.' };
+      return { ok: true, code, expiresAt: iso(r.expires_at)! };
+    },
+
+    async verifyEmailOtp(rawEmail, code) {
+      const email = normalizeEmail(rawEmail);
+      if (!email || !/^\d{6}$/.test((code ?? '').trim())) return false;
+      const { data, error } = await db.rpc('verify_email_otp', { p_email: email, p_code_hash: hashOtp(email, code), p_max_attempts: OTP_MAX_ATTEMPTS });
+      if (error) throw new Error(error.message);
+      return data === true;
     }
   };
 
   return repo;
 }
-
-/** Marcador temporal: lanza en cada método del MVP hasta que exista la implementación real sobre Supabase. */
-function mvpPending(): Pick<Repo, MvpMethod> {
-  const names: MvpMethod[] = [
-    'createBusinessAccess', 'listAdminBusinesses', 'getAdminBusiness', 'getPlatformSummary', 'setBusinessStatus', 'updateBusinessPlan',
-    'verifyAdminCredentials', 'isAdminLoginLocked', 'getAdmin', 'upsertAdmin', 'changeAdminPassword',
-    'issueAccessToken', 'peekAccessToken', 'consumeAccessToken', 'findStaffByEmail', 'setStaffEmail',
-    'saveBusinessSetup', 'completeBusinessSetup', 'uploadBusinessImage',
-    'getBusinessBySlug', 'findCustomerByEmail', 'listCustomerCards', 'getCustomerCard', 'registerVerifiedCustomer', 'requestEmailOtp', 'verifyEmailOtp'
-  ];
-  const out: Record<string, () => Promise<never>> = {};
-  for (const n of names) out[n] = async () => { throw new Error(`Supabase: ${n} aún no está implementado.`); };
-  return out as unknown as Pick<Repo, MvpMethod>;
-}
-
-type MvpMethod =
-  | 'createBusinessAccess' | 'listAdminBusinesses' | 'getAdminBusiness' | 'getPlatformSummary' | 'setBusinessStatus' | 'updateBusinessPlan'
-  | 'verifyAdminCredentials' | 'isAdminLoginLocked' | 'getAdmin' | 'upsertAdmin' | 'changeAdminPassword'
-  | 'issueAccessToken' | 'peekAccessToken' | 'consumeAccessToken' | 'findStaffByEmail' | 'setStaffEmail'
-  | 'saveBusinessSetup' | 'completeBusinessSetup' | 'uploadBusinessImage'
-  | 'getBusinessBySlug' | 'findCustomerByEmail' | 'listCustomerCards' | 'getCustomerCard' | 'registerVerifiedCustomer' | 'requestEmailOtp' | 'verifyEmailOtp';

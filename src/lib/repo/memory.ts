@@ -60,7 +60,7 @@ const checkPin = (pin: string, stored?: string): boolean => {
 };
 
 const clone = <T>(v: T): T => structuredClone(v);
-const strip = (s: StaffRec): Staff => { const { pinHash: _p, passwordHash: _h, failedLogins: _f, lockedUntil: _l, ...rest } = s; return { ...rest, hasPin: !!s.pinHash }; };
+const strip = (s: StaffRec): Staff => { const { pinHash: _p, passwordHash: _h, failedLogins: _f, lockedUntil: _l, ...rest } = s; return { ...rest, hasPin: !!s.pinHash, invitePending: !!s.email && !s.passwordHash }; };
 const fail = (msg: string): never => { throw new Error(msg); };
 
 export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
@@ -394,6 +394,7 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
 
     async claimStampCode(businessId, rawCode, customerId): Promise<ClaimResult> {
       const program = prog(businessId);
+      if ((biz(businessId).status ?? 'active') !== 'active') return { ok: false, error: 'Este negocio no está recibiendo sellos por ahora.' };
       const customer = findCustomer(businessId, customerId);
       if (!customer) return { ok: false, error: 'No encontramos tu tarjeta en este negocio.' };
       const wanted = (rawCode ?? '').trim();
@@ -541,6 +542,8 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
     async setBusinessStatus(id, status) {
       const b = biz(id);
       if (status === 'suspended') {
+        // Un negocio anterior al MVP (sin estado) ya opera: se marca como configurado para que al reactivarlo vuelva a 'active'.
+        if (b.status === undefined) b.setupCompletedAt ??= b.createdAt;
         if (b.status !== 'suspended') { b.status = 'suspended'; b.suspendedAt = nowIso(); }
         log(id, undefined, 'business.suspend', 'Stampa suspendió el negocio.');
       } else {

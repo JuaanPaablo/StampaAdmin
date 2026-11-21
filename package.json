@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "next lint",
     "test": "vitest run",
-    "account:create": "tsx scripts/create-account.ts"
+    "account:create": "tsx scripts/create-account.ts",
+    "admin:create": "tsx scripts/create-admin.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
