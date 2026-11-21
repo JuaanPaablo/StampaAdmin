@@ -1,0 +1,83 @@
+import Link from 'next/link';
+import type { Business, CustomerCard, Program } from '@/lib/contracts';
+import { signOutAction } from '@/app/u/actions';
+import { PLACEHOLDER_BUSINESS_NAME } from '@/lib/mvp-rules';
+import { Isotipo } from '@/components/shell/logo';
+import { rewardPhrase } from './card-model';
+import { BusinessHeader } from './LoyaltyCard';
+import { Notice } from './Shell';
+import { StampGrid } from './Stamps';
+
+/** Barra superior: "Mis tarjetas · 1 de 3" cuando el cliente tiene más de una. */
+export function CardsTopBar({ index, total }: { index?: number; total: number }) {
+  if (total < 2) return null;
+  return (
+    <div className="mb-3 flex items-center justify-between">
+      <Link href="/mis-tarjetas" className="inline-flex min-h-12 items-center gap-1 font-display text-lg font-bold text-navy">
+        <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+        Mis tarjetas
+      </Link>
+      {index !== undefined && <span className="text-sm font-semibold tabular-nums text-muted">{index + 1} de {total}</span>}
+    </div>
+  );
+}
+
+/** "No soy yo / salir": borra la sesión de este teléfono. */
+export function SignOut({ slug, email }: { slug?: string; email: string }) {
+  return (
+    <form action={signOutAction} className="mt-6 text-center">
+      {slug && <input type="hidden" name="slug" value={slug} />}
+      <p className="text-xs text-muted">Entraste como <span className="break-all font-semibold text-navy">{email}</span></p>
+      <button type="submit" className="mt-1 inline-flex min-h-12 items-center px-3 text-sm font-semibold text-navy underline underline-offset-4">No soy yo / salir</button>
+    </form>
+  );
+}
+
+/** Negocio todavía en configuración. */
+export function ComingSoon({ business }: { business: Business }) {
+  const named = business.name && business.name !== PLACEHOLDER_BUSINESS_NAME;
+  return (
+    <div className="mt-10 rounded-3xl bg-navy px-6 py-10 text-center text-white shadow-card">
+      <Isotipo size={56} className="mx-auto" />
+      <h1 className="mt-5 font-display text-3xl font-bold">Muy pronto</h1>
+      <p className="mt-2 text-[15px] text-white/85">
+        {named ? `La tarjeta de sellos de ${business.name} está casi lista.` : 'Esta tarjeta de sellos está casi lista.'} Vuelve a escanear el código en unos días.
+      </p>
+    </div>
+  );
+}
+
+/** Negocio pausado y el cliente no tiene tarjeta: aviso, sin registro. */
+export function PausedNoCard({ business, program }: { business: Business; program: Program }) {
+  return (
+    <div className="space-y-4">
+      <div className="overflow-hidden rounded-3xl bg-white shadow-card ring-1 ring-line/70"><BusinessHeader business={business} program={program} /></div>
+      <Notice tone="warning" title="Este negocio pausó su tarjeta por ahora">
+        No está recibiendo clientes nuevos ni sumando sellos. Si ya tienes tarjeta, ábrela con tu correo.
+      </Notice>
+    </div>
+  );
+}
+
+/** Presentación de la tarjeta del negocio para quien aún no tiene sesión. */
+export function ProgramIntro({ business, program }: { business: Business; program: Program }) {
+  return (
+    <div className="overflow-hidden rounded-3xl bg-white shadow-card ring-1 ring-line/70">
+      <BusinessHeader business={business} program={program} />
+      <div className="space-y-4 px-5 py-5">
+        <p className="font-display text-lg font-semibold leading-snug text-navy">
+          Junta {program.stampsRequired} sellos y gana tu {rewardPhrase(program.rewardTitle)}.
+        </p>
+        {program.rewardDescription && <p className="-mt-2 text-sm text-muted">{program.rewardDescription}</p>}
+        <StampGrid total={program.stampsRequired} filled={0} />
+        {program.birthdayReward && <p className="text-sm text-muted">Y en tu cumpleaños: {program.birthdayReward.charAt(0).toLowerCase() + program.birthdayReward.slice(1)}.</p>}
+      </div>
+    </div>
+  );
+}
+
+/** Posición de la tarjeta de este negocio en la lista del cliente. */
+export function cardIndex(cards: CustomerCard[], businessId: string): number | undefined {
+  const i = cards.findIndex((c) => c.business.id === businessId);
+  return i >= 0 ? i : undefined;
+}
