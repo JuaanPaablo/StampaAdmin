@@ -55,7 +55,7 @@ export default async function StampPage({ params, searchParams }: Props) {
             {cardLink}
           </div>
         </div>
-        <SignOut slug={business.slug} email={session.email} />
+        <SignOut slug={business.slug} email={session.email} stampCode={code} />
       </CustomerShell>
     );
   }
@@ -70,7 +70,7 @@ export default async function StampPage({ params, searchParams }: Props) {
             prefill={other ? { name: other.name, day: other.birthday?.d, month: other.birthday?.m, year: other.birthdayYear } : undefined} />
           <p className="mt-3 text-center text-sm text-muted">Al unirte sumamos tu sello del código {code}.</p>
         </div>
-        <SignOut slug={business.slug} email={session.email} />
+        <SignOut slug={business.slug} email={session.email} stampCode={code} />
       </CustomerShell>
     );
   }

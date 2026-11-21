@@ -23,10 +23,11 @@ export function CardsTopBar({ index, total }: { index?: number; total: number })
 }
 
 /** "No soy yo / salir": borra la sesión de este teléfono. */
-export function SignOut({ slug, email }: { slug?: string; email: string }) {
+export function SignOut({ slug, email, stampCode }: { slug?: string; email: string; stampCode?: string }) {
   return (
     <form action={signOutAction} className="mt-6 text-center">
       {slug && <input type="hidden" name="slug" value={slug} />}
+      {stampCode && <input type="hidden" name="c" value={stampCode} />}
       <p className="text-xs text-muted">Entraste como <span className="break-all font-semibold text-navy">{email}</span></p>
       <button type="submit" className="mt-1 inline-flex min-h-12 items-center px-3 text-sm font-semibold text-navy underline underline-offset-4">No soy yo / salir</button>
     </form>

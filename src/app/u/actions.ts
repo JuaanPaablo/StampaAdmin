@@ -247,5 +247,8 @@ export async function signOutAction(fd: FormData): Promise<void> {
   await clearCustomerSession();
   await clearPendingSignup();
   const business = await businessFor(str(fd, 'slug'));
+  const code = str(fd, 'c');
+  // Desde la página del sello, quien sale sigue con el mismo código para registrarse o entrar con su correo.
+  if (business && /^\d{6}$/.test(code)) redirect(stampPath(business.slug, code));
   redirect(business ? customerPath(business.slug) : '/mis-tarjetas');
 }
