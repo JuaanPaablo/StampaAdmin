@@ -1,7 +1,9 @@
 import type {
   Alert, AuditEntry, Business, ClaimResult, CreateCodeResult, Customer, CustomerDetail, CustomerQuery,
   CustomerRow, DashboardData, Location, NewBusinessInput, NewStampCodeInput, Program, RangeKey,
-  Redemption, Staff, StaffReportRow, StampCode, Role
+  Redemption, Staff, StaffReportRow, StampCode, Role,
+  AccessTokenInfo, AccessTokenKind, AdminAccount, AdminBusinessRow, BusinessSetupInput, BusinessStatus, CustomerCard,
+  IssuedToken, NewBusinessAccessInput, OtpRequestResult, Plan, PlatformSummary
 } from '../contracts';
 import { createMemoryRepo } from './memory';
 import { createSupabaseRepo } from './supabase';
@@ -72,6 +74,71 @@ export interface Repo {
   getStaffReport(businessId: string, range: RangeKey): Promise<StaffReportRow[]>;
   listAlerts(businessId: string, limit?: number): Promise<Alert[]>;
   listAudit(businessId: string, limit?: number): Promise<AuditEntry[]>;
+
+  /* =============================== MVP (ver docs/MVP.md) =============================== */
+
+  /* Plataforma: panel de administrador de Stampa */
+  /**
+   * Autoriza un correo como dueño de un negocio NUEVO. Crea el negocio en estado 'setup' (nombre provisional
+   * "Negocio nuevo", slug provisional), su programa con la plantilla 'otro' y la persona dueña con ese correo y SIN
+   * contraseña. Devuelve también la invitación (72 h). Falla si el correo ya pertenece a alguien.
+   */
+  createBusinessAccess(input: NewBusinessAccessInput): Promise<{ business: Business; ownerId: string; invite: IssuedToken }>;
+  listAdminBusinesses(): Promise<AdminBusinessRow[]>;
+  getAdminBusiness(id: string): Promise<AdminBusinessRow | null>;
+  getPlatformSummary(): Promise<PlatformSummary>;
+  /** Solo 'active' | 'suspended'. Reactivar un negocio que nunca terminó el asistente lo devuelve a 'setup'. */
+  setBusinessStatus(id: string, status: Exclude<BusinessStatus, 'setup'>): Promise<Business>;
+  /** planExpiresAt null = sin vencimiento. note undefined = no cambia. */
+  updateBusinessPlan(id: string, plan: Plan, planExpiresAt: string | null, note?: string): Promise<Business>;
+
+  /* Cuentas de administrador (tabla aparte del equipo de los negocios) */
+  verifyAdminCredentials(email: string, password: string): Promise<{ adminId: string } | null>;
+  isAdminLoginLocked(email: string): Promise<boolean>;
+  getAdmin(id: string): Promise<AdminAccount | null>;
+  /** Crea o reemplaza la contraseña de un admin por correo (lo usa el script de alta). */
+  upsertAdmin(email: string, password: string): Promise<AdminAccount>;
+  /** Cambia la contraseña verificando la actual. Lanza Error con mensaje en español si no coincide. */
+  changeAdminPassword(adminId: string, currentPassword: string, newPassword: string): Promise<void>;
+
+  /* Enlaces de un solo uso (invitación y restablecer contraseña) */
+  /** Invalida los enlaces anteriores sin usar del mismo tipo para esa persona y emite uno nuevo. */
+  issueAccessToken(staffId: string, kind: AccessTokenKind): Promise<IssuedToken>;
+  /** Información del enlace si es válido (existe, no vencido, no usado, persona activa); si no, null. */
+  peekAccessToken(token: string): Promise<AccessTokenInfo | null>;
+  /** Usa el enlace: fija la contraseña (y el nombre si viene), lo marca usado y limpia bloqueos. Lanza si no es válido. */
+  consumeAccessToken(token: string, password: string, name?: string): Promise<{ businessId: string; staffId: string }>;
+  /** Persona ACTIVA con ese correo (para "olvidé mi contraseña"), o null. */
+  findStaffByEmail(email: string): Promise<Staff | null>;
+  /** Asigna o cambia el correo de acceso de alguien del equipo (único en toda la plataforma). */
+  setStaffEmail(businessId: string, staffId: string, email: string, actorId?: string): Promise<Staff>;
+
+  /* Asistente de bienvenida del dueño */
+  /**
+   * Guarda nombre, tipo y ciudad. Mientras el negocio esté en 'setup' regenera el slug desde el nombre y, si cambia el
+   * tipo, reaplica la plantilla de la tarjeta. Después de activarse el slug ya NO cambia (el QR impreso depende de él).
+   */
+  saveBusinessSetup(businessId: string, input: BusinessSetupInput, actorId?: string): Promise<Business>;
+  /** Pasa de 'setup' a 'active' (exige nombre real y al menos una sucursal activa). */
+  completeBusinessSetup(businessId: string, actorId?: string): Promise<Business>;
+  /** Imágenes del negocio. Devuelve la URL pública. kind: 'logo' | 'cover'. Máx. 2 MB, png/jpeg/webp. */
+  uploadBusinessImage(businessId: string, kind: 'logo' | 'cover', file: { bytes: Uint8Array; contentType: string }): Promise<string>;
+
+  /* Clientes (página pública /u/<slug>) */
+  getBusinessBySlug(slug: string): Promise<Business | null>;
+  findCustomerByEmail(businessId: string, email: string): Promise<Customer | null>;
+  /** Tarjetas de ese correo en todos los negocios ACTIVOS o suspendidos (las suspendidas se muestran congeladas). */
+  listCustomerCards(email: string): Promise<CustomerCard[]>;
+  getCustomerCard(businessId: string, customerId: string): Promise<CustomerCard | null>;
+  /**
+   * Alta desde la página pública: contacto = correo ya verificado. Si ya existe en ese negocio devuelve el existente.
+   * Guarda emailVerifiedAt y consentAt.
+   */
+  registerVerifiedCustomer(businessId: string, input: { name: string; email: string; birthday: { d: number; m: number }; birthdayYear?: number }): Promise<Customer>;
+  /** Código de 6 dígitos para un correo. Máx. 5 por correo por hora; vence en 10 min. Devuelve el código en claro para enviarlo. */
+  requestEmailOtp(email: string): Promise<OtpRequestResult>;
+  /** true si el código es correcto y vigente (lo consume). Máx. 5 intentos por código. */
+  verifyEmailOtp(email: string, code: string): Promise<boolean>;
 }
 
 const g = globalThis as unknown as { __stampaRepo?: Repo };

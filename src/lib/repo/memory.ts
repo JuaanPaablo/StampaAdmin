@@ -18,6 +18,14 @@ import { hashPassword, hashPasswordSync, validatePassword, verifyPassword } from
 import { AttemptLimiter, LOCK_MS, MAX_FAILED_LOGINS } from '../login-throttle';
 import { getTemplate } from '../templates';
 import type { Repo } from './index';
+import type { AccessTokenKind, AdminAccount, AdminBusinessRow, BusinessSetupInput, CustomerCard, IssuedToken, PlatformSummary } from '../contracts';
+import { INVITE_TTL_HOURS, RESET_TTL_MINUTES } from '../contracts';
+import { generateOtp, generateToken, hashOtp, hashToken, isTokenShape } from '../tokens';
+import {
+  OTP_MAX_ATTEMPTS, OTP_MAX_PER_HOUR, OTP_TTL_MINUTES, PLACEHOLDER_BUSINESS_NAME, PLANS, provisionalSlug, validateBirthYear, validateBusinessImage
+} from '../mvp-rules';
+
+const DAY = 86_400_000;
 
 /**
  * Repositorio en memoria. Es la implementación por defecto (datos de ejemplo de 5 negocios, ver seed.ts).
@@ -71,6 +79,16 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
   /** Fallos de correos que no existen: bloquean igual que los de cuentas reales para no revelar cuáles existen. */
   const unknownEmails = new AttemptLimiter(MAX_FAILED_LOGINS, LOCK_MS);
 
+  /* ---------- Estado del MVP ---------- */
+  interface AdminRec extends AdminAccount { passwordHash: string; failedLogins: number; lockedUntil?: number }
+  interface TokenRec { hash: string; staffId: string; kind: AccessTokenKind; expiresAt: number; usedAt?: number }
+  interface OtpRec { email: string; hash: string; expiresAt: number; attempts: number; consumedAt?: number; createdAt: number }
+  const admins: AdminRec[] = [];
+  const tokens: TokenRec[] = [];
+  const otps: OtpRec[] = [];
+  const notes = new Map<string, string>();
+  const unknownAdmins = new AttemptLimiter(MAX_FAILED_LOGINS, LOCK_MS);
+
   if (opts.seed !== false) {
     const seed = buildSeed(clock());
     businesses.push(...seed.businesses);
@@ -83,6 +101,8 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
     redemptions.push(...seed.redemptions);
     audit.push(...seed.audit);
     rejections.push(...seed.rejections);
+    // Cuenta de administrador de ejemplo (solo repo en memoria): administrador@stampa.com / Stampa-Demo-2026
+    admins.push({ id: 'adm_demo', email: 'administrador@stampa.com', passwordHash: demoPasswordHash, failedLogins: 0, createdAt: new Date(clock()).toISOString() });
   }
 
   // Los ids de lo creado en ejecución llevan 5 dígitos (10001...); los de ejemplo, 3 o 4: no chocan.
@@ -452,8 +472,381 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
     },
     async listAudit(businessId, limit = 50) {
       return clone(audit.filter((a) => a.businessId === businessId).sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, limit));
+    },
+
+    /* =============================== MVP =============================== */
+
+    async createBusinessAccess(input) {
+      const email = normalizeEmail(input.ownerEmail);
+      const err = validateEmail(email);
+      if (err) fail(err);
+      if (staff.some((s) => s.email === email)) fail('Ese correo ya tiene acceso a Stampa.');
+      if (!PLANS.includes(input.plan)) fail('Elige un plan válido.');
+      if (input.planExpiresAt && Number.isNaN(Date.parse(input.planExpiresAt))) fail('La fecha de vencimiento no es válida.');
+      let slug = provisionalSlug();
+      while (businesses.some((b) => b.slug === slug)) slug = provisionalSlug();
+      const id = `biz_${slug.replace(/-/g, '_')}`;
+      const at = nowIso();
+      const business: Business = {
+        id, name: PLACEHOLDER_BUSINESS_NAME, slug, type: 'otro', country: 'EC', currency: 'USD', timezone: 'America/Guayaquil',
+        plan: input.plan, createdAt: at, status: 'setup',
+        planExpiresAt: input.planExpiresAt ? new Date(input.planExpiresAt).toISOString() : undefined
+      };
+      const owner: StaffRec = {
+        id: newId('emp', id), businessId: id, name: email.split('@')[0].slice(0, 80) || 'Dueño', role: 'owner', active: true,
+        email, hasPin: false, createdAt: at
+      };
+      businesses.push(business); staff.push(owner);
+      programs.push({ businessId: id, ...clone(getTemplate('otro').program), logoText: 'ST' });
+      if (input.note?.trim()) notes.set(id, input.note.trim().slice(0, 500));
+      log(id, undefined, 'business.access', `Stampa autorizó el acceso de ${email}.`);
+      const invite = await repo.issueAccessToken(owner.id, 'invite');
+      return { business: clone(business), ownerId: owner.id, invite };
+    },
+
+    async listAdminBusinesses() {
+      return businesses.map(adminRow).sort((a, b) => Date.parse(b.business.createdAt) - Date.parse(a.business.createdAt));
+    },
+
+    async getAdminBusiness(id) {
+      const b = businesses.find((x) => x.id === id);
+      return b ? adminRow(b) : null;
+    },
+
+    async getPlatformSummary(): Promise<PlatformSummary> {
+      const now = clock();
+      const since = now - 30 * DAY;
+      const st = (b: Business) => b.status ?? 'active';
+      const exp = (b: Business) => (b.planExpiresAt ? Date.parse(b.planExpiresAt) : Infinity);
+      let stampsTotal = 0;
+      let stamps30d = 0;
+      for (const c of codes) for (const cl of c.claims) if (!cl.voidedAt) { stampsTotal++; if (Date.parse(cl.at) >= since) stamps30d++; }
+      return {
+        businesses: {
+          total: businesses.length,
+          active: businesses.filter((b) => st(b) === 'active').length,
+          setup: businesses.filter((b) => st(b) === 'setup').length,
+          suspended: businesses.filter((b) => st(b) === 'suspended').length,
+          expiringSoon: businesses.filter((b) => st(b) !== 'suspended' && exp(b) >= now && exp(b) - now <= 7 * DAY).length,
+          expired: businesses.filter((b) => st(b) !== 'suspended' && exp(b) < now).length
+        },
+        customers: customers.length,
+        stampsTotal,
+        stamps30d,
+        redemptionsTotal: redemptions.length,
+        redemptions30d: redemptions.filter((r) => Date.parse(r.at) >= since).length
+      };
+    },
+
+    async setBusinessStatus(id, status) {
+      const b = biz(id);
+      if (status === 'suspended') {
+        if (b.status !== 'suspended') { b.status = 'suspended'; b.suspendedAt = nowIso(); }
+        log(id, undefined, 'business.suspend', 'Stampa suspendió el negocio.');
+      } else {
+        b.status = b.setupCompletedAt || b.status === undefined ? 'active' : 'setup';
+        b.suspendedAt = undefined;
+        log(id, undefined, 'business.reactivate', 'Stampa reactivó el negocio.');
+      }
+      return clone(b);
+    },
+
+    async updateBusinessPlan(id, plan, planExpiresAt, note) {
+      const b = biz(id);
+      if (!PLANS.includes(plan)) fail('Elige un plan válido.');
+      if (planExpiresAt && Number.isNaN(Date.parse(planExpiresAt))) fail('La fecha de vencimiento no es válida.');
+      b.plan = plan;
+      b.planExpiresAt = planExpiresAt ? new Date(planExpiresAt).toISOString() : undefined;
+      if (note !== undefined) { if (note.trim()) notes.set(id, note.trim().slice(0, 500)); else notes.delete(id); }
+      log(id, undefined, 'business.plan', `Plan ${plan}${b.planExpiresAt ? ` hasta ${b.planExpiresAt.slice(0, 10)}` : ' sin vencimiento'}.`);
+      return clone(b);
+    },
+
+    /* ---------- Administradores ---------- */
+    async verifyAdminCredentials(rawEmail, password) {
+      const email = normalizeEmail(rawEmail);
+      const now = clock();
+      const rec = admins.find((a) => a.email === email);
+      if (!rec) {
+        await verifyPassword(password, null);
+        if (!unknownAdmins.lockedFor(email, now)) unknownAdmins.fail(email, now);
+        return null;
+      }
+      const locked = !!rec.lockedUntil && rec.lockedUntil > now;
+      const ok = await verifyPassword(password, rec.passwordHash);
+      if (locked) return null;
+      if (!ok) {
+        rec.failedLogins++;
+        if (rec.failedLogins >= MAX_FAILED_LOGINS) { rec.lockedUntil = now + LOCK_MS; rec.failedLogins = 0; }
+        return null;
+      }
+      rec.failedLogins = 0; rec.lockedUntil = undefined; rec.lastLoginAt = nowIso();
+      return { adminId: rec.id };
+    },
+
+    async isAdminLoginLocked(rawEmail) {
+      const email = normalizeEmail(rawEmail);
+      const rec = admins.find((a) => a.email === email);
+      return rec ? !!rec.lockedUntil && rec.lockedUntil > clock() : unknownAdmins.lockedFor(email, clock()) > 0;
+    },
+
+    async getAdmin(id) {
+      const a = admins.find((x) => x.id === id);
+      return a ? { id: a.id, email: a.email, createdAt: a.createdAt, lastLoginAt: a.lastLoginAt } : null;
+    },
+
+    async upsertAdmin(rawEmail, password) {
+      const email = normalizeEmail(rawEmail);
+      const err = validateEmail(email) ?? validatePassword(password);
+      if (err) fail(err);
+      const passwordHash = await hashPassword(password);
+      let a = admins.find((x) => x.email === email);
+      if (a) { a.passwordHash = passwordHash; a.failedLogins = 0; a.lockedUntil = undefined; }
+      else { a = { id: `adm_${++seq}`, email, passwordHash, failedLogins: 0, createdAt: nowIso() }; admins.push(a); }
+      return { id: a.id, email: a.email, createdAt: a.createdAt, lastLoginAt: a.lastLoginAt };
+    },
+
+    async changeAdminPassword(adminId, currentPassword, newPassword) {
+      const a = admins.find((x) => x.id === adminId) ?? fail('No encontramos esa cuenta.');
+      if (!(await verifyPassword(currentPassword, a.passwordHash))) fail('La contraseña actual no es correcta.');
+      const err = validatePassword(newPassword);
+      if (err) fail(err);
+      if (newPassword === currentPassword) fail('La contraseña nueva debe ser distinta de la actual.');
+      a.passwordHash = await hashPassword(newPassword);
+    },
+
+    /* ---------- Enlaces de un solo uso ---------- */
+    async issueAccessToken(staffId, kind) {
+      const s = staff.find((x) => x.id === staffId) ?? fail('No encontramos a esa persona del equipo.');
+      if (!s.active) fail('Esa persona está desactivada.');
+      if (!s.email) fail('Esa persona no tiene correo de acceso.');
+      const now = clock();
+      for (const t of tokens) if (t.staffId === staffId && t.kind === kind && !t.usedAt) t.usedAt = now; // invalida los anteriores
+      const token = generateToken();
+      const expiresAt = now + (kind === 'invite' ? INVITE_TTL_HOURS * 3_600_000 : RESET_TTL_MINUTES * 60_000);
+      tokens.push({ hash: hashToken(token), staffId, kind, expiresAt });
+      log(s.businessId, undefined, kind === 'invite' ? 'access.invite' : 'access.reset',
+        `${kind === 'invite' ? 'Invitación' : 'Enlace para restablecer la contraseña'} para ${s.email}.`);
+      const out: IssuedToken = { token, kind, expiresAt: new Date(expiresAt).toISOString() };
+      return out;
+    },
+
+    async peekAccessToken(token) {
+      const t = findToken(token);
+      if (!t) return null;
+      const s = staff.find((x) => x.id === t.staffId)!;
+      const b = biz(s.businessId);
+      return {
+        kind: t.kind, staffId: s.id, businessId: b.id, email: s.email!, staffName: s.name, businessName: b.name,
+        businessStatus: b.status ?? 'active', expiresAt: new Date(t.expiresAt).toISOString()
+      };
+    },
+
+    async consumeAccessToken(token, password, name) {
+      const t = findToken(token) ?? fail('Este enlace ya no es válido. Pide uno nuevo.');
+      const err = validatePassword(password);
+      if (err) fail(err);
+      const s = staff.find((x) => x.id === t.staffId)!;
+      if (name !== undefined) { const e = validateName(name); if (e) fail(e); s.name = name.trim(); }
+      s.passwordHash = await hashPassword(password);
+      s.failedLogins = 0; s.lockedUntil = undefined;
+      t.usedAt = clock();
+      log(s.businessId, s.id, 'access.password', `${s.name} ${t.kind === 'invite' ? 'creó' : 'cambió'} su contraseña.`);
+      return { businessId: s.businessId, staffId: s.id };
+    },
+
+    async findStaffByEmail(rawEmail) {
+      const email = normalizeEmail(rawEmail);
+      const s = email ? staff.find((x) => x.email === email && x.active) : undefined;
+      return s ? strip(s) : null;
+    },
+
+    async setStaffEmail(businessId, staffId, rawEmail, actorId) {
+      const email = normalizeEmail(rawEmail);
+      const err = validateEmail(email);
+      if (err) fail(err);
+      const s = staff.find((x) => x.id === staffId && x.businessId === businessId) ?? fail('No encontramos a esa persona del equipo.');
+      if (staff.some((x) => x.id !== staffId && x.email === email)) fail('Ese correo ya tiene acceso a Stampa.');
+      if (s.email !== email) {
+        s.email = email;
+        for (const t of tokens) if (t.staffId === staffId && !t.usedAt) t.usedAt = clock();
+      }
+      log(businessId, actorId, 'staff.email', `Correo de acceso de ${s.name}: ${email}.`);
+      return strip(s);
+    },
+
+    /* ---------- Asistente del dueño ---------- */
+    async saveBusinessSetup(businessId, input: BusinessSetupInput, actorId) {
+      const b = biz(businessId);
+      const name = input.name?.trim() ?? '';
+      if (name.length < 2) fail('Escribe el nombre de tu negocio.');
+      if (name.length > 80) fail('El nombre es demasiado largo (máximo 80 letras).');
+      if (name.toLowerCase() === PLACEHOLDER_BUSINESS_NAME.toLowerCase()) fail('Escribe el nombre real de tu negocio.');
+      const typeChanged = b.type !== input.type;
+      b.name = name; b.type = input.type; b.city = input.city?.trim() || undefined;
+      if (b.status === 'setup') {
+        const base = slugify(name);
+        let slug = base;
+        let n = 1;
+        while (businesses.some((x) => x.id !== b.id && x.slug === slug)) slug = `${base}-${++n}`;
+        b.slug = slug;
+        const p = prog(businessId);
+        if (typeChanged) Object.assign(p, clone(getTemplate(input.type).program), { businessId, logoUrl: p.logoUrl, coverUrl: p.coverUrl });
+        p.logoText = initials(name);
+      }
+      log(businessId, actorId, 'business.update', 'Se guardaron los datos del negocio.');
+      return clone(b);
+    },
+
+    async completeBusinessSetup(businessId, actorId) {
+      const b = biz(businessId);
+      if (b.status === 'suspended') fail('Tu cuenta está suspendida. Escríbenos por WhatsApp.');
+      if (b.name === PLACEHOLDER_BUSINESS_NAME) fail('Primero escribe el nombre de tu negocio.');
+      if (!locations.some((l) => l.businessId === businessId && l.active)) fail('Agrega al menos una sucursal.');
+      if (b.status === 'setup') { b.status = 'active'; b.setupCompletedAt = nowIso(); }
+      log(businessId, actorId, 'business.ready', `${b.name} terminó su configuración.`);
+      return clone(b);
+    },
+
+    async uploadBusinessImage(businessId, kind, file) {
+      biz(businessId);
+      const err = validateBusinessImage(file);
+      if (err) fail(err);
+      const url = `data:${file.contentType};base64,${Buffer.from(file.bytes).toString('base64')}`;
+      const p = prog(businessId);
+      if (kind === 'logo') p.logoUrl = url; else p.coverUrl = url;
+      return url;
+    },
+
+    /* ---------- Clientes (página pública) ---------- */
+    async getBusinessBySlug(slug) {
+      const b = businesses.find((x) => x.slug === slug);
+      return b ? clone(b) : null;
+    },
+
+    async findCustomerByEmail(businessId, rawEmail) {
+      const email = normalizeEmail(rawEmail);
+      const c = customers.find((x) => x.businessId === businessId && x.contactKind === 'email' && x.contact === email);
+      return c ? clone(c) : null;
+    },
+
+    async listCustomerCards(rawEmail) {
+      const email = normalizeEmail(rawEmail);
+      if (!email) return [];
+      const out: CustomerCard[] = [];
+      for (const c of customers) {
+        if (c.contactKind !== 'email' || c.contact !== email) continue;
+        const b = businesses.find((x) => x.id === c.businessId);
+        if (!b || b.status === 'setup') continue;
+        out.push(cardOf(b, c));
+      }
+      const when = (c: CustomerCard) => Date.parse(c.customer.lastVisitAt ?? c.customer.createdAt);
+      return out.sort((a, b) => when(b) - when(a));
+    },
+
+    async getCustomerCard(businessId, customerId) {
+      const b = businesses.find((x) => x.id === businessId);
+      const c = findCustomer(businessId, customerId);
+      return b && c ? cardOf(b, c) : null;
+    },
+
+    async registerVerifiedCustomer(businessId, input) {
+      const b = biz(businessId);
+      if ((b.status ?? 'active') !== 'active') fail('Este negocio no está recibiendo clientes nuevos por ahora.');
+      const v = validateContact('email', input.email);
+      if (!v.ok) return fail(v.error);
+      const existing = customers.find((x) => x.businessId === businessId && x.contact === v.contact);
+      if (existing) {
+        if (!existing.emailVerifiedAt) existing.emailVerifiedAt = nowIso();
+        return clone(existing);
+      }
+      const nameErr = validateName(input.name);
+      if (nameErr) fail(nameErr);
+      const bErr = validateBirthday(input.birthday) ?? validateBirthYear(input.birthdayYear, clock());
+      if (bErr) fail(bErr);
+      const at = nowIso();
+      const c: Customer = {
+        id: newId('cli', businessId), businessId, name: input.name.trim(), contact: v.contact, contactKind: 'email',
+        birthday: input.birthday, birthdayYear: input.birthdayYear, consentAt: at, createdAt: at, emailVerifiedAt: at,
+        stamps: 0, totalStamps: 0, rewardsRedeemed: 0
+      };
+      customers.push(c);
+      return clone(c);
+    },
+
+    async requestEmailOtp(rawEmail) {
+      const email = normalizeEmail(rawEmail);
+      const err = validateEmail(email);
+      if (err) return { ok: false, error: err };
+      const now = clock();
+      const recent = otps.filter((o) => o.email === email && o.createdAt > now - 3_600_000).length;
+      if (recent >= OTP_MAX_PER_HOUR) return { ok: false, error: 'Pediste demasiados códigos. Espera un rato e inténtalo de nuevo.' };
+      for (const o of otps) if (o.email === email && !o.consumedAt) o.consumedAt = now;
+      const code = generateOtp();
+      const expiresAt = now + OTP_TTL_MINUTES * 60_000;
+      otps.push({ email, hash: hashOtp(email, code), expiresAt, attempts: 0, createdAt: now });
+      return { ok: true, code, expiresAt: new Date(expiresAt).toISOString() };
+    },
+
+    async verifyEmailOtp(rawEmail, code) {
+      const email = normalizeEmail(rawEmail);
+      const now = clock();
+      const o = otps.filter((x) => x.email === email && !x.consumedAt && x.expiresAt > now).sort((a, b) => b.createdAt - a.createdAt)[0];
+      if (!o || !/^\d{6}$/.test((code ?? '').trim())) return false;
+      if (o.hash !== hashOtp(email, code)) {
+        o.attempts++;
+        if (o.attempts >= OTP_MAX_ATTEMPTS) o.consumedAt = now;
+        return false;
+      }
+      o.consumedAt = now;
+      return true;
     }
   };
+
+  function findToken(token: string) {
+    if (!isTokenShape(token)) return undefined;
+    const h = hashToken(token);
+    const t = tokens.find((x) => x.hash === h);
+    if (!t || t.usedAt || t.expiresAt <= clock()) return undefined;
+    const s = staff.find((x) => x.id === t.staffId);
+    if (!s || !s.active) return undefined;
+    return t;
+  }
+
+  function adminRow(b: Business): AdminBusinessRow {
+    const since = clock() - 30 * DAY;
+    const owner = staff
+      .filter((s) => s.businessId === b.id && s.role === 'owner')
+      .sort((x, y) => Date.parse(x.createdAt) - Date.parse(y.createdAt))[0];
+    let stamps30d = 0;
+    let last = 0;
+    for (const c of bizCodes(b.id)) for (const cl of c.claims) {
+      const t = Date.parse(cl.at);
+      last = Math.max(last, t);
+      if (!cl.voidedAt && t >= since) stamps30d++;
+    }
+    const reds = redemptions.filter((r) => r.businessId === b.id);
+    for (const r of reds) last = Math.max(last, Date.parse(r.at));
+    return {
+      business: clone(b),
+      owner: owner ? { staffId: owner.id, name: owner.name, email: owner.email, invitePending: !!owner.email && !owner.passwordHash } : undefined,
+      note: notes.get(b.id),
+      stats: {
+        customers: customers.filter((c) => c.businessId === b.id).length,
+        stamps30d,
+        redemptions30d: reds.filter((r) => Date.parse(r.at) >= since).length,
+        lastActivityAt: last ? new Date(last).toISOString() : undefined
+      }
+    };
+  }
+
+  function cardOf(b: Business, c: Customer): CustomerCard {
+    const recent: CustomerCard['recent'] = [];
+    for (const code of bizCodes(b.id)) for (const cl of code.claims) if (cl.customerId === c.id && !cl.voidedAt) recent.push({ at: cl.at, kind: 'stamp' });
+    for (const r of redemptions) if (r.businessId === b.id && r.customerId === c.id) recent.push({ at: r.at, kind: 'redeem' });
+    recent.sort((x, y) => Date.parse(y.at) - Date.parse(x.at));
+    return { business: clone(b), program: clone(prog(b.id)), customer: clone(c), recent: recent.slice(0, 10) };
+  }
 
   return repo;
 }

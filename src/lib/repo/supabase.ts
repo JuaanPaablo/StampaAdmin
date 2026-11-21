@@ -170,6 +170,8 @@ export function createSupabaseRepo(): Repo {
   /* ---------- Implementación ---------- */
 
   const repo: Repo = {
+    // PENDIENTE (agente de datos): reemplazar por la implementación real de los métodos del MVP.
+    ...mvpPending(),
     async listBusinesses() {
       return (must(await db.from('businesses').select('*').order('created_at'), 'Negocios') as Row[]).map(toBusiness);
     },
@@ -435,3 +437,24 @@ export function createSupabaseRepo(): Repo {
 
   return repo;
 }
+
+/** Marcador temporal: lanza en cada método del MVP hasta que exista la implementación real sobre Supabase. */
+function mvpPending(): Pick<Repo, MvpMethod> {
+  const names: MvpMethod[] = [
+    'createBusinessAccess', 'listAdminBusinesses', 'getAdminBusiness', 'getPlatformSummary', 'setBusinessStatus', 'updateBusinessPlan',
+    'verifyAdminCredentials', 'isAdminLoginLocked', 'getAdmin', 'upsertAdmin', 'changeAdminPassword',
+    'issueAccessToken', 'peekAccessToken', 'consumeAccessToken', 'findStaffByEmail', 'setStaffEmail',
+    'saveBusinessSetup', 'completeBusinessSetup', 'uploadBusinessImage',
+    'getBusinessBySlug', 'findCustomerByEmail', 'listCustomerCards', 'getCustomerCard', 'registerVerifiedCustomer', 'requestEmailOtp', 'verifyEmailOtp'
+  ];
+  const out: Record<string, () => Promise<never>> = {};
+  for (const n of names) out[n] = async () => { throw new Error(`Supabase: ${n} aún no está implementado.`); };
+  return out as unknown as Pick<Repo, MvpMethod>;
+}
+
+type MvpMethod =
+  | 'createBusinessAccess' | 'listAdminBusinesses' | 'getAdminBusiness' | 'getPlatformSummary' | 'setBusinessStatus' | 'updateBusinessPlan'
+  | 'verifyAdminCredentials' | 'isAdminLoginLocked' | 'getAdmin' | 'upsertAdmin' | 'changeAdminPassword'
+  | 'issueAccessToken' | 'peekAccessToken' | 'consumeAccessToken' | 'findStaffByEmail' | 'setStaffEmail'
+  | 'saveBusinessSetup' | 'completeBusinessSetup' | 'uploadBusinessImage'
+  | 'getBusinessBySlug' | 'findCustomerByEmail' | 'listCustomerCards' | 'getCustomerCard' | 'registerVerifiedCustomer' | 'requestEmailOtp' | 'verifyEmailOtp';

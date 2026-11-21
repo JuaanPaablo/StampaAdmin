@@ -25,6 +25,11 @@ export interface Business {
   timezone: string;         // 'America/Guayaquil'
   plan: Plan;
   createdAt: string;
+  /** MVP. Ausente = 'active'. */
+  status?: BusinessStatus;
+  planExpiresAt?: string;          // vencimiento del plan (lo fija Stampa; el cobro es por WhatsApp)
+  suspendedAt?: string;
+  setupCompletedAt?: string;
 }
 
 export interface Location {
@@ -46,6 +51,8 @@ export interface Staff {
   email?: string;
   hasPin: boolean;          // el PIN nunca sale del repo (solo sirve para aprobaciones dentro del panel)
   createdAt: string;
+  /** MVP. Tiene correo pero todavía no creó su contraseña (invitación pendiente). */
+  invitePending?: boolean;
 }
 
 /** Diseño de la tarjeta y reglas del programa de sellos. Un programa por negocio. */
@@ -66,6 +73,8 @@ export interface Program {
   terms?: string;
   birthdayReward?: string;         // ej. "Un café de regalo en tu cumpleaños"
   rewardExpiresDays?: number;
+  /** MVP. Foto de portada de la tarjeta (URL pública). */
+  coverUrl?: string;
 }
 
 export type ContactKind = 'whatsapp' | 'email';
@@ -86,6 +95,10 @@ export interface Customer {
   lastVisitAt?: string;
   wallet?: WalletKind;
   notes?: string;
+  /** MVP. Año de nacimiento (el día y mes siguen en birthday). */
+  birthdayYear?: number;
+  /** MVP. Cuándo confirmó su correo con el código de 6 dígitos. */
+  emailVerifiedAt?: string;
 }
 
 export type CustomerSegment = 'nuevo' | 'activo' | 'en_riesgo' | 'inactivo' | 'por_canjear';
@@ -221,3 +234,70 @@ export interface CustomerDetail {
   customer: CustomerRow;
   history: { at: string; kind: 'stamp' | 'redeem' | 'void'; ticket?: string; staffName?: string }[];
 }
+
+/* =====================================================================================================
+ * MVP (noviembre 2026): panel de administrador de Stampa, invitaciones, asistente del dueño y tarjeta del cliente.
+ * Ver docs/MVP.md. Todo lo de aquí abajo es nuevo; los campos agregados a tipos existentes son opcionales.
+ * ===================================================================================================== */
+
+/** setup = invitado, el dueño aún no termina el asistente · active = operando · suspended = bloqueado por Stampa. */
+export type BusinessStatus = 'setup' | 'active' | 'suspended';
+
+export type AccessTokenKind = 'invite' | 'reset';
+
+/** Enlace de un solo uso. `token` es el valor en claro: solo existe en esta respuesta (en la base se guarda su hash). */
+export interface IssuedToken { token: string; kind: AccessTokenKind; expiresAt: string }
+
+export interface AccessTokenInfo {
+  kind: AccessTokenKind;
+  staffId: string;
+  businessId: string;
+  email: string;
+  staffName: string;
+  businessName: string;
+  businessStatus: BusinessStatus;
+  expiresAt: string;
+}
+
+export const INVITE_TTL_HOURS = 72;
+export const RESET_TTL_MINUTES = 60;
+
+export interface NewBusinessAccessInput {
+  ownerEmail: string;
+  plan: Plan;
+  planExpiresAt?: string;          // ISO; opcional
+  note?: string;                   // nota interna de Stampa (p. ej. "Pizzería, 5 sucursales")
+}
+
+export interface AdminBusinessRow {
+  business: Business;
+  owner?: { staffId: string; name: string; email?: string; invitePending: boolean };
+  note?: string;
+  stats: { customers: number; stamps30d: number; redemptions30d: number; lastActivityAt?: string };
+}
+
+export interface PlatformSummary {
+  businesses: { total: number; active: number; setup: number; suspended: number; expiringSoon: number; expired: number };
+  customers: number;
+  stamps30d: number;
+  stampsTotal: number;
+  redemptions30d: number;
+  redemptionsTotal: number;
+}
+
+export interface AdminAccount { id: string; email: string; createdAt: string; lastLoginAt?: string }
+
+/** Datos que el dueño completa en el asistente de bienvenida. */
+export interface BusinessSetupInput { name: string; type: BusinessType; city?: string }
+
+/** Lo que ve el cliente en su teléfono. */
+export interface CustomerCard {
+  business: Business;
+  program: Program;
+  customer: Customer;
+  recent: { at: string; kind: 'stamp' | 'redeem' }[];
+}
+
+export type OtpRequestResult =
+  | { ok: true; code: string; expiresAt: string }
+  | { ok: false; error: string };
