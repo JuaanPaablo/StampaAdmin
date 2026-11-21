@@ -2,11 +2,14 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Isotipo } from '@/components/shell/logo';
 
-/** Marco de las páginas del cliente: móvil primero, sin la navegación del panel. Stampa firma discretamente al pie. */
-export function CustomerShell({ children, top }: { children: ReactNode; top?: ReactNode }) {
+/**
+ * Marco de las páginas del cliente: móvil primero, sin la navegación del panel. Stampa firma discretamente al pie.
+ * `wide`: en computadora (lg) el marco se ensancha para usar dos columnas con <Split>.
+ */
+export function CustomerShell({ children, top, wide }: { children: ReactNode; top?: ReactNode; wide?: boolean }) {
   return (
     <div className="min-h-screen bg-surface text-navy">
-      <div className="mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-8 pt-4">
+      <div className={`mx-auto flex min-h-screen w-full max-w-md flex-col px-4 pb-8 pt-4 lg:pt-10 ${wide ? 'lg:max-w-5xl lg:px-8' : ''}`}>
         {top}
         <main className="flex-1">{children}</main>
         <footer className="mt-10 flex flex-col items-center gap-3 text-xs text-muted">
@@ -19,6 +22,16 @@ export function CustomerShell({ children, top }: { children: ReactNode; top?: Re
           </nav>
         </footer>
       </div>
+    </div>
+  );
+}
+
+/** En móvil, una columna. En computadora: la tarjeta del negocio a la izquierda (fija al desplazar) y el formulario a la derecha. */
+export function Split({ aside, children }: { aside: ReactNode; children: ReactNode }) {
+  return (
+    <div className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-10">
+      <div className="lg:sticky lg:top-10">{aside}</div>
+      <div className="mt-4 lg:mt-0">{children}</div>
     </div>
   );
 }

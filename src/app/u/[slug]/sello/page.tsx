@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { AutoClaim } from '@/components/customer/ClaimForm';
 import { JoinForm } from '@/components/customer/JoinForm';
 import { BusinessHeader } from '@/components/customer/LoyaltyCard';
-import { CustomerShell, Notice, secondaryBtn } from '@/components/customer/Shell';
+import { CustomerShell, Notice, secondaryBtn, Split } from '@/components/customer/Shell';
 import { SignupFlow } from '@/components/customer/SignupFlow';
 import { cleanCode } from '@/components/customer/card-model';
 import { CardsTopBar, ComingSoon, PausedNoCard, ProgramIntro, SignOut } from '@/components/customer/views';
@@ -63,26 +63,28 @@ export default async function StampPage({ params, searchParams }: Props) {
   if (session) {
     const other = cards[0]?.customer;
     return (
-      <CustomerShell top={<CardsTopBar total={cards.length} />}>
-        <ProgramIntro business={business} program={program} />
-        <div className="mt-4 rounded-3xl bg-white p-5 shadow-card ring-1 ring-line/70">
-          <JoinForm slug={business.slug} businessName={business.name} email={session.email} stampCode={code}
-            prefill={other ? { name: other.name, day: other.birthday?.d, month: other.birthday?.m, year: other.birthdayYear } : undefined} />
-          <p className="mt-3 text-center text-sm text-muted">Al unirte sumamos tu sello del código {code}.</p>
-        </div>
-        <SignOut slug={business.slug} email={session.email} stampCode={code} />
+      <CustomerShell top={<CardsTopBar total={cards.length} />} wide>
+        <Split aside={<ProgramIntro business={business} program={program} />}>
+          <div className="rounded-3xl bg-white p-5 shadow-card ring-1 ring-line/70 lg:p-7">
+            <JoinForm slug={business.slug} businessName={business.name} email={session.email} stampCode={code}
+              prefill={other ? { name: other.name, day: other.birthday?.d, month: other.birthday?.m, year: other.birthdayYear } : undefined} />
+            <p className="mt-3 text-center text-sm text-muted">Al unirte sumamos tu sello del código {code}.</p>
+          </div>
+          <SignOut slug={business.slug} email={session.email} stampCode={code} />
+        </Split>
       </CustomerShell>
     );
   }
 
   return (
-    <CustomerShell>
-      <Notice tone="info" title="Estás a un paso de tu sello">Crea tu tarjeta o ábrela con tu correo. Al terminar sumamos el sello del código {code}.</Notice>
-      <div className="mt-4"><ProgramIntro business={business} program={program} /></div>
-      <div className="mt-4 rounded-3xl bg-white p-5 shadow-card ring-1 ring-line/70">
-        <SignupFlow slug={business.slug} businessName={business.name} allowSignup stampCode={code}
-          resume={pending && pending.stampCode === code ? { mode: pending.mode, email: pending.email } : undefined} />
-      </div>
+    <CustomerShell wide>
+      <Split aside={<ProgramIntro business={business} program={program} />}>
+        <Notice tone="info" title="Estás a un paso de tu sello">Crea tu tarjeta o ábrela con tu correo. Al terminar sumamos el sello del código {code}.</Notice>
+        <div className="mt-4 rounded-3xl bg-white p-5 shadow-card ring-1 ring-line/70 lg:p-7">
+          <SignupFlow slug={business.slug} businessName={business.name} allowSignup stampCode={code}
+            resume={pending && pending.stampCode === code ? { mode: pending.mode, email: pending.email } : undefined} />
+        </div>
+      </Split>
     </CustomerShell>
   );
 }
