@@ -1,3 +1,4 @@
+import { pendingRewards } from '@/lib/rewards';
 import Link from 'next/link';
 import { getContext } from '@/lib/context';
 import { requireRole } from '@/lib/auth';
@@ -170,13 +171,13 @@ export default async function ResumenPage({ searchParams }: { searchParams: { ra
         <Card>
           <h2 className="font-display text-base font-semibold text-navy">Listos para canjear</h2>
           <p className="mt-1 font-display text-3xl font-bold tabular-nums text-navy">{num(redeemable.length)}</p>
-          <p className="text-xs text-muted">{redeemable.length === 1 ? v.customer : v.customers} con la tarjeta completa: {program.rewardTitle}.</p>
+          <p className="text-xs text-muted">{redeemable.length === 1 ? v.customer + ' tiene' : v.customers + ' tienen'} un premio por entregar.</p>
           {redeemable.length > 0 && (
             <ul className="mt-3 flex flex-col gap-1.5 text-sm text-navy">
               {redeemable.slice(0, 3).map((c) => (
                 <li key={c.id} className="flex items-center justify-between gap-2">
                   <Link href={`/panel/clientes/${c.id}`} className="truncate font-medium underline-offset-2 hover:underline">{c.name}</Link>
-                  <span className="shrink-0 text-xs text-muted">{c.lastVisitAt ? ago(c.lastVisitAt, now) : ''}</span>
+                  <span className="shrink-0 truncate text-xs text-muted">{pendingRewards(c, program).map((p) => p.title).join(', ')}</span>
                 </li>
               ))}
             </ul>

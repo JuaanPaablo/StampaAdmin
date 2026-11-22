@@ -13,7 +13,21 @@ export function auditLabel(action: string, v: Pick<Vocabulary, 'reward' | 'ticke
     'program.update': 'Reglas de la tarjeta',
     'staff.update': 'Equipo actualizado',
     'staff.create': 'Integrante agregado',
-    'customer.update': 'Datos de cliente'
+    'customer.update': 'Datos de cliente',
+    'staff.email': 'Correo del equipo',
+    'staff.credentials': 'Acceso del equipo',
+    'location.delete': 'Sucursal eliminada',
+    'location.update': 'Sucursal actualizada',
+    'business.update': 'Datos del negocio',
+    'business.ready': 'Negocio activado',
+    'business.create': 'Negocio creado',
+    'business.access': 'Acceso autorizado',
+    'business.plan': 'Plan actualizado',
+    'business.suspend': 'Negocio suspendido',
+    'business.reactivate': 'Negocio reactivado',
+    'access.invite': 'Invitación enviada',
+    'access.password': 'Contraseña creada',
+    'access.reset': 'Contraseña restablecida'
   };
-  return map[action] ?? action;
+  return map[action] ?? 'Otra acción';
 }
