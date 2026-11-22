@@ -44,8 +44,8 @@ export default async function EditarPage({ params, searchParams }: {
         </p>
       )}
       <div className="max-w-2xl space-y-5">
-        <InviteCard key={person.id} staffId={person.id} name={person.name} email={person.email} status={status} active={person.active} isMe={person.id === me.id} />
-        <StaffForm key={person.id} staff={person} locations={locations} vocab={template.vocab} soleOwner={isSoleOwner(person, people)} />
+        <InviteCard key={`invite-${person.id}`} staffId={person.id} name={person.name} email={person.email} status={status} active={person.active} isMe={person.id === me.id} />
+        <StaffForm key={`form-${person.id}`} staff={person} locations={locations} vocab={template.vocab} soleOwner={isSoleOwner(person, people)} />
         <ResetPinForm staffId={person.id} name={person.name} hasPin={person.hasPin} />
       </div>
     </>
