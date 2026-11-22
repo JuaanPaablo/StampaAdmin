@@ -94,10 +94,10 @@ export async function GET(req: Request) {
     ? <img src={logo} width={size} height={size} style={{ borderRadius: size / 2, objectFit: 'cover', background: '#fff', ...(ring ? { border: `4px solid ${ring}` } : {}) }} alt="" />
     : <div style={{ width: size, height: size, borderRadius: size / 2, background: card.accent, color: accentInk, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Sora', fontWeight: 800, fontSize: Math.round(size * 0.38) }}>{initials}</div>;
 
-  const brandEl = (ink: string, size = 88) => (
+  const brandEl = (ink: string, size = 88, shadow = false) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
       {logoEl(size)}
-      <div style={{ display: 'flex', fontFamily: 'Sora', fontWeight: 700, fontSize: Math.round(size * 0.42), color: ink, maxWidth: W - pad * 2 - size - 40 }}>{business.name}</div>
+      <div style={{ display: 'flex', fontFamily: 'Sora', fontWeight: 700, fontSize: Math.round(size * 0.42), color: ink, maxWidth: W - pad * 2 - size - 40, ...(shadow ? { textShadow: '0 2px 12px rgba(0,0,0,0.6)' } : {}) }}>{business.name}</div>
     </div>
   );
 
@@ -124,8 +124,8 @@ export async function GET(req: Request) {
     el = (
       <div style={{ width: W, height: H, display: 'flex', position: 'relative', background: '#000' }}>
         {photoEl(W, H)}
-        <div style={{ position: 'absolute', left: 0, top: 0, width: W, height: H, display: 'flex', backgroundImage: 'linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 45%, rgba(0,0,0,0.82) 100%)' }} />
-        <div style={{ position: 'absolute', left: pad, top: pad, display: 'flex' }}>{brandEl('#FFFFFF', 80)}</div>
+        <div style={{ position: 'absolute', left: 0, top: 0, width: W, height: H, display: 'flex', backgroundImage: 'linear-gradient(180deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.25) 14%, rgba(0,0,0,0) 28%, rgba(0,0,0,0) 42%, rgba(0,0,0,0.85) 100%)' }} />
+        <div style={{ position: 'absolute', left: pad, top: pad, display: 'flex' }}>{brandEl('#FFFFFF', 80, true)}</div>
         <div style={{ position: 'absolute', left: pad, right: pad, bottom: story ? 220 : pad, display: 'flex', flexDirection: 'column', gap: 30 }}>
           {titleEl('#FFFFFF', story ? 120 : 104, true)}
           {chipEl()}
