@@ -1,5 +1,6 @@
 import { Isotipo, Wordmark } from '@/components/shell/logo';
 import { LoginForm } from './login-form';
+import { stampaWhatsappUrl } from '@/lib/urls';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Iniciar sesión · Stampa' };
@@ -66,7 +67,7 @@ export default function IngresarPage({ searchParams }: { searchParams?: { next?:
           <div className="mt-6"><LoginForm next={next} /></div>
           <p className="mt-10 text-center text-sm text-muted">
             ¿Aún no eres cliente?{' '}
-            <a href="mailto:hola@stampa.app" className="rounded font-semibold text-navy underline underline-offset-2">Escríbenos</a>
+            <a href={stampaWhatsappUrl('Hola, quiero Stampa para mi negocio.')} target="_blank" rel="noopener" className="rounded font-semibold text-navy underline underline-offset-2">Escríbenos</a>
           </p>
         </div>
         <p className="mt-8 text-center text-xs text-muted">© {new Date().getFullYear()} Stampa</p>
