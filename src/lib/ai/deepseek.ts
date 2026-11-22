@@ -34,7 +34,9 @@ async function call(model: string, messages: ChatMessage[], maxTokens: number, t
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}` },
       body: JSON.stringify({
         model, messages, max_tokens: maxTokens, temperature, stream: false,
-        response_format: { type: 'json_object' }
+        response_format: { type: 'json_object' },
+        // Sin modo de razonamiento: para textos de marketing no aporta y cobra cientos de tokens extra por llamada.
+        thinking: { type: 'disabled' }
       }),
       signal: ctrl.signal,
       cache: 'no-store'
