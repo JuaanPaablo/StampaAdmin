@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { generateMarketingAction } from '@/app/panel/marketing/actions';
 import { btnClass, Card, inputClass } from '@/components/ui';
 import { cn } from '@/lib/cn';
@@ -48,7 +48,13 @@ function PostCard({ o, n, layout, big, hasCover }: { o: PostOption; n: number; l
   const [design, setDesign] = useState<Design>(initial);
   const [text, setText] = useState(o.texto + (o.hashtags.length ? '\n\n' + o.hashtags.map((h) => '#' + h).join(' ') : ''));
   const [title, setTitle] = useState(o.titulo);
-  const view = { titulo: title, subtitulo: o.subtitulo };
+  const [sub, setSub] = useState(o.subtitulo);
+  // La imagen se regenera 600 ms después de dejar de escribir, no con cada letra.
+  const [view, setView] = useState({ titulo: o.titulo, subtitulo: o.subtitulo });
+  useEffect(() => {
+    const t = setTimeout(() => setView({ titulo: title, subtitulo: sub }), 600);
+    return () => clearTimeout(t);
+  }, [title, sub]);
   return (
     <article className="grid gap-4 rounded-2xl bg-surface p-4 md:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
       <div className="flex flex-col gap-2">
@@ -71,10 +77,14 @@ function PostCard({ o, n, layout, big, hasCover }: { o: PostOption; n: number; l
           <input value={title} maxLength={60} onChange={(e) => setTitle(e.target.value)} className={inputClass} />
         </label>
         <label className="flex flex-col gap-1.5">
+          <span className={label}>Subtítulo de la imagen</span>
+          <input value={sub} maxLength={110} onChange={(e) => setSub(e.target.value)} className={inputClass} />
+        </label>
+        <label className="flex flex-col gap-1.5">
           <span className={label}>Texto para publicar</span>
           <textarea value={text} onChange={(e) => setText(e.target.value)} rows={8} className={cn(inputClass, 'h-auto py-2.5 leading-relaxed')} />
         </label>
-        {/\[[^\]]+\]/.test(text) && <p className="rounded-xl bg-[#FFF4CC] px-3 py-2 text-xs text-navy">Completa lo que está entre corchetes antes de publicar.</p>}
+        {/\[[^\]]+\]/.test(text + title + sub) &&<p className="rounded-xl bg-[#FFF4CC] px-3 py-2 text-xs text-navy">Completa lo que está entre corchetes antes de publicar.</p>}
         <div className="flex flex-wrap gap-2">
           <CopyButton text={text} />
           <a href={imageUrl(design, view, big, false, true)} className={btnClass('ghost', 'sm')}>Descargar imagen</a>
