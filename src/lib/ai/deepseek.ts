@@ -75,15 +75,21 @@ export async function chatJson<T>(messages: ChatMessage[], opts: { maxTokens?: n
   workingModel = model;
 
   const body = await res.json() as {
-    choices?: { message?: { content?: string } }[];
+    choices?: { finish_reason?: string; message?: { content?: string; reasoning_content?: string } }[];
     usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_cache_hit_tokens?: number };
   };
-  const content = body.choices?.[0]?.message?.content ?? '';
-  let data: T;
-  try {
-    data = JSON.parse(content) as T;
-  } catch {
-    throw new AiError('La IA respondió algo que no pudimos leer. Intenta de nuevo.');
+  const choice = body.choices?.[0];
+  const content = choice?.message?.content ?? '';
+  const data = parseJsonLoose<T>(content);
+  if (data === undefined) {
+    // Diagnóstico sin datos sensibles: motivo de corte y tamaños.
+    console.warn('[deepseek] respuesta ilegible', JSON.stringify({
+      model, finish: choice?.finish_reason, len: content.length, reasoning: choice?.message?.reasoning_content?.length ?? 0,
+      usage: body.usage, head: content.slice(0, 160), tail: content.slice(-80)
+    }));
+    throw new AiError(choice?.finish_reason === 'length'
+      ? 'La respuesta salió muy larga y se cortó. Intenta de nuevo.'
+      : 'La IA respondió algo que no pudimos leer. Intenta de nuevo.');
   }
   return {
     data,
@@ -94,4 +100,13 @@ export async function chatJson<T>(messages: ChatMessage[], opts: { maxTokens?: n
       completionTokens: body.usage?.completion_tokens ?? 0
     }
   };
+}
+
+/** JSON.parse tolerante: quita cercas ```json y toma del primer "{" al último "}". */
+export function parseJsonLoose<T>(raw: string): T | undefined {
+  const s = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  try { return JSON.parse(s) as T; } catch { /* sigue */ }
+  const a = s.indexOf('{'), b = s.lastIndexOf('}');
+  if (a >= 0 && b > a) { try { return JSON.parse(s.slice(a, b + 1)) as T; } catch { /* nada */ } }
+  return undefined;
 }

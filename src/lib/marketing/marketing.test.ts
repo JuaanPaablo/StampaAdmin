@@ -91,3 +91,12 @@ describe('repo de marketing', () => {
     expect((await repo.marketingUsage('2000-01-01T00:00:00Z'))[biz.id]).toEqual({ count: 2, promptTokens: 100, cachedTokens: 80, completionTokens: 50 });
   });
 });
+
+describe('json tolerante', async () => {
+  const { parseJsonLoose } = await import('../ai/deepseek');
+  it('acepta cercas y texto alrededor', () => {
+    expect(parseJsonLoose('```json\n{"a":1}\n```')).toEqual({ a: 1 });
+    expect(parseJsonLoose('Aquí va: {"a":2} listo')).toEqual({ a: 2 });
+    expect(parseJsonLoose('{"a":')).toBeUndefined();
+  });
+});

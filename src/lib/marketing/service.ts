@@ -68,7 +68,7 @@ export async function generate(ctx: PanelContext, req: GenerateRequest): Promise
       : req.kind === 'data_post' ? dataPostMessages(b, req.fact, req.channel)
         : req.kind === 'calendar' ? calendarMessages(b, req.facts)
           : reviewMessages(b, req.review, req.stars);
-  const maxTokens = req.kind === 'calendar' ? 1800 : req.kind === 'review_reply' ? 600 : 1100;
+  const maxTokens = req.kind === 'calendar' ? 3000 : req.kind === 'review_reply' ? 1000 : 2000;
 
   const sample = !aiConfigured();
   let data: unknown;
