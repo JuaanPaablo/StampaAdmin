@@ -55,32 +55,29 @@ export default async function ClientesPage({ searchParams }: { searchParams: SP 
     <div className="flex flex-col gap-5">
       <PageHeader
         title={cap(v.customers)}
-        subtitle={`${num(counts.todos)} ${counts.todos === 1 ? v.customer : v.customers} en ${business.name}.`}
         actions={<a href={exportHref} className={btnClass('ghost')} title={canFilterExport ? undefined : 'Descarga la lista completa. Exportar con filtros es del plan Standard.'}>Exportar CSV</a>}
       />
       <NewCustomerForm customerLabel={v.customer} />
 
-      <form method="get" action="/panel/clientes" role="search" className="flex flex-col gap-3 sm:flex-row sm:items-end">
+      <form method="get" action="/panel/clientes" role="search" className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
         {segmento !== 'todos' && <input type="hidden" name="segmento" value={segmento} />}
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <label htmlFor="q" className="text-xs font-semibold tracking-wide text-muted">Buscar por nombre o contacto</label>
-          <Input id="q" name="q" type="search" defaultValue={q} placeholder="Ana, 0991234567, ana@correo.com" autoComplete="off" />
-        </div>
-        <div className="flex flex-col gap-1.5 sm:w-56">
-          <label htmlFor="orden" className="text-xs font-semibold tracking-wide text-muted">Ordenar por</label>
-          <Select id="orden" name="orden" defaultValue={orden}>
+        <label htmlFor="q" className="sr-only">Buscar por nombre o contacto</label>
+        <Input id="q" name="q" type="search" defaultValue={q} placeholder="Buscar nombre, teléfono o correo" autoComplete="off" className="min-w-0 sm:flex-1" />
+        <div className="flex gap-2 sm:gap-3">
+          <label htmlFor="orden" className="sr-only">Ordenar por</label>
+          <Select id="orden" name="orden" defaultValue={orden} className="min-w-0 flex-1 sm:w-56 sm:flex-none">
             {SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
           </Select>
+          <Button type="submit" variant="dark">Buscar</Button>
         </div>
-        <Button type="submit" variant="dark">Buscar</Button>
       </form>
 
-      <nav aria-label="Filtrar por segmento" className="-mx-1 flex flex-wrap gap-2">
+      <nav aria-label="Filtrar por segmento" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
         {chips.map((c) => {
           const active = c.key === segmento;
           return (
             <Link key={c.key} href={href({ q, segmento: c.key, orden })} aria-current={active ? 'true' : undefined}
-              className={cn('inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[13px] font-semibold ring-1 ring-inset transition',
+              className={cn('inline-flex shrink-0 items-center gap-2 rounded-full px-3.5 py-1.5 text-[13px] font-semibold ring-1 ring-inset transition',
                 active ? 'bg-navy text-white ring-navy' : 'bg-white text-navy ring-[#C9D6E3] hover:bg-surface')}>
               {c.label}
               <span className={cn('rounded-full px-1.5 py-0.5 text-[11px] tabular-nums', active ? 'bg-white/20' : 'bg-surface text-muted')}>{num(counts[c.key])}</span>
@@ -93,8 +90,8 @@ export default async function ClientesPage({ searchParams }: { searchParams: SP 
         <EmptyState
           title={all.length === 0 && !q ? `Aún no tienes ${v.customers}` : 'No encontramos resultados'}
           text={all.length === 0 && !q
-            ? `Registra a tu primer ${v.customer} con el botón de arriba, o entrega un código en ${v.counter.toLowerCase()} y se registrará solo.`
-            : 'Prueba con otro nombre, quita el filtro de segmento o busca solo una parte del contacto.'}
+            ? `Se registran solos al recibir su primer sello.`
+            : undefined}
           action={(q || segmento !== 'todos') ? <Link href="/panel/clientes" className={btnClass('ghost', 'sm')}>Quitar filtros</Link> : undefined}
         />
       ) : (
@@ -132,28 +129,27 @@ export default async function ClientesPage({ searchParams }: { searchParams: SP 
             </Table>
           </div>
 
-          <ul className="flex flex-col gap-3 sm:hidden" aria-label={`Lista de ${v.customers}`}>
+          <ul className="flex flex-col gap-2 sm:hidden" aria-label={`Lista de ${v.customers}`}>
             {rows.map((c) => (
-              <li key={c.id} className="rounded-2xl bg-white p-4 shadow-card ring-1 ring-line/70">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <Link href={`/panel/clientes/${c.id}`} className="block truncate font-semibold text-navy underline-offset-2 hover:underline">{c.name}</Link>
-                    <p className="truncate text-xs text-muted">{contactLabel(c.contactKind)}: {c.contact}</p>
-                    {birthdayLabel(c) && <p className="truncate text-xs text-muted">Cumpleaños: {birthdayLabel(c)}</p>}
-                  </div>
-                  <SegmentBadge segment={c.segment} />
-                </div>
-                <div className="mt-3">
-                  <div className="mb-1 flex justify-between text-xs text-muted"><span>{c.stamps} de {required} sellos</span><span>{c.rewardsRedeemed} canjes</span></div>
-                  <Meter value={c.stamps / required} tone={c.stamps >= required ? 'sun' : 'navy'} />
-                </div>
-                <p className="mt-2 text-xs text-muted">Última {v.visit}: {c.lastVisitAt ? ago(c.lastVisitAt, now) : 'sin ' + v.visits}</p>
+              <li key={c.id}>
+                <Link href={`/panel/clientes/${c.id}`} className="block rounded-2xl bg-white px-4 py-3 shadow-card ring-1 ring-line/70 active:bg-surface">
+                  <span className="flex items-center justify-between gap-3">
+                    <span className="min-w-0 truncate font-semibold text-navy">{c.name}</span>
+                    <SegmentBadge segment={c.segment} />
+                  </span>
+                  <span className="mt-0.5 block truncate text-xs text-muted">{c.contact}</span>
+                  <span className="mt-2.5 flex items-center gap-3 text-xs text-muted">
+                    <span className="min-w-0 flex-1"><Meter value={c.stamps / required} tone={c.stamps >= required ? 'sun' : 'navy'} /></span>
+                    <span className="shrink-0 tabular-nums">{c.stamps}/{required}</span>
+                    <span className="shrink-0">{c.lastVisitAt ? ago(c.lastVisitAt, now) : 'sin ' + v.visits}</span>
+                  </span>
+                </Link>
               </li>
             ))}
           </ul>
 
           <nav aria-label="Paginación" className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
-            <p>Mostrando {from} a {from + rows.length - 1} de {num(filtered.length)}</p>
+            <p>{from}–{from + rows.length - 1} de {num(filtered.length)}</p>
             <div className="flex gap-2">
               {page > 1 ? <Link href={href({ q, segmento, orden, pagina: page - 1 })} className={btnClass('ghost', 'sm')} rel="prev">Anterior</Link> : null}
               <span className="inline-flex h-9 items-center px-2">Página {page} de {pages}</span>

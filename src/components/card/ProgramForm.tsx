@@ -118,7 +118,7 @@ function MilestonesField({ value, onChange, total, rewardTitle, error, max = MAX
             <button type="button" onClick={add} className="text-sm font-semibold text-navy underline underline-offset-4">+ Agregar otro premio</button>
           )}
           {value.length >= max && max < MAX_MILESTONES && (
-            <p className="text-xs text-muted">Tu plan permite {max} {max === 1 ? 'premio' : 'premios'} antes del final. Con Standard o Pro puedes dar hasta {MAX_MILESTONES}.</p>
+            <p className="text-xs text-muted">Tu plan: {max} {max === 1 ? 'premio' : 'premios'} antes del final. Standard o Pro: hasta {MAX_MILESTONES}.</p>
           )}
         </div>
       )}
@@ -163,14 +163,14 @@ export function ProgramForm({ program, maxMilestones, businessName, vocab, rewar
       <Switch id="requireAmount" name="requireAmount" checked={v.requireAmount} onChange={(x) => set('requireAmount', x)}
         label="El sello depende del monto"
         help={v.requireAmount
-          ? `Quien atiende escribe el monto del ${ticket} y el sistema calcula cuántos sellos da. Así nadie reparte sellos sin un comprobante.`
-          : `Apagado: cada ${vocab.visit} da un sello, sin importar cuánto se gaste. El control se apoya en los cupos y en el tiempo mínimo entre sellos.`} />
+          ? `Se escribe el monto del ${ticket} y se calculan los sellos.`
+          : `Cada ${vocab.visit} da un sello, sin importar el monto.`} />
 
       {v.requireAmount ? (
         <FormField id="minSpend" label="Mínimo por sello (USD)" error={err.minSpend}
           help={spend > 0
-            ? `Cada ${money(spend)} de consumo da un sello. Con un ${ticket} de $10,00 se dan ${Math.floor(1000 / spend)} sellos.`
-            : `Cuánto debe consumir tu ${vocab.customer} para ganar un sello.`}>
+            ? `Ej.: un ${ticket} de $10,00 da ${Math.floor(1000 / spend)} sellos.`
+            : undefined}>
           <div className="relative max-w-[180px]">
             <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[15px] text-muted" aria-hidden="true">$</span>
             <Input id="minSpend" name="minSpend" inputMode="decimal" value={v.minSpend} onChange={(e) => set('minSpend', e.target.value.replace(/[^0-9.,]/g, ''))}
@@ -195,11 +195,11 @@ export function ProgramForm({ program, maxMilestones, businessName, vocab, rewar
         {imagesSlot}
         <form action={formAction} className="min-w-0 space-y-5" noValidate>
           {show.identidad && (
-            <Section id="sec-identidad" title="Identidad de la tarjeta" intro={`Lo primero que ve tu ${vocab.customer} al abrir su tarjeta.`}>
+            <Section id="sec-identidad" title="Identidad de la tarjeta">
               <FormField id="name" label="Nombre de la tarjeta" error={err.name}>
                 <Input id="name" name="name" value={v.name} maxLength={40} required onChange={(e) => set('name', e.target.value)} aria-invalid={!!err.name} aria-describedby={describedBy('name', undefined, err.name)} />
               </FormField>
-              <FormField id="logoText" label="Iniciales" help="De 1 a 3 letras. Se ven en lugar del logo si no subes uno." error={err.logoText} className="max-w-[260px]">
+              <FormField id="logoText" label="Iniciales" help="Se ven si no subes logo." error={err.logoText} className="max-w-[260px]">
                 <Input id="logoText" name="logoText" value={v.logoText} maxLength={3} required className="uppercase" autoComplete="off"
                   onChange={(e) => set('logoText', e.target.value.toUpperCase())} aria-invalid={!!err.logoText} aria-describedby={describedBy('logoText', 'x', err.logoText)} />
               </FormField>
@@ -207,9 +207,9 @@ export function ProgramForm({ program, maxMilestones, businessName, vocab, rewar
           )}
 
           {show.premio && (
-            <Section id="sec-premio" title={wizard ? 'Tu premio' : 'Premio'} intro={`Qué gana tu ${vocab.customer} al completar la tarjeta.`}>
+            <Section id="sec-premio" title={wizard ? 'Tu premio' : 'Premio'}>
               <FormField id="stampsRequired" label="Sellos para ganar el premio" error={err.stampsRequired}
-                help={`Tu ${vocab.customer} necesitará ${v.stampsRequired} ${vocab.visits} para completar la tarjeta. Entre 4 y 20.`}>
+                help="Entre 4 y 20.">
                 <div className="flex items-center gap-4">
                   <input id="stampsRequired" name="stampsRequired" type="range" min={4} max={20} step={1} value={v.stampsRequired}
                     onChange={(e) => set('stampsRequired', Number(e.target.value))} className="h-11 w-full accent-[#001D3D]"
@@ -241,7 +241,7 @@ export function ProgramForm({ program, maxMilestones, businessName, vocab, rewar
               <div className="grid gap-4 sm:grid-cols-2">
                 {show.premioExtra && (
                   <FormField id="rewardExpiresDays" label="Vigencia del premio (días)" optional error={err.rewardExpiresDays}
-                    help={`Días que tiene tu ${vocab.customer} para canjear el premio. Vacío: no vence.`}>
+                    help="Vacío: no vence.">
                     <Input id="rewardExpiresDays" name="rewardExpiresDays" inputMode="numeric" value={v.rewardExpiresDays} maxLength={3}
                       onChange={(e) => set('rewardExpiresDays', e.target.value.replace(/\D/g, ''))} aria-invalid={!!err.rewardExpiresDays} aria-describedby={describedBy('rewardExpiresDays', 'x', err.rewardExpiresDays)} />
                   </FormField>
@@ -256,7 +256,7 @@ export function ProgramForm({ program, maxMilestones, businessName, vocab, rewar
           )}
 
           {show.colores && (
-            <Section id="sec-colores" title={wizard ? 'Colores de tu tarjeta' : 'Colores'} intro="Elige una paleta o ajusta cada color. Revisa que el texto se lea bien.">
+            <Section id="sec-colores" title={wizard ? 'Colores de tu tarjeta' : 'Colores'}>
               <div role="group" aria-label="Paletas sugeridas" className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {palettes.map((p) => {
                   const active = p.bg.toLowerCase() === bg.toLowerCase() && p.accent.toLowerCase() === accent.toLowerCase() && p.ink.toLowerCase() === ink.toLowerCase();
@@ -285,24 +285,24 @@ export function ProgramForm({ program, maxMilestones, businessName, vocab, rewar
           )}
 
           {show.reglas && (
-            <Section id="sec-reglas" title="Reglas de sellos" intro="Controlan cómo se entregan los sellos y evitan que se repartan de más.">
+            <Section id="sec-reglas" title="Reglas de sellos">
               {amountFields}
               <div className="grid gap-4 sm:grid-cols-2">
                 <FormField id="codeTtlSeconds" label="Vigencia del código" error={err.codeTtlSeconds}
-                  help={`Tiempo que tiene tu ${vocab.customer} para escanear el código. Un código corto es difícil de pasar por mensaje a quien no está en el local.`}>
+                  help="Más corto, más difícil de compartir fuera del local.">
                   <Select id="codeTtlSeconds" name="codeTtlSeconds" value={v.codeTtlSeconds} onChange={(e) => set('codeTtlSeconds', Number(e.target.value))} aria-describedby={describedBy('codeTtlSeconds', 'x', err.codeTtlSeconds)}>
                     {ttlOptions.map((s) => <option key={s} value={s}>{ttlLabel(s)}</option>)}
                   </Select>
                 </FormField>
                 <FormField id="maxSeatsWithoutApproval" label="Cupos máximos sin aprobación" error={err.maxSeatsWithoutApproval}
-                  help={`Si un ${ticket} reparte más cupos que este número, se pide el PIN de un dueño o gerente. Así nadie reparte sellos de más.`}>
+                  help="Más cupos piden el PIN de un dueño o gerente.">
                   <Select id="maxSeatsWithoutApproval" name="maxSeatsWithoutApproval" value={v.maxSeatsWithoutApproval} onChange={(e) => set('maxSeatsWithoutApproval', Number(e.target.value))} aria-describedby={describedBy('maxSeatsWithoutApproval', 'x', err.maxSeatsWithoutApproval)}>
                     {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n} {n === 1 ? 'cupo' : 'cupos'}</option>)}
                   </Select>
                 </FormField>
               </div>
               <FormField id="cooldownMinutes" label={`Tiempo mínimo entre sellos del mismo ${vocab.customer}`} error={err.cooldownMinutes} className="max-w-md"
-                help={`Cuánto debe esperar tu ${vocab.customer} para sumar otro sello. Evita que alguien junte varios sellos con una sola ${vocab.visit}.`}>
+                help={`Evita varios sellos en una sola ${vocab.visit}.`}>
                 <Select id="cooldownMinutes" name="cooldownMinutes" value={v.cooldownMinutes} onChange={(e) => set('cooldownMinutes', Number(e.target.value))} aria-describedby={describedBy('cooldownMinutes', 'x', err.cooldownMinutes)}>
                   {cooldownOptions.map((m) => <option key={m} value={m}>{cooldownLabel(m)}</option>)}
                 </Select>
@@ -312,7 +312,7 @@ export function ProgramForm({ program, maxMilestones, businessName, vocab, rewar
 
           {show.terminos && (
             <Section id="sec-terminos" title="Términos y condiciones">
-              <FormField id="terms" label="Condiciones del programa" optional error={err.terms} help={`Tu ${vocab.customer} las ve al crear su tarjeta. Máximo 600 caracteres.`}>
+              <FormField id="terms" label="Condiciones del programa" optional error={err.terms} help="Máximo 600 caracteres.">
                 <Textarea id="terms" name="terms" rows={4} value={v.terms} maxLength={600} onChange={(e) => set('terms', e.target.value)}
                   aria-invalid={!!err.terms} aria-describedby={describedBy('terms', 'x', err.terms)} />
               </FormField>
@@ -356,7 +356,6 @@ export function ProgramForm({ program, maxMilestones, businessName, vocab, rewar
               </div>
               <div className="flex flex-wrap items-center gap-3">
                 <SubmitButton disabled={changes.length === 0}>Guardar cambios</SubmitButton>
-                {changes.length === 0 && <span className="text-xs text-muted">El botón se activa cuando cambies algo.</span>}
               </div>
             </Card>
           )}

@@ -12,7 +12,7 @@ export function median(values: number[]): number {
 export function StaffTable({ rows, ticketPlural, staffWord, ticketWord = 'Ticket' }: { rows: StaffReportRow[]; ticketPlural: string; staffWord: string; ticketWord?: string }) {
   const tw = ticketWord.toLowerCase();
   if (rows.length === 0) {
-    return <EmptyState title="Sin actividad en este periodo" text={'Cuando el equipo genere códigos, aquí verás cuántos sellos da cada ' + staffWord + ' por ' + tw + '.'} />;
+    return <EmptyState title="Sin actividad en este periodo"/>;
   }
   const med = median(rows.filter((r) => r.tickets > 0).map((r) => r.ratio));
   const scale = Math.max(1, med * 2, ...rows.map((r) => r.ratio));
@@ -50,7 +50,7 @@ export function StaffTable({ rows, ticketPlural, staffWord, ticketWord = 'Ticket
         </tbody>
       </Table>
       <p className="mt-3 text-xs text-muted">
-        Sellos por {tw} = sellos dados ÷ {ticketPlural.toLowerCase()} generados. La marca amarilla es la mediana del equipo ({num(med, 1)}); se marca “Revisar” a quien tiene 5 o más {ticketPlural.toLowerCase()} y supera 1,5 veces esa mediana.
+        Marca amarilla: mediana del equipo ({num(med, 1)}). “Revisar”: 5+ {ticketPlural.toLowerCase()} y más de 1,5× la mediana.
       </p>
     </>
   );

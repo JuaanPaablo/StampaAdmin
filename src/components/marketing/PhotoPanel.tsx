@@ -28,13 +28,14 @@ async function shrink(file: File): Promise<Blob> {
   return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('No pudimos leer la foto.'))), 'image/jpeg', 0.86));
 }
 
-export function PhotoPanel({ photos: initial, coverUrl, quota: initialQuota, advice, value, onChange, aiReady }: {
+export function PhotoPanel({ photos: initial, coverUrl, quota: initialQuota, advice, value, onChange, onEnhanced, aiReady }: {
   photos: MarketingPhoto[];
   coverUrl?: string;
   quota: Quota;
   advice: PhotoAdvice[];
   value: PhotoChoice;
   onChange: (p: PhotoChoice) => void;
+  onEnhanced?: () => void;
   aiReady: boolean;
 }) {
   const [photos, setPhotos] = useState(initial);
@@ -79,6 +80,7 @@ export function PhotoPanel({ photos: initial, coverUrl, quota: initialQuota, adv
       setPhotos((p) => [r.photo, ...p]);
       setBefore(original);
       onChange({ kind: 'photo', id: r.photo.id, url: r.photo.url });
+      onEnhanced?.();
     });
   }
 
@@ -89,10 +91,10 @@ export function PhotoPanel({ photos: initial, coverUrl, quota: initialQuota, adv
     <Card className="flex flex-col gap-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="font-display text-lg font-semibold text-navy">1. Tu foto</h2>
-          <p className="text-sm text-muted">Sube una foto real de tu producto o tu local. La IA la mejora, nunca inventa tu producto.</p>
+          <h2 className="font-display text-lg font-semibold text-navy">Tu foto</h2>
+          <p className="text-sm text-muted">Real, de tu producto o local. La IA la mejora, no la inventa.</p>
         </div>
-        <p className="text-sm text-muted">Fotos con IA este mes: <strong className="text-navy">{quota.used} de {quota.limit}</strong></p>
+        <p className="text-xs text-muted" title="Mejoras con IA este mes. Se renuevan el día 1.">Fotos IA <strong className="text-navy">{quota.used}/{quota.limit}</strong></p>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -137,11 +139,11 @@ export function PhotoPanel({ photos: initial, coverUrl, quota: initialQuota, adv
           </div>
 
           <div className="flex flex-col gap-3">
-            <p className="font-display text-base font-semibold text-navy">2. ¿Cómo la mejoramos?</p>
+            <p className="font-display text-base font-semibold text-navy">Mejórala <span className="text-sm font-normal text-muted">(opcional)</span></p>
             {value?.kind === 'portada' ? (
-              <p className="text-sm text-muted">La portada se usa tal cual. Para mejorarla con IA, súbela como foto.</p>
+              <p className="text-sm text-muted">La portada va tal cual. Súbela como foto para mejorarla.</p>
             ) : !aiReady ? (
-              <p className="rounded-xl bg-[#FFF4CC] px-3 py-2 text-sm text-navy">La mejora con IA se activa pronto. Mientras tanto puedes usar tu foto tal cual en los diseños.</p>
+              <p className="rounded-xl bg-[#FFF4CC] px-3 py-2 text-sm text-navy">La mejora con IA llega pronto. Puedes usar tu foto tal cual.</p>
             ) : (
               <div className="grid gap-2 sm:grid-cols-2">
                 {PHOTO_STYLES.map((s) => {
@@ -149,7 +151,7 @@ export function PhotoPanel({ photos: initial, coverUrl, quota: initialQuota, adv
                   const name = s.id === 'temporada' && season ? `${s.label}: ${SEASON_LABEL[season]}` : s.label;
                   return (
                     <button key={s.id} type="button" disabled={pending || noQuota} onClick={() => enhance(s.id)}
-                      className={cn('flex flex-col items-start gap-1 rounded-xl border-[1.5px] bg-white p-3 text-left transition hover:border-navy disabled:opacity-60', rec ? 'border-[#E0B400]' : 'border-[#C9D6E3]')}>
+                      className={cn('flex min-h-[44px] flex-col items-start gap-1 rounded-xl border-[1.5px] bg-white p-3 text-left transition hover:border-navy disabled:opacity-60', rec ? 'border-[#E0B400]' : 'border-[#C9D6E3]')}>
                       <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-navy">
                         {busy === s.id ? 'Mejorando… (hasta 40 s)' : name}
                         {rec && busy !== s.id && <span className="rounded-full bg-[#FFF3CC] px-2 py-0.5 text-[11px] font-semibold text-[#7A5A00]">Recomendado</span>}
@@ -160,8 +162,8 @@ export function PhotoPanel({ photos: initial, coverUrl, quota: initialQuota, adv
                 })}
               </div>
             )}
-            {noQuota && value?.kind === 'photo' && aiReady && <p className="text-sm text-muted">Ya usaste tus fotos con IA de este mes. Puedes seguir usando tus fotos tal cual.</p>}
-            <p className="text-xs text-muted">Consejo: foto horizontal o cuadrada, con buena luz natural y el producto al centro. La original siempre se conserva.</p>
+            {noQuota && value?.kind === 'photo' && aiReady && <p className="text-sm text-muted">Ya usaste tus mejoras de este mes. Tus fotos siguen disponibles tal cual.</p>}
+            <p className="text-xs text-muted">Buena luz y producto al centro. La original se conserva.</p>
           </div>
         </div>
       )}

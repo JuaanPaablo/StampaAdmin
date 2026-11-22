@@ -5,9 +5,9 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
 const STEPS = [
-  { href: '/panel/tarjeta/poster', title: 'Descarga tu póster QR', text: 'Imprímelo y ponlo donde tus clientes lo vean. Lo escanean y crean su tarjeta.' },
-  { href: '/panel/equipo', title: 'Invita a tu equipo', text: 'Agrega a quien atiende y envíale su invitación por correo.' },
-  { href: '/panel/caja', title: 'Da el primer sello', text: 'Genera un código en caja y pruébalo con tu propio teléfono.' }
+  { href: '/panel/tarjeta/poster', title: 'Descarga tu póster QR', text: 'Imprímelo y ponlo a la vista.' },
+  { href: '/panel/equipo', title: 'Invita a tu equipo', text: 'Cada uno entra con su correo.' },
+  { href: '/panel/caja', title: 'Da el primer sello', text: 'Pruébalo con tu teléfono.' }
 ];
 
 /**
@@ -34,8 +34,6 @@ export function PrimerosPasos() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 id="primeros-pasos-t" className="font-display text-xl font-bold tracking-tight">¡Tu negocio ya está activo!</h2>
-          <p className="mt-1 max-w-xl text-sm text-white/75">Tu tarjeta de sellos está lista. Descarga tu póster QR y empieza a dar sellos hoy.</p>
-          <Link href="/panel/tarjeta/poster" className="mt-4 inline-flex h-11 items-center justify-center rounded-full bg-sun px-5 text-sm font-semibold text-navy hover:bg-sun-2">Descargar mi póster QR</Link>
         </div>
         <button type="button" onClick={dismiss} className="shrink-0 rounded-full px-3 py-2 text-[13px] font-semibold text-white/80 ring-1 ring-inset ring-white/25 hover:bg-white/10">
           Ocultar

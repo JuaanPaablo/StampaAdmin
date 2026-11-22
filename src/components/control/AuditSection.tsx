@@ -37,7 +37,7 @@ export function AuditSection({ entries, actions, selected, range, staffNames, ti
         {canExport && <a href={exportHref} download className={btnClass('ghost', 'sm')}>Exportar CSV</a>}
       </div>
       {entries.length === 0 ? (
-        <EmptyState title="Sin movimientos" text={selected ? 'No hay registros con esa acción. Prueba con “Todas”.' : 'Cada código, anulación, canje y cambio de reglas queda registrado aquí.'} />
+        <EmptyState title="Sin movimientos" text={selected ? 'No hay registros con esa acción. Prueba con “Todas”.' : 'Aquí aparecerá cada código, canje y cambio.'} />
       ) : (
         <Table>
           <caption className="sr-only">Registro de actividad</caption>

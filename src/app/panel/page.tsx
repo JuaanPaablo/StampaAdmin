@@ -8,7 +8,7 @@ import type { Alert, RangeKey } from '@/lib/contracts';
 import { ago, localizeTicket, num, pct } from '@/lib/format';
 import { Badge, Card, EmptyState, PageHeader, btnClass } from '@/components/ui';
 import {
-  BarChart, KpiCard, LineChart, RangeTabs, WEEKDAYS, MONTHS_FULL, RANGE_LABEL,
+  BarChart, KpiCard, LineChart, RangeTabs, WEEKDAYS, MONTHS_FULL,
   cap, dayLabel, delta, hourLabel, hourPhrase, peakIndex
 } from '@/components/dashboard';
 
@@ -42,7 +42,7 @@ export default async function ResumenPage({ searchParams }: { searchParams: { ra
   ]);
   const now = Date.now();
   const k = dash.kpis, p = dash.previous;
-  const prevHint = `frente a los ${RANGE_LABEL[range]} anteriores`;
+  const prevHint = 'vs. periodo anterior';
   const hasActivity = dash.series.some((s) => s.stamps > 0 || s.newCustomers > 0) || k.stampsIssued > 0;
 
   /* Horas: se recorta a la franja con movimiento (con un mínimo de 8 barras). */
@@ -77,7 +77,6 @@ export default async function ResumenPage({ searchParams }: { searchParams: { ra
     <div className="flex flex-col gap-6">
       <PageHeader
         title={`${greeting(business.timezone)}, ${staff.name.split(' ')[0]}`}
-        subtitle={`Así va ${business.name} en los últimos ${RANGE_LABEL[range]}.`}
         actions={<RangeTabs current={range} maxDays={plan.statsDays} />}
       />
 
@@ -86,27 +85,24 @@ export default async function ResumenPage({ searchParams }: { searchParams: { ra
         <KpiCard label={`${customersCap} activos`} value={num(k.activeCustomers)} delta={delta(k.activeCustomers, p.activeCustomers)} hint={prevHint} />
         <KpiCard label={`${customersCap} nuevos`} value={num(k.newCustomers)} delta={delta(k.newCustomers, p.newCustomers)} hint={prevHint} />
         <KpiCard label={`${cap(v.reward)}s canjeados`} value={num(k.rewardsRedeemed)} delta={delta(k.rewardsRedeemed, p.rewardsRedeemed)} hint={prevHint} />
-        <KpiCard label="Tasa de regreso" value={pct(k.returnRate)} hint={`${v.customers} con 2 o más ${v.visits}`} />
-        <KpiCard label={`Sellos por ${v.ticket.toLowerCase()}`} value={num(k.stampsPerTicket, 1)} hint="promedio del periodo" />
+        <KpiCard label="Tasa de regreso" value={pct(k.returnRate)} hint={`con 2 o más ${v.visits}`} />
+        <KpiCard label={`Sellos por ${v.ticket.toLowerCase()}`} value={num(k.stampsPerTicket, 1)} hint="promedio" />
       </section>
 
       {!hasActivity ? (
         <EmptyState
-          title="Todavía no hay movimiento en este periodo"
-          text={`Cuando tus ${v.customers} empiecen a sumar sellos, aquí verás cómo van tus ${v.visits}, quiénes regresan y a qué hora llegan. Prueba con un rango más amplio o genera el primer código en ${v.counter.toLowerCase()}.`}
+          title="Sin movimiento en este periodo"
           action={<Link href="/panel/caja" className={btnClass('primary', 'sm')}>Ir a {v.counter.toLowerCase()}</Link>}
         />
       ) : (
         <section aria-label="Tendencia" className="grid gap-4 lg:grid-cols-2">
           <Card>
-            <h2 className="font-display text-base font-semibold text-navy">Sellos por día</h2>
-            <p className="mb-3 text-xs text-muted">Cada punto es un día. El amarillo marca el día más alto.</p>
+            <h2 className="mb-3 font-display text-base font-semibold text-navy">Sellos por día</h2>
             <LineChart id="ln-sellos" title="Sellos por día" unit="sellos"
               data={dash.series.map((s) => ({ label: dayLabel(s.date), value: s.stamps }))} />
           </Card>
           <Card>
-            <h2 className="font-display text-base font-semibold text-navy">{customersCap} nuevos por día</h2>
-            <p className="mb-3 text-xs text-muted">Personas que se registraron por primera vez.</p>
+            <h2 className="mb-3 font-display text-base font-semibold text-navy">{customersCap} nuevos por día</h2>
             <LineChart id="ln-nuevos" title={`${customersCap} nuevos por día`} unit={v.customers}
               data={dash.series.map((s) => ({ label: dayLabel(s.date), value: s.newCustomers }))} />
           </Card>
@@ -116,20 +112,18 @@ export default async function ResumenPage({ searchParams }: { searchParams: { ra
       <section aria-labelledby="cuando" className="grid gap-4 lg:grid-cols-2">
         <h2 id="cuando" className="sr-only">¿Cuándo viene tu gente?</h2>
         <Card>
-          <h3 className="font-display text-base font-semibold text-navy">¿Cuándo viene tu gente? Por hora</h3>
-          <p className="mb-3 text-sm font-medium text-navy">{hourSentence}</p>
+          <h3 className="font-display text-base font-semibold text-navy">Por hora</h3>
+          <p className="mb-3 text-sm text-muted">{hourSentence}</p>
           <BarChart id="bar-hora" title="Sellos por hora del día" desc={hourSentence}
             items={hours.map((h) => ({ label: String(h.hour), value: h.stamps, tooltip: `${hourLabel(h.hour)}: ${num(h.stamps)} sellos` }))}
             highlight={hPeak} labelEvery={hours.length > 12 ? 2 : 1} />
-          <p className="mt-1 text-xs text-muted">Hora del día, de 0 a 23.</p>
         </Card>
         <Card>
-          <h3 className="font-display text-base font-semibold text-navy">¿Cuándo viene tu gente? Por día</h3>
-          <p className="mb-3 text-sm font-medium text-navy">{daySentence}</p>
+          <h3 className="font-display text-base font-semibold text-navy">Por día de la semana</h3>
+          <p className="mb-3 text-sm text-muted">{daySentence}</p>
           <BarChart id="bar-dia" title="Sellos por día de la semana" desc={daySentence}
             items={weekdays.map((w) => ({ label: WEEKDAYS[w.weekday].slice(0, 3), value: w.stamps, tooltip: `${cap(WEEKDAYS[w.weekday])}: ${num(w.stamps)} sellos` }))}
             highlight={wdPeakIdx} />
-          <p className="mt-1 text-xs text-muted">De lunes a domingo.</p>
         </Card>
       </section>
 
@@ -137,7 +131,7 @@ export default async function ResumenPage({ searchParams }: { searchParams: { ra
         <Card>
           <h2 className="font-display text-base font-semibold text-navy">Mejores {v.customers}</h2>
           {dash.topCustomers.length === 0 ? (
-            <p className="mt-3 text-sm text-muted">Aún no hay {v.customers} con sellos en este periodo.</p>
+            <p className="mt-3 text-sm text-muted">Sin datos en este periodo.</p>
           ) : (
             <ol className="mt-3 divide-y divide-line/80">
               {dash.topCustomers.slice(0, 5).map((c, i) => (
@@ -157,7 +151,7 @@ export default async function ResumenPage({ searchParams }: { searchParams: { ra
           <h2 className="font-display text-base font-semibold text-navy">Cumpleaños próximos</h2>
           {program.birthdayReward && <p className="mt-1 text-xs text-muted">Regalo: {program.birthdayReward}</p>}
           {dash.upcomingBirthdays.length === 0 ? (
-            <p className="mt-3 text-sm text-muted">No hay cumpleaños en los próximos días.</p>
+            <p className="mt-3 text-sm text-muted">Ninguno pronto.</p>
           ) : (
             <ul className="mt-3 divide-y divide-line/80">
               {dash.upcomingBirthdays.slice(0, 5).map((b) => (
@@ -175,7 +169,7 @@ export default async function ResumenPage({ searchParams }: { searchParams: { ra
         <Card>
           <h2 className="font-display text-base font-semibold text-navy">Listos para canjear</h2>
           <p className="mt-1 font-display text-3xl font-bold tabular-nums text-navy">{num(redeemable.length)}</p>
-          <p className="text-xs text-muted">{redeemable.length === 1 ? v.customer + ' tiene' : v.customers + ' tienen'} un premio por entregar.</p>
+          <p className="text-xs text-muted">por entregar</p>
           {redeemable.length > 0 && (
             <ul className="mt-3 flex flex-col gap-1.5 text-sm text-navy">
               {redeemable.slice(0, 3).map((c) => (
@@ -200,7 +194,7 @@ export default async function ResumenPage({ searchParams }: { searchParams: { ra
           <Link href="/panel/control" className="text-sm font-semibold text-navy underline underline-offset-4">Ver control</Link>
         </div>
         {alerts.length === 0 ? (
-          <p className="mt-3 text-sm text-muted">Sin alertas. Todo marcha con normalidad.</p>
+          <p className="mt-3 text-sm text-muted">Sin alertas.</p>
         ) : (
           <ul className="mt-3 divide-y divide-line/80">
             {alerts.slice(0, 3).map((a) => (

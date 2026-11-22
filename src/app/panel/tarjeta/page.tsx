@@ -18,7 +18,6 @@ export default async function TarjetaPage() {
     <>
       <PageHeader
         title="Tarjeta"
-        subtitle={`Diseña la tarjeta de sellos de ${business.name}. Lo que cambies se ve al instante en la vista previa.`}
         actions={<Link href="/panel/tarjeta/poster" className={btnClass('ghost')}>Póster con QR</Link>}
       />
       <ProgramForm maxMilestones={features(business.plan).maxMilestones}

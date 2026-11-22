@@ -13,7 +13,7 @@ export default async function NuevoPage() {
   const locations = await repo.listLocations(business.id);
   return (
     <>
-      <PageHeader title="Agregar persona" subtitle={`Agrega a alguien de tu equipo. Para ${template.vocab.staffRole} elige el rol con menos permisos.`} />
+      <PageHeader title="Agregar persona" />
       <div className="max-w-2xl"><StaffForm locations={locations} vocab={template.vocab} /></div>
     </>
   );

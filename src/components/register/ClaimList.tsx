@@ -12,9 +12,7 @@ export function ClaimList({ codeId, claims, timezone, customerWord, canVoid }: {
   return (
     <div aria-live="polite" aria-relevant="additions text">
       {sorted.length === 0 ? (
-        <p className="rounded-xl bg-surface px-4 py-6 text-center text-sm text-muted">
-          Aún nadie reclama. Cuando un {customerWord} escanee o digite el código, aparece aquí al instante.
-        </p>
+        <p className="rounded-xl bg-surface px-4 py-4 text-center text-sm text-muted">Esperando al {customerWord}…</p>
       ) : (
         <ul className="divide-y divide-line">
           {sorted.map((c) => (
@@ -28,7 +26,7 @@ export function ClaimList({ codeId, claims, timezone, customerWord, canVoid }: {
               </div>
               {!c.voidedAt && canVoid && (
                 <ActionButton action={voidClaimAction} fields={{ codeId, claimId: c.id }} label="Anular" confirmLabel="Sí, anular sello" variant="danger" size="sm"
-                  confirmQuestion="El sello se quita de la tarjeta y el cupo no se devuelve." pendingText="Anulando…" />
+                  confirmQuestion="Se quita el sello. El cupo no se devuelve." pendingText="Anulando…" />
               )}
             </li>
           ))}

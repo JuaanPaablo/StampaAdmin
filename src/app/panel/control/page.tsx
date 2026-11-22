@@ -78,7 +78,7 @@ export default async function ControlPage({ searchParams }: { searchParams: Reco
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-10">
-      <PageHeader title="Control" subtitle={'Qué pasa en ' + v.counter.toLowerCase() + ' de ' + business.name + ': alertas, equipo y registro de actividad.'}
+      <PageHeader title="Control"
         actions={<RangeTabs range={range} accion={accion || undefined} />} />
 
       {plan.alerts && (
@@ -92,19 +92,19 @@ export default async function ControlPage({ searchParams }: { searchParams: Reco
       <Section id="alertas" title="Alertas">
         {plan.alerts ? (
         <AlertList alerts={alerts.slice(0, 30)} staffNames={staffNames} range={range} ticketWord={v.ticket}
-          emptyText="No hubo códigos compartidos, aprobaciones ni anulaciones sospechosas. Si algo cambia, lo verás aquí primero." />
+          emptyText="Todo en orden." />
         ) : (
         <PlanLock plan="standard" businessName={business.name} title="Alertas antifraude"
-          text="Te avisamos si un código circula fuera del local, si alguien repite tickets o anula sellos." />
+          text="Códigos compartidos, tickets repetidos y anulaciones sospechosas." />
         )}
       </Section>
 
-      <Section id="cajeros" title={'Equipo en ' + v.counter.toLowerCase()} hint={'Cuántos sellos da cada ' + v.staffRole + ' por ' + v.ticket.toLowerCase() + ', frente al resto del equipo.'}>
+      <Section id="cajeros" title={'Equipo en ' + v.counter.toLowerCase()}>
         {plan.staffReport ? (
         <StaffTable rows={report} ticketPlural={plural(v.ticket)} staffWord={v.staffRole} ticketWord={v.ticket} />
         ) : (
         <PlanLock plan="pro" businessName={business.name} title={'Reporte por ' + v.staffRole}
-          text={'Compara cuántos sellos da cada ' + v.staffRole + ' por ' + v.ticket.toLowerCase() + ' y detecta a quien se sale de lo normal.'} />
+          text={'Sellos por ' + v.ticket.toLowerCase() + ' de cada persona frente al equipo.'} />
         )}
       </Section>
 
@@ -112,7 +112,7 @@ export default async function ControlPage({ searchParams }: { searchParams: Reco
         <CodesTable codes={codes} statuses={statuses} staffNames={staffNames} showAmount={program.requireAmount} ticketWord={v.ticket} staffWord={v.staffRole} />
       </Section>
 
-      <Section id="reglas" title="Reglas activas" hint="Lo que el sistema exige hoy a cada código.">
+      <Section id="reglas" title="Reglas activas">
         <RulesCard program={program} customerWord={v.customer} />
       </Section>
 

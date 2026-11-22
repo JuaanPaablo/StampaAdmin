@@ -36,7 +36,7 @@ export default async function ClienteDetallePage({ params }: { params: { id: str
       <nav aria-label="Ruta de navegación" className="text-sm">
         <Link href="/panel/clientes" className="font-medium text-navy underline underline-offset-4">Volver a {v.customers}</Link>
       </nav>
-      <PageHeader title={c.name} subtitle={`${v.customer.charAt(0).toUpperCase() + v.customer.slice(1)} desde el ${dateShort(c.createdAt)}.`} actions={<SegmentBadge segment={c.segment} />} />
+      <PageHeader title={c.name} subtitle={`Desde el ${dateShort(c.createdAt)}`} actions={<SegmentBadge segment={c.segment} />} />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,420px)_1fr]">
         <div className="flex flex-col gap-4">
@@ -71,7 +71,6 @@ export default async function ClienteDetallePage({ params }: { params: { id: str
                   <a href={contactHref(c.contactKind, c.contact)} className="underline underline-offset-4" {...(c.contactKind === 'whatsapp' ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>
                     {c.contact}
                   </a>
-                  <span className="ml-2 font-normal text-muted">{c.contactKind === 'whatsapp' ? '(abre WhatsApp)' : '(abre tu correo)'}</span>
                   {c.emailVerifiedAt && <span className="mt-0.5 block text-xs font-normal text-[#12683F]">Correo confirmado el {dateShort(c.emailVerifiedAt)}</span>}
                 </dd>
               </div>
@@ -83,8 +82,8 @@ export default async function ClienteDetallePage({ params }: { params: { id: str
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-muted">Consentimiento de mensajes</dt>
-                <dd className="font-semibold text-navy">Aceptado el {dateShort(c.consentAt)}</dd>
+                <dt className="text-xs text-muted">Acepta mensajes</dt>
+                <dd className="font-semibold text-navy">Desde el {dateShort(c.consentAt)}</dd>
               </div>
             </dl>
           </Card>
@@ -94,7 +93,7 @@ export default async function ClienteDetallePage({ params }: { params: { id: str
           <Card>
             <h2 className="font-display text-base font-semibold text-navy">Historial</h2>
             {history.length === 0 ? (
-              <p className="mt-3 text-sm text-muted">Todavía no hay movimientos para {c.name}.</p>
+              <p className="mt-3 text-sm text-muted">Sin movimientos.</p>
             ) : (
               <ol className="mt-4 flex flex-col">
                 {history.map((h, i) => {

@@ -27,7 +27,7 @@ export default async function MarketingPage() {
 
   return (
     <>
-      <PageHeader title="Marketing" subtitle="Posts listos para tus redes: tu foto mejorada, tu marca y un texto que vende. Tú revisas, copias y publicas." />
+      <PageHeader title="Marketing" />
       <MarketingStudio
         quota={quota}
         insights={insights}
@@ -39,11 +39,11 @@ export default async function MarketingPage() {
         aiImagesReady={aiImagesReady}
         locks={{
           ideas: <PlanLock plan="standard" businessName={name} title="Ideas con tus datos"
-            text="Stampa mira tus días flojos, premios entregados y clientes nuevos, y te propone posts listos con esas cifras." />,
+            text="Posts con tus cifras reales: días flojos, premios y clientes nuevos." />,
           semana: <PlanLock plan="pro" businessName={name} title="Tu semana de posts"
-            text="Cinco publicaciones de lunes a viernes, armadas con tus datos, en un solo clic." />,
+            text="5 posts de lunes a viernes en un clic." />,
           resenas: <PlanLock plan="pro" businessName={name} title="Respuestas a reseñas de Google"
-            text="Pega una reseña y recibe respuestas amables y profesionales para publicarlas." />
+            text="Respuestas amables listas para publicar." />
         }}
       />
     </>

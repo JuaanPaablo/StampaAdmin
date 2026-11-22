@@ -58,7 +58,7 @@ export default async function CodePage({ params }: { params: { id: string } }) {
   else if (status === 'cancelado') reason = 'Se canceló' + (code.cancelledAt ? ' a las ' + clock(code.cancelledAt, tz) : '') + '.';
 
   return (
-    <div className="flex w-full max-w-4xl flex-col gap-8">
+    <div className="flex w-full max-w-4xl flex-col gap-6 sm:gap-8">
       <LiveRefresh active={active} expiresAt={code.expiresAt} />
       <PageHeader
         title={v.ticket + ' ' + code.ticket}
@@ -69,16 +69,16 @@ export default async function CodePage({ params }: { params: { id: string } }) {
         <div role="status" className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-navy px-5 py-5 text-white shadow-card">
           <div className="min-w-0">
             <p className="font-display text-xl font-bold">Código quemado</p>
-            <p className="mt-1 text-sm text-white/80">{reason} Ya no sirve para reclamar sellos; si alguien lo intenta, se rechaza y queda registrado.</p>
+            <p className="mt-1 text-sm text-white/80">{reason}</p>
           </div>
           <Link href="/panel/caja" className={btnClass('primary')}>Nuevo código</Link>
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
-        <Card className="flex flex-col items-center gap-5 p-5 sm:p-7">
+      <div className="grid gap-4 sm:gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+        <Card className="flex flex-col items-center gap-4 p-4 sm:gap-5 sm:p-7">
           <div className="flex w-full items-center justify-between">
-            <h2 className="font-display text-base font-semibold text-navy">Código de un solo uso</h2>
+            <h2 className="font-display text-base font-semibold text-navy">Código</h2>
             <StatusBadge status={status} />
           </div>
           {active ? (
@@ -87,18 +87,17 @@ export default async function CodePage({ params }: { params: { id: string } }) {
               dangerouslySetInnerHTML={{ __html: qrSvg }} />
           ) : (
             <div className="flex aspect-square w-full max-w-[20rem] items-center justify-center rounded-2xl bg-surface p-6 text-center text-sm text-muted ring-1 ring-line">
-              El QR ya no está disponible porque el código se quemó.
+              QR no disponible
             </div>
           )}
           <div className="flex flex-col items-center gap-1">
             {active && <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted">O escribe este código</p>}
             <p className={'font-display text-6xl font-extrabold tracking-[0.12em] tabular-nums sm:text-7xl ' + (active ? 'text-navy' : 'text-muted line-through')} aria-label={'Código ' + code.code.split('').join(' ')}>{grouped}</p>
           </div>
-          <p className="text-center text-sm text-muted">{active ? `Tu ${v.customer} escanea el QR con la cámara o escribe el código en su tarjeta.` : 'Código fuera de uso.'}</p>
           <Countdown expiresAt={code.expiresAt} createdAt={code.createdAt} active={active} />
         </Card>
 
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-4 sm:gap-6">
           <Card>
             <div className="flex items-center justify-between gap-3">
               <h2 className="font-display text-base font-semibold text-navy">Cupos</h2>
@@ -115,10 +114,7 @@ export default async function CodePage({ params }: { params: { id: string } }) {
           </Card>
 
           <Card className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h2 className="font-display text-base font-semibold text-navy">Intentos rechazados</h2>
-              <p className="text-xs text-muted">Alguien probó el código cuando ya estaba quemado o repetido.</p>
-            </div>
+            <h2 className="font-display text-base font-semibold text-navy">Intentos rechazados</h2>
             <div aria-live="polite">
               {code.attempts > 0 ? <Badge tone="warn">{code.attempts} {code.attempts === 1 ? 'intento' : 'intentos'}</Badge> : <span className="text-2xl font-bold tabular-nums text-navy">0</span>}
             </div>
@@ -126,7 +122,7 @@ export default async function CodePage({ params }: { params: { id: string } }) {
 
           {canCancel && (
             <ActionButton action={cancelCodeAction} fields={{ codeId: code.id }} label="Cancelar código" confirmLabel="Sí, cancelar código" variant="danger"
-              confirmQuestion={'Se quema ahora mismo y nadie más podrá reclamar. Los ' + v.customers + ' que ya reclamaron conservan su sello.'} pendingText="Cancelando…" />
+              confirmQuestion={'Nadie más podrá reclamar. Quien ya reclamó conserva su sello.'} pendingText="Cancelando…" />
           )}
         </div>
       </div>

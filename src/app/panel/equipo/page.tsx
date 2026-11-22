@@ -33,16 +33,16 @@ export default async function EquipoPage({ searchParams }: { searchParams?: { ok
     <>
       <PageHeader
         title="Equipo"
-        subtitle={`Quienes atienden y administran ${business.name}. Cada persona entra con su correo y su contraseña, así sabes quién dio cada sello.`}
         actions={<Link href="/panel/equipo/nuevo" className={btnClass('primary')}>Agregar persona</Link>}
       />
       <p className={'mb-5 rounded-xl px-4 py-3 text-sm ' + (atLimit ? 'bg-[#FFF3CC] text-[#7A5A00]' : 'bg-surface text-muted')}>
-        {staffLimitText(business.plan, PLAN_LABEL[business.plan])}
-        {Number.isFinite(limit) && <> Hoy tienes <strong className="text-navy">{activeTeam} de {limit}</strong> activas.</>}
-        {atLimit && <> Para sumar a alguien, desactiva a otra persona o cambia a un plan mayor.</>}
+        {Number.isFinite(limit)
+          ? <>Plan {PLAN_LABEL[business.plan]}: <strong className="text-navy">{activeTeam} de {limit}</strong> personas activas, además de ti.</>
+          : staffLimitText(business.plan, PLAN_LABEL[business.plan])}
+        {atLimit && <> Desactiva a alguien o sube de plan para sumar más.</>}
       </p>
       {sp.ok === 'creado' && (
-        <p role="status" className="mb-5 rounded-xl bg-[#DDF3E8] px-4 py-3 text-sm font-medium text-[#12683F]">Persona agregada. Agrega su correo y envíale la invitación para que entre al panel.</p>
+        <p role="status" className="mb-5 rounded-xl bg-[#DDF3E8] px-4 py-3 text-sm font-medium text-[#12683F]">Persona agregada. Envíale la invitación para que entre al panel.</p>
       )}
 
       <div className="space-y-6">
@@ -76,7 +76,7 @@ export default async function EquipoPage({ searchParams }: { searchParams?: { ok
         {onlyOwner && (
           <EmptyState
             title="Aún no tienes equipo"
-            text={`Agrega a tu ${v.staffRole} e invítalo con su correo. Así cada sello queda a nombre de quien lo dio.`}
+            text={`Cada sello queda a nombre de quien lo dio.`}
             action={<Link href="/panel/equipo/nuevo" className={btnClass('primary', 'sm')}>Agregar la primera persona</Link>}
           />
         )}

@@ -14,20 +14,20 @@ export function RecentCodes({ codes, statuses, ticketWord, showAmount, excludeId
     <section aria-labelledby="ultimos-h">
       <h2 id="ultimos-h" className="mb-3 font-display text-lg font-semibold text-navy">Últimos códigos</h2>
       {rows.length === 0 ? (
-        <EmptyState title="Aún no generas códigos" text={'Cada código es de un solo uso. Empieza con el formulario: ingresa los datos del comprobante y los cupos.'} />
+        <EmptyState title="Aún no hay códigos" />
       ) : (
         <Card className="p-0">
           <ul className="divide-y divide-line">
             {rows.map((c) => (
               <li key={c.id}>
-                <Link href={'/panel/caja/' + c.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-3.5 hover:bg-surface focus-visible:bg-surface">
+                <Link href={'/panel/caja/' + c.id} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-surface focus-visible:bg-surface sm:px-5 sm:py-3.5">
                   <span className="min-w-0">
                     <span className="block truncate text-[15px] font-semibold text-navy">{ticketWord} {c.ticket}{showAmount && c.amountCents > 0 ? ' · ' + money(c.amountCents) : ''}</span>
-                    <span className="block font-mono text-xs text-muted tabular-nums">{groupCode(c.code)} · {ago(c.createdAt)}</span>
+                    <span className="block text-xs text-muted tabular-nums"><span className="font-mono">{groupCode(c.code)}</span> · {ago(c.createdAt)}</span>
                   </span>
-                  <span className="flex items-center gap-3">
-                    <SeatPips seats={c.seats} claims={c.claims} size="sm" />
+                  <span className="flex shrink-0 flex-col items-end gap-1.5">
                     <StatusBadge status={statuses[c.id]} />
+                    <SeatPips seats={c.seats} claims={c.claims} size="sm" />
                   </span>
                 </Link>
               </li>

@@ -70,7 +70,7 @@ export function LineChart({ id, title, unit, data, caption }: {
           </circle>
         )}
       </svg>
-      <figcaption className="mt-1 text-xs text-muted">{caption ?? summary}</figcaption>
+      <figcaption className="mt-1 text-xs text-muted" aria-hidden>{caption ?? (total === 0 ? 'Sin datos' : `${num(total)} en total · ${num(avg, 1)} por día · pico ${num(peakVal)} el ${data[peak].label}`)}</figcaption>
     </figure>
   );
 }

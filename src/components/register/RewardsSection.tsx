@@ -15,14 +15,13 @@ export function RewardsSection({ redeemable, redemptions, stampsRequired, reward
       <h2 id="premios-h" className="mb-3 font-display text-lg font-semibold text-navy">Listos para canjear</h2>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <h3 className="mb-1 text-sm font-semibold text-navy">Premios pendientes</h3>
-          <p className="mb-3 text-xs text-muted">{redeemable.length === 1 ? '1 ' + vocab.customer + ' tiene' : redeemable.length + ' ' + vocab.customers + ' tienen'} un premio por recibir.</p>
+          <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-navy">Pendientes <span className="rounded-full bg-surface px-2 py-0.5 text-xs tabular-nums text-muted">{redeemable.length}</span></h3>
           {redeemable.length === 0 ? (
-            <EmptyState title={'Ningún ' + vocab.reward + ' pendiente'} text={'Cuando un ' + vocab.customer + ' llegue a ' + stampsRequired + ' sellos, aparece aquí para entregarle su ' + vocab.reward + '.'} />
+            <EmptyState title={'Ningún ' + vocab.reward + ' pendiente'} />
           ) : (
             <ul className="divide-y divide-line">
               {redeemable.flatMap((c) => pendingRewards(c, { stampsRequired, rewardTitle, milestones }).map((p) => (
-                <li key={c.id + ':' + (p.milestone ?? 'final')} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                <li key={c.id + ':' + (p.milestone ?? 'final')} className="flex items-center justify-between gap-3 py-3">
                   <div className="min-w-0">
                     <p className="truncate text-[15px] font-semibold text-navy">{c.name}</p>
                     <p className="text-xs text-muted">{p.title} · {p.milestone ? `sello ${p.milestone}` : `${c.stamps} de ${stampsRequired} sellos`}</p>
@@ -36,7 +35,7 @@ export function RewardsSection({ redeemable, redemptions, stampsRequired, reward
         <Card>
           <h3 className="mb-3 text-sm font-semibold text-navy">Últimos canjes</h3>
           {redemptions.length === 0 ? (
-            <p className="rounded-xl bg-surface px-4 py-6 text-center text-sm text-muted">Todavía no se canjea ningún {vocab.reward}.</p>
+            <p className="py-4 text-sm text-muted">Sin canjes todavía.</p>
           ) : (
             <ul className="divide-y divide-line">
               {redemptions.map((r) => (

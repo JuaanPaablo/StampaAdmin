@@ -16,11 +16,10 @@ export const metadata = { title: 'Póster con QR · Stampa' };
 export default async function PosterPage({ searchParams }: { searchParams?: { tamano?: string } | Promise<{ tamano?: string }> }) {
   const ctx = await getContext();
   requireRole(ctx, ['owner', 'manager']);
-  const { business, program, template } = ctx;
+  const { business, program } = ctx;
 
   const sp = (await Promise.resolve(searchParams)) ?? {};
   const size: PosterSize = sp.tamano?.toLowerCase() === 'a6' ? 'a6' : 'a4';
-  const v = template.vocab;
   // IMPORTANTE: el QR impreso depende de este formato (ver src/lib/urls.ts).
   const signupUrl = customerUrl(business.slug);
   const qrSvg = await QRCode.toString(signupUrl, {
@@ -40,20 +39,17 @@ export default async function PosterPage({ searchParams }: { searchParams?: { ta
       <div data-noprint>
         <PageHeader
           title="Póster con QR"
-          subtitle={`Imprímelo y ponlo en ${v.counter.toLowerCase()} o en la entrada. Tus ${v.customers} lo escanean, crean su tarjeta y empiezan a sumar sellos.`}
-          actions={<><Link href="/panel/tarjeta" className={btnClass('ghost')}>Volver a la tarjeta</Link><PrintButton /></>}
+          actions={<><Link href="/panel/tarjeta" className={btnClass('ghost')}>Volver</Link><PrintButton /></>}
         />
         <nav aria-label="Tamaño del póster" className="mb-5 flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold text-muted">Tamaño</span>
           <Link href="/panel/tarjeta/poster" aria-current={size === 'a4' ? 'page' : undefined} className={tabClass(size === 'a4')}>A4 (póster)</Link>
           <Link href="/panel/tarjeta/poster?tamano=a6" aria-current={size === 'a6' ? 'page' : undefined} className={tabClass(size === 'a6')}>A6 (tarjeta de mesa)</Link>
         </nav>
-        <p className="mb-2 max-w-2xl text-sm text-navy">
-          El QR abre <a href={signupUrl} target="_blank" rel="noopener noreferrer" className="break-all font-semibold underline underline-offset-4">{signupUrl}</a>. Pruébalo con tu teléfono antes de imprimir.
-        </p>
-        <p className="mb-5 max-w-2xl text-xs text-muted">
-          Al imprimir elige papel {size.toUpperCase()}, orientación vertical y escala al 100 %. Activa los gráficos de fondo para que se vean los colores.
-        </p>
+        <ul className="mb-5 flex max-w-2xl flex-col gap-1 text-xs text-muted">
+          <li>QR: <a href={signupUrl} target="_blank" rel="noopener noreferrer" className="break-all font-semibold text-navy underline underline-offset-4">{signupUrl}</a> · pruébalo antes de imprimir.</li>
+          <li>Impresión: {size.toUpperCase()}, vertical, escala 100 % y gráficos de fondo activados.</li>
+        </ul>
       </div>
       {/* eslint-disable-next-line @next/next/no-page-custom-font */}
       <link rel="stylesheet" href={POSTER_FONTS_HREF} />
@@ -63,7 +59,7 @@ export default async function PosterPage({ searchParams }: { searchParams?: { ta
         <div className="flex flex-col gap-5">
           <div data-noprint>
             <PlanLock plan="standard" businessName={business.name} title="Diseña tu póster"
-              text="Cambia colores, tipo de letra y título para que el póster combine con tu local." />
+              text="Tus colores, tu letra y tu título." />
           </div>
           <PosterSheet {...sheet} />
         </div>

@@ -35,8 +35,8 @@ export function StaffForm({ staff, locations, vocab, soleOwner }: {
 
         <FormField id="email" label="Correo" optional error={err.email}
           help={isNew
-            ? 'Con su correo puede entrar al panel. Después de agregarla, le envías la invitación para que cree su contraseña.'
-            : staff?.email ? 'Es su correo para entrar al panel.' : 'Agrégalo para invitarla al panel.'}>
+            ? 'Para invitarla al panel.'
+            : staff?.email ? undefined : 'Para invitarla al panel.'}>
           <Input id="email" name="email" type="email" inputMode="email" defaultValue={staff?.email ?? ''} maxLength={254} autoComplete="off" spellCheck={false}
             placeholder="nombre@correo.com" aria-invalid={!!err.email} aria-describedby={describedBy('email', 'x', err.email)} />
         </FormField>
@@ -51,7 +51,7 @@ export function StaffForm({ staff, locations, vocab, soleOwner }: {
             </Select>
           </FormField>
           <FormField id="locationId" label="Sucursal" optional error={err.locationId}
-            help={visibleLocations.length === 0 ? 'Aún no hay sucursales: la persona trabaja en todo el negocio.' : 'Déjalo en "Todas" si trabaja en más de una.'}>
+            help={visibleLocations.length === 0 ? 'Aún no tienes sucursales.' : undefined}>
             <Select id="locationId" name="locationId" defaultValue={staff?.locationId ?? ''} aria-describedby={describedBy('locationId', 'x', err.locationId)}>
               <option value="">Todas las sucursales</option>
               {visibleLocations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
@@ -61,7 +61,7 @@ export function StaffForm({ staff, locations, vocab, soleOwner }: {
 
         {isNew ? (
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField id="pin" label="PIN de 4 dígitos" error={err.pin} help="Sirve para aprobar acciones dentro del panel, no para entrar. Evita fechas o números seguidos.">
+            <FormField id="pin" label="PIN de 4 dígitos" error={err.pin} help="Aprueba acciones; no sirve para entrar. Evita fechas o números seguidos.">
               <Input id="pin" name="pin" type="password" inputMode="numeric" pattern="\d{4}" maxLength={4} autoComplete="new-password" required
                 aria-invalid={!!err.pin} aria-describedby={describedBy('pin', 'x', err.pin)} />
             </FormField>
@@ -71,14 +71,14 @@ export function StaffForm({ staff, locations, vocab, soleOwner }: {
             </FormField>
           </div>
         ) : (
-          <p className="text-xs text-muted">{staff?.hasPin ? 'Esta persona ya tiene PIN.' : 'Esta persona aún no tiene PIN.'} Para cambiarlo usa "Restablecer PIN" más abajo.</p>
+          <p className="text-xs text-muted">{staff?.hasPin ? 'Tiene PIN.' : 'Sin PIN.'} Cámbialo en "Restablecer PIN".</p>
         )}
 
         {isNew ? <input type="hidden" name="active" value="1" /> : (
           <Switch id="active" name="active" checked={active} onChange={setActive} label="Activo" disabled={soleOwner}
             help={soleOwner
-              ? 'Eres el único dueño activo, por eso no puedes cambiar tu rol ni desactivarte. Nombra primero a otro dueño.'
-              : 'Una persona desactivada no puede entrar ni dar sellos. Su historial se conserva y puedes reactivarla cuando quieras.'} />
+              ? 'Eres el único dueño activo: nombra a otro dueño antes de cambiar tu rol o desactivarte.'
+              : 'Desactivada no entra ni da sellos. Su historial se conserva.'} />
         )}
       </Card>
 

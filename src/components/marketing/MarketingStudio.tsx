@@ -50,6 +50,35 @@ function CopyButton({ text, children = 'Copiar texto' }: { text: string; childre
   );
 }
 
+/** Guía visual del flujo: foto → mejora → texto → imagen. */
+function Steps({ done }: { done: boolean[] }) {
+  const steps = [
+    { n: 1, t: 'Foto', why: 'Tu producto real' },
+    { n: 2, t: 'Mejora', why: 'Opcional, con IA' },
+    { n: 3, t: 'Texto', why: 'La IA lo escribe' },
+    { n: 4, t: 'Imagen', why: 'Lista para publicar' }
+  ];
+  const current = done.findIndex((d) => !d);
+  return (
+    <ol className="grid grid-cols-4 gap-1.5 sm:gap-3" aria-label="Pasos">
+      {steps.map((s, i) => {
+        const ok = done[i];
+        const now = i === current;
+        return (
+          <li key={s.n} aria-current={now ? 'step' : undefined}
+            className={cn('flex min-w-0 flex-col items-center gap-1 rounded-xl px-1 py-2 text-center sm:flex-row sm:gap-2.5 sm:px-3 sm:text-left', now ? 'bg-navy text-white' : 'bg-surface text-navy')}>
+            <span aria-hidden="true" className={cn('grid size-7 shrink-0 place-items-center rounded-full font-display text-sm font-bold', ok ? 'bg-[#DDF3E8] text-[#12683F]' : now ? 'bg-sun text-navy' : 'bg-white text-muted')}>{ok ? '✓' : s.n}</span>
+            <span className="min-w-0">
+              <span className="block text-xs font-semibold sm:text-sm">{s.t}</span>
+              <span className={cn('hidden truncate text-xs sm:block', now ? 'text-white/75' : 'text-muted')}>{s.why}</span>
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 /** Una opción de post: imagen con la marca, texto editable y botones para copiar y descargar. */
 function PostCard({ o, n, layout, big, ph }: { o: PostOption; n: number; layout?: InsightLayout; big?: string; ph?: string }) {
   // Cada opción arranca con un diseño distinto; si cambia la foto, se pasa al juego de diseños que corresponde.
@@ -121,6 +150,7 @@ export function MarketingStudio({ quota: initialQuota, insights, can, coverUrl, 
   const [review, setReview] = useState('');
   const [stars, setStars] = useState(5);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [enhanced, setEnhanced] = useState(false);
 
   function run(req: unknown, t: Tab, insight?: Insight) {
     setError(null);
@@ -142,7 +172,7 @@ export function MarketingStudio({ quota: initialQuota, insights, can, coverUrl, 
   const channelPicker = (
     <label className="flex flex-col gap-1.5">
       <span className={label}>¿Dónde lo vas a publicar?</span>
-      <select value={channel} onChange={(e) => setChannel(e.target.value as typeof channel)} className={cn(inputClass, 'w-56 pr-8')}>
+      <select value={channel} onChange={(e) => setChannel(e.target.value as typeof channel)} className={cn(inputClass, 'w-full pr-8 sm:w-56')}>
         {CHANNELS.map((c) => <option key={c}>{c}</option>)}
       </select>
     </label>
@@ -150,34 +180,37 @@ export function MarketingStudio({ quota: initialQuota, insights, can, coverUrl, 
 
   return (
     <div className="flex flex-col gap-6">
-      <PhotoPanel photos={photos} coverUrl={coverUrl} quota={imageQuota} advice={advice} value={photo} onChange={setPhoto} aiReady={aiImagesReady} />
+      <Steps done={[!!photo, enhanced || photo?.kind === 'portada', !!result, !!result?.options?.length]} />
 
-      <h2 className="-mb-2 font-display text-lg font-semibold text-navy">3. Tu texto</h2>
-      <Card className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="font-display text-base font-semibold text-navy">Textos con IA este mes</p>
-          <p className="text-sm text-muted">Usaste {quota.used} de {quota.limit}. Se renuevan el 1 de cada mes. Las imágenes no cuentan.</p>
+      <PhotoPanel photos={photos} coverUrl={coverUrl} quota={imageQuota} advice={advice} value={photo}
+        onChange={(p) => { setPhoto(p); setEnhanced(false); }} onEnhanced={() => setEnhanced(true)} aiReady={aiImagesReady} />
+
+      <div className="-mb-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <h2 className="font-display text-lg font-semibold text-navy">Tu texto</h2>
+        <div className="flex items-center gap-2 text-xs text-muted" title="Se renuevan el 1 de cada mes. Las fotos no cuentan.">
+          <span>Textos IA <strong className="text-navy">{quota.used}/{quota.limit}</strong></span>
+          <div className="h-2 w-24 overflow-hidden rounded-full bg-[#E3EAF2]" role="meter" aria-valuemin={0} aria-valuemax={quota.limit} aria-valuenow={quota.used} aria-label="Textos usados este mes">
+            <div className={cn('h-full rounded-full', quota.left <= 0 ? 'bg-bad' : 'bg-navy')} style={{ width: `${Math.min(100, (quota.used / Math.max(1, quota.limit)) * 100)}%` }} />
+          </div>
         </div>
-        <div className="h-2.5 w-full overflow-hidden rounded-full bg-[#E3EAF2] sm:w-64" role="meter" aria-valuemin={0} aria-valuemax={quota.limit} aria-valuenow={quota.used} aria-label="Textos usados">
-          <div className={cn('h-full rounded-full', quota.left <= 0 ? 'bg-bad' : 'bg-navy')} style={{ width: `${Math.min(100, (quota.used / Math.max(1, quota.limit)) * 100)}%` }} />
-        </div>
-      </Card>
+      </div>
+      {noQuota && <p className="-mb-2 rounded-xl bg-[#FFF3CC] px-3 py-2 text-sm text-[#7A5A00]">Ya usaste tus textos de este mes. Se renuevan el día 1.</p>}
 
       <nav className="flex flex-wrap gap-2" aria-label="Herramientas de marketing">
         {tabs.map((t) => (
           <button key={t.id} type="button" aria-pressed={tab === t.id} onClick={() => { setTab(t.id); setError(null); }}
-            className={btnClass(tab === t.id ? 'dark' : 'ghost', 'sm')}>{t.label}</button>
+            className={cn(btnClass(tab === t.id ? 'dark' : 'ghost', 'sm'), 'shrink-0')}>{t.label}</button>
         ))}
       </nav>
 
       {tab === 'ideas' && (!can.dataPosts ? locks.ideas : (
         <section className="flex flex-col gap-4" aria-label="Ideas con tus datos">
           <div className="flex flex-wrap items-end justify-between gap-3">
-            <p className="max-w-2xl text-sm text-muted">Ideas sacadas de lo que pasa en tu negocio estos 30 días. Elige una y la IA te escribe 3 opciones de post con su imagen.</p>
+            <p className="max-w-2xl text-sm text-muted">Según tus últimos 30 días.</p>
             {channelPicker}
           </div>
           {insights.length === 0 ? (
-            <Card><p className="text-sm text-muted">Todavía no hay suficientes datos. Cuando tus clientes sumen sellos, aquí aparecerán ideas.</p></Card>
+            <Card><p className="text-sm text-muted">Aún faltan datos: aparecerán cuando tus clientes sumen sellos.</p></Card>
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
               {insights.map((i) => (
@@ -205,7 +238,7 @@ export function MarketingStudio({ quota: initialQuota, insights, can, coverUrl, 
             <textarea value={topic} onChange={(e) => setTopic(e.target.value)} maxLength={300} rows={3}
               placeholder="Ej. Lanzamos la pizza de chorizo con maduro esta semana."
               className={cn(inputClass, 'h-auto py-2.5')} />
-            <span className="text-xs text-muted">Cuenta lo importante: el producto, la fecha o la promo. La IA no inventa precios.</span>
+            <span className="text-xs text-muted">Producto, fecha o promo. La IA no inventa precios.</span>
           </label>
           <div className="flex flex-wrap items-end gap-3">
             {channelPicker}
@@ -217,7 +250,7 @@ export function MarketingStudio({ quota: initialQuota, insights, can, coverUrl, 
 
       {tab === 'semana' && (!can.calendar ? locks.semana : (
         <Card className="flex flex-col gap-3">
-          <p className="text-sm text-muted">Te armamos 5 publicaciones de lunes a viernes con ideas variadas y tus datos reales. Cuenta como 1 texto.</p>
+          <p className="text-sm text-muted">5 posts de lunes a viernes · cuenta como 1 texto.</p>
           <button type="button" disabled={pending || noQuota} onClick={() => run({ kind: 'calendar' }, 'semana')}
             className={cn(btnClass('primary'), 'self-start')}>{busyId === 'semana' ? 'Armando tu semana…' : 'Armar mi semana'}</button>
         </Card>
@@ -246,7 +279,7 @@ export function MarketingStudio({ quota: initialQuota, insights, can, coverUrl, 
 
       {result && result.tab === tab && (
         <section id="resultado" className="flex scroll-mt-6 flex-col gap-4" aria-label="Resultado">
-          <h2 className="font-display text-lg font-semibold text-navy">{result.insight ? `Posts: ${result.insight.title}` : 'Resultado'}</h2>
+          <h2 className="font-display text-lg font-semibold text-navy">{result.options ? `Tu imagen${result.insight ? ': ' + result.insight.title : ''}` : 'Resultado'}</h2>
           {result.sample && <p className="rounded-xl bg-[#FFF4CC] px-3 py-2 text-xs text-navy">Texto de ejemplo: en este entorno no hay clave de IA.</p>}
           {result.options?.map((o, n) => <PostCard key={n + o.titulo} o={o} n={n} layout={result.insight?.layout} big={result.insight?.big} ph={ph} />)}
           {result.days?.map((d, n) => (

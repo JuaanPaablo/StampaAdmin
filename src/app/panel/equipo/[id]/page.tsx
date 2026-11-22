@@ -30,7 +30,6 @@ export default async function EditarPage({ params, searchParams }: {
     <>
       <PageHeader
         title={person.name}
-        subtitle="Edita su rol, su correo y su acceso al panel."
         actions={<><Badge tone={roleTone[person.role]}>{roleLabel(person.role, template.vocab)}</Badge><Badge tone={person.active ? 'ok' : 'neutral'}>{person.active ? 'Activo' : 'Desactivado'}</Badge></>}
       />
       {sp.ok === 'creado' && (

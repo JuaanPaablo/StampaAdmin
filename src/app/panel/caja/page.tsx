@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Caja · Stampa' };
 
 export default async function CajaPage() {
-  const { repo, business, program, template, staff } = await getContext();
+  const { repo, business, program, template } = await getContext();
   const v = template.vocab;
   const [codes, redeemable, redemptions, staffList] = await Promise.all([
     repo.listStampCodes(business.id, 8),
@@ -23,17 +23,16 @@ export default async function CajaPage() {
   const staffNames = Object.fromEntries(staffList.map((s) => [s.id, s.name]));
 
   return (
-    <div className="flex w-full max-w-3xl flex-col gap-8 xl:max-w-6xl">
-      <PageHeader title={v.counter} subtitle={'Hola, ' + staff.name + '. Cada ' + v.visit + ' genera un código de un solo uso.'}
-        actions={<a href="#premios" className="text-sm font-semibold text-navy underline underline-offset-4">Ir a canjes</a>} />
+    <div className="flex w-full max-w-3xl flex-col gap-6 sm:gap-8 xl:max-w-6xl">
+      <PageHeader title={v.counter}
+        actions={<a href="#premios" className="inline-flex h-9 items-center gap-2 rounded-full bg-white px-3.5 text-sm font-semibold text-navy ring-1 ring-inset ring-[#C9D6E3] hover:bg-surface">
+          Por canjear{redeemable.length > 0 && <span className="rounded-full bg-sun px-2 py-0.5 text-xs tabular-nums">{redeemable.length}</span>}
+        </a>} />
 
       {/* En pantallas anchas: el formulario a la izquierda y los últimos códigos a la derecha. */}
-      <div className="flex flex-col gap-8 xl:grid xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] xl:items-start">
-        <Card as="section" className="p-5 sm:p-7">
-          <h2 className="mb-1 font-display text-xl font-semibold text-navy">Dar un sello</h2>
-          <p className="mb-5 text-sm text-muted">
-            Ingresa los datos del comprobante y entrega el código al {v.customer}. Si vienen varios juntos, agrega un cupo por persona: cada uno escanea con su teléfono.
-          </p>
+      <div className="flex flex-col gap-6 sm:gap-8 xl:grid xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] xl:items-start">
+        <Card as="section" className="p-4 sm:p-7">
+          <h2 className="mb-4 font-display text-xl font-semibold text-navy">Dar un sello</h2>
           <CodeForm program={program} vocab={{ ticket: v.ticket, people: v.people, customers: v.customers }} />
         </Card>
 

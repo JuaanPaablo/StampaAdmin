@@ -10,13 +10,13 @@ export function BusinessImages({ logoUrl, coverUrl, logoText, framing, title = '
     <Card as="section" className="space-y-5">
       <div>
         <h2 className="font-display text-lg font-semibold text-navy">{title}</h2>
-        <p className="mt-1 text-sm text-muted">{intro ?? 'Sin logo, usamos tus iniciales.'}</p>
+        {intro && <p className="mt-1 text-sm text-muted">{intro}</p>}
       </div>
       <div className="grid gap-6 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <ImageUpload kind="logo" label="Logo" currentUrl={logoUrl} fallback={logoText} framing={framing?.logo}
-          help="Recomendado: 500 × 500 px (cuadrado). Máximo 2 MB." />
+          help="Cuadrado, 500 × 500 px · máx. 2 MB" />
         <ImageUpload kind="cover" label="Foto de portada" currentUrl={coverUrl} framing={framing?.cover}
-          help="Recomendado: 1500 × 500 px (3:1). Máximo 2 MB." />
+          help="Horizontal 3:1, 1500 × 500 px · máx. 2 MB" />
       </div>
     </Card>
   );

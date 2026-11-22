@@ -39,7 +39,7 @@ export function RoleMatrix({ vocab }: { vocab: Vocabulary }) {
     <Card as="section" className="space-y-4 overflow-hidden">
       <div>
         <h2 className="font-display text-lg font-semibold text-navy">Qué puede hacer cada rol</h2>
-        <p className="mt-1 text-sm text-muted">Elige el rol con el menor acceso que la persona necesite. Solo un dueño puede crear o editar dueños.</p>
+        <p className="mt-1 text-sm text-muted">Solo un dueño puede crear o editar dueños.</p>
       </div>
       <div className="relative -mx-5 overflow-x-auto px-5">
         <table className="w-full min-w-[520px] border-collapse text-left text-sm">

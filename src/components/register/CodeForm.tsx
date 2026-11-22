@@ -32,11 +32,11 @@ export function CodeForm({ program, vocab }: CodeFormProps) {
   const askPin = needsApproval(program, seats);
   const ticketLower = vocab.ticket.toLowerCase();
 
-  let help: string;
-  if (program.requireAmount && cents <= 0) help = 'Escribe el monto para ver cuántos sellos se permiten.';
-  else if (limit < 1) help = 'Con ' + money(cents) + ' no alcanza para un sello (mínimo ' + money(program.minSpendCentsPerStamp) + ').';
-  else if (program.requireAmount) help = 'Con ' + money(cents) + ' se permiten hasta ' + limit + (limit === 1 ? ' sello' : ' sellos') + '.';
-  else help = 'Se permiten hasta ' + limit + ' sellos por ' + ticketLower + '.';
+  let help = '';
+  if (program.requireAmount && cents <= 0) help = '';
+  else if (limit < 1) help = 'No alcanza (mínimo ' + money(program.minSpendCentsPerStamp) + ').';
+  else help = 'Máx. ' + limit + (limit === 1 ? ' sello' : ' sellos') + (program.requireAmount ? '' : ' por ' + ticketLower) + '.';
+  const bad = overLimit || (limit < 1 && (!program.requireAmount || cents > 0));
 
   const dec = () => setSeats((s) => Math.max(1, s - 1));
   const inc = () => setSeats((s) => Math.min(limit > 0 ? limit : ABSOLUTE_MAX, s + 1));
@@ -45,7 +45,7 @@ export function CodeForm({ program, vocab }: CodeFormProps) {
 
   return (
     <form action={formAction} className="flex flex-col gap-5" noValidate>
-      <Field label={'N.º de ' + ticketLower} htmlFor="ticket" error={err('ticket')} hint="El mismo número que sale en el comprobante.">
+      <Field label={'N.º de ' + ticketLower} htmlFor="ticket" error={err('ticket')}>
         <Input id="ticket" name="ticket" value={ticket} onChange={(e) => setTicket(e.target.value)} autoComplete="off" inputMode="text"
           maxLength={40} required aria-invalid={!!err('ticket')} className="h-14 text-lg" />
       </Field>
@@ -61,29 +61,26 @@ export function CodeForm({ program, vocab }: CodeFormProps) {
       )}
 
       <Field label={vocab.people} error={err('seats')}>
-        <div className="flex items-center gap-3" role="group" aria-label={vocab.people}>
+        <div className="flex items-center gap-2.5 sm:gap-3" role="group" aria-label={vocab.people}>
           <button type="button" onClick={dec} disabled={seats <= 1} aria-label="Quitar un cupo"
             className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-2xl font-bold text-navy ring-1 ring-inset ring-[#C9D6E3] hover:bg-surface active:scale-95 disabled:opacity-40">
             <span aria-hidden>−</span>
           </button>
-          <output htmlFor="seats" className="min-w-[3.5rem] text-center font-display text-4xl font-bold tabular-nums text-navy" aria-live="polite">{seats}</output>
+          <output htmlFor="seats" className="min-w-[2.75rem] text-center font-display text-4xl font-bold tabular-nums text-navy" aria-live="polite">{seats}</output>
           <input type="hidden" id="seats" name="seats" value={seats} />
           <button type="button" onClick={inc} disabled={limit > 0 && seats >= limit} aria-label="Agregar un cupo"
             className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-2xl font-bold text-navy ring-1 ring-inset ring-[#C9D6E3] hover:bg-surface active:scale-95 disabled:opacity-40">
             <span aria-hidden>+</span>
           </button>
-          <span className="text-sm text-muted">{seats === 1 ? '1 cupo' : seats + ' cupos'}</span>
+          <span id="seats-help" aria-live="polite" className={'min-w-0 flex-1 text-sm ' + (bad ? 'font-semibold text-[#9B2A22]' : 'text-muted')}>
+            {overLimit ? 'Máx. ' + limit + '. Baja los cupos o sube el monto.' : help}
+          </span>
         </div>
       </Field>
 
-      <p id="seats-help" aria-live="polite" className={'rounded-xl px-3.5 py-2.5 text-sm ' + (overLimit || (limit < 1 && (!program.requireAmount || cents > 0)) ? 'bg-[#FBE0DE] text-[#9B2A22]' : 'bg-surface text-muted')}>
-        {help}
-        {overLimit && <span className="block font-semibold">Pediste {seats} cupos: baja a {limit} o sube el monto.</span>}
-      </p>
-
       {askPin && (
         <Field label="PIN de dueño o gerente" htmlFor="pin" error={err('pin')}
-          hint={'Más de ' + program.maxSeatsWithoutApproval + ' cupos necesitan aprobación. Pídele el PIN de 4 dígitos a un dueño o gerente.'}>
+          hint={'Más de ' + program.maxSeatsWithoutApproval + ' cupos requieren aprobación.'}>
           <Input id="pin" name="pin" type="password" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
             inputMode="numeric" autoComplete="off" maxLength={4} pattern="\d{4}" required aria-invalid={!!err('pin')} className="h-14 w-40 text-center text-xl tracking-[0.5em]" />
         </Field>

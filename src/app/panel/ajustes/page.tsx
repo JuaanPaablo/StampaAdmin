@@ -9,7 +9,7 @@ import { ActionForm, FormField } from '@/components/shell/action-form';
 import { TIMEZONES } from '@/components/shell/labels';
 import { PlaceFields } from '@/components/shell/PlaceFields';
 import { provinceOfCity } from '@/lib/ecuador';
-import { locationLimitText, maxLocations } from '@/lib/plan-rules';
+import { maxLocations } from '@/lib/plan-rules';
 import { deleteLocationAction, saveLocationAction, updateBusinessAction } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -36,21 +36,21 @@ export default async function AjustesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Ajustes" subtitle={`Datos de ${business.name}, sucursales, plan y privacidad.`} />
+      <PageHeader title="Ajustes" />
 
       <Card className="sm:p-6">
         <h2 className="font-display text-lg font-bold text-navy">Datos del negocio</h2>
         <div className="mt-3 rounded-xl bg-surface px-4 py-3">
           <p className="text-xs font-semibold text-muted">Tu dirección pública</p>
           <a href={publicUrl} target="_blank" rel="noopener noreferrer" className="mt-0.5 block break-all text-sm font-semibold text-navy underline underline-offset-4">{publicUrl}</a>
-          <p className="mt-1 text-xs text-muted">Es la que abre el QR de tu póster. No cambia aunque cambies el nombre.</p>
+          <p className="mt-1 text-xs text-muted">La abre tu QR. No cambia si cambias el nombre.</p>
         </div>
         <ActionForm action={updateBusinessAction} submitLabel="Guardar cambios" className="mt-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField name="name" label="Nombre del negocio" defaultValue={business.name} maxLength={60} required />
             <div className="sm:col-span-2"><PlaceFields province={business.province ?? provinceOfCity(business.city)} city={business.city} /></div>
-            <FormField name="timezone" label="Zona horaria" defaultValue={business.timezone} options={tzOptions} hint="Define la hora de los sellos, reportes y horarios." />
-            <FormField name="type" label="Tipo de negocio" defaultValue={business.type} options={typeOptions} hint="Cambiar el tipo actualiza las palabras del panel y las sugerencias. No modifica la tarjeta que ya creaste: su premio y sus reglas se quedan como están." />
+            <FormField name="timezone" label="Zona horaria" defaultValue={business.timezone} options={tzOptions} />
+            <FormField name="type" label="Tipo de negocio" defaultValue={business.type} options={typeOptions} hint="Cambia las palabras y sugerencias del panel, no tu tarjeta." />
           </div>
         </ActionForm>
       </Card>
@@ -60,17 +60,14 @@ export default async function AjustesPage() {
           <h2 className="font-display text-lg font-bold text-navy">Sucursales</h2>
           <Badge tone="info">{locations.length} de {limit}</Badge>
         </div>
-        <p className="mt-1 text-sm text-muted">{locationLimitText(business.plan, PLAN_LABEL[business.plan])} Al eliminar una, sus sellos anteriores se conservan.</p>
+        <p className="mt-1 text-sm text-muted">Al eliminar una, sus sellos se conservan.</p>
 
         {locations.length === 0 ? (
-          <p className="mt-4 rounded-xl border border-dashed border-[#C9D6E3] px-4 py-6 text-center text-sm text-muted">Aún no tienes sucursales. Agrega la primera aquí abajo.</p>
+          <p className="mt-4 rounded-xl border border-dashed border-[#C9D6E3] px-4 py-6 text-center text-sm text-muted">Aún no tienes sucursales.</p>
         ) : (
           <ul className="mt-4 flex flex-col gap-3">
             {locations.map((l) => (
               <li key={l.id} className="rounded-xl bg-surface p-4">
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted">Sucursal</span>
-                </div>
                 <ActionForm key={l.id + l.name + (l.address ?? '')} action={saveLocationAction} submitLabel="Guardar" size="sm" variant="dark" actionsClassName="mt-3">
                   <input type="hidden" name="id" value={l.id} />
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -131,10 +128,9 @@ export default async function AjustesPage() {
         <ul className="mt-4 grid gap-1.5 text-sm text-navy sm:grid-cols-2">
           {planIncludes(business.plan).map((t) => <li key={t} className="flex gap-2"><span aria-hidden="true" className="text-[#12683F]">✓</span>{t}</li>)}
         </ul>
-        <p className="mt-4 text-sm text-muted">¿Quieres renovar o cambiar de plan? Escríbenos y te ayudamos.</p>
-        <div className="mt-3 flex flex-wrap items-center gap-3">
+        <div className="mt-5 flex flex-wrap items-center gap-3">
           <a href={stampaWhatsappUrl(`Hola, quiero renovar/cambiar mi plan de Stampa para ${business.name}`)} target="_blank" rel="noopener noreferrer" className={btnClass('primary')}>
-            Escríbenos por WhatsApp
+            Renovar o cambiar plan
           </a>
           <span className="text-sm font-semibold text-navy">{STAMPA_WHATSAPP_DISPLAY}</span>
         </div>
@@ -143,8 +139,8 @@ export default async function AjustesPage() {
       <Card className="sm:p-6">
         <h2 className="font-display text-lg font-bold text-navy">Privacidad y datos</h2>
         <div className="mt-2 max-w-3xl space-y-3 text-sm text-navy">
-          <p>De cada {template.vocab.customer} Stampa guarda lo mínimo para que la tarjeta funcione: su nombre, su correo, su fecha de nacimiento y la fecha en que aceptó participar. También guarda sus sellos y los premios que canjeó.</p>
-          <p>Estos datos son de tu negocio. Úsalos solo para lo que tus {template.vocab.customers} aceptaron, como avisarles de sus sellos y premios. Si alguien pide corregir o borrar sus datos, atiéndelo.</p>
+          <p>Guardamos lo mínimo de cada {template.vocab.customer}: nombre, correo, cumpleaños, fecha de aceptación, sellos y canjes.</p>
+          <p>Los datos son de tu negocio: úsalos solo para lo que aceptaron y atiende si alguien pide corregirlos o borrarlos.</p>
         </div>
         <div className="mt-4">
           <a href="/panel/clientes/exportar" className={btnClass('ghost')}>Descargar mis {template.vocab.customers} (CSV)</a>

@@ -8,7 +8,7 @@ export function CodesTable({ codes, statuses, staffNames, showAmount, ticketWord
   codes: StampCode[]; statuses: Record<string, CodeStatus>; staffNames: Record<string, string>; showAmount: boolean; ticketWord: string; staffWord: string;
 }) {
   if (codes.length === 0) {
-    return <EmptyState title="Aún no hay códigos" text={'Los códigos que genere el equipo aparecen aquí con su ' + staffWord + ', cupos y estado.'} />;
+    return <EmptyState title="Aún no hay códigos"/>;
   }
   return (
     <Table>
@@ -22,7 +22,7 @@ export function CodesTable({ codes, statuses, staffNames, showAmount, ticketWord
       <tbody>
         {codes.map((c) => (
           <tr key={c.id}>
-            <Td className="font-semibold"><Link href={'/panel/caja/' + c.id} className="underline underline-offset-2">{c.ticket}</Link></Td>
+            <Td className="whitespace-nowrap font-semibold"><Link href={'/panel/caja/' + c.id} className="underline underline-offset-2">{c.ticket}</Link></Td>
             <Td>{staffNames[c.createdBy] ?? '—'}</Td>
             {showAmount && <Td className="text-right">{c.amountCents > 0 ? money(c.amountCents) : '—'}</Td>}
             <Td className="text-right">{c.claims.length}/{c.seats}</Td>

@@ -13,6 +13,8 @@ export function delta(current: number, previous: number): { value: string; good:
   if (previous === 0) return { value: 'Sin dato previo', good: true };
   const p = Math.round(((current - previous) / previous) * 100);
   if (p === 0) return { value: 'Sin cambio', good: true };
+  // Con bases muy chicas (1 → 23) un porcentaje enorme no dice nada: se muestra el múltiplo.
+  if (p >= 300) return { value: '×' + (Math.round((current / previous) * 10) / 10).toString().replace('.', ','), good: true };
   return { value: (p > 0 ? '+' : '−') + Math.abs(p) + ' %', good: p > 0 };
 }
 

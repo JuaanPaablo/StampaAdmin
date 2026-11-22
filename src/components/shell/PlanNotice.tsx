@@ -36,8 +36,8 @@ export function PlanNotice({ business }: { business: Business }) {
   const expired = days < 0;
   const title = expired ? `Tu plan ${plan} venció el ${date}` : days === 0 ? `Tu plan ${plan} vence hoy` : days === 1 ? `Tu plan ${plan} vence mañana` : `Tu plan ${plan} vence en ${days} días`;
   const text = expired
-    ? 'Tus clientes siguen sumando sellos por ahora. Escríbenos y lo renovamos en un momento.'
-    : `Vence el ${date}. Renuévalo a tiempo y todo sigue igual para ti y tus clientes.`;
+    ? 'Tus clientes siguen sumando sellos por ahora.'
+    : `Vence el ${date}.`;
   return (
     <div role="status" className={'mb-6 flex flex-col gap-3 rounded-2xl px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5 ' + (expired ? 'bg-[#FDECEA] text-[#8A1F18]' : 'bg-[#FFF4CC] text-navy')}>
       <div>

@@ -38,15 +38,14 @@ export function InviteCard({ staffId, name, email, status, active, isMe }: {
       {status === 'active' ? (
         <p className="text-sm text-muted">
           {isMe ? 'Entras con tu correo' : `${first} entra con su correo`} <span className="font-semibold text-navy">{email}</span> y su contraseña.
-          {!isMe && ' Si olvida su contraseña, puede pedir una nueva en la pantalla de ingreso.'}
         </p>
       ) : !active ? (
         <p className="text-sm text-muted">Esta persona está desactivada. Actívala para invitarla.</p>
       ) : (
         <p className="text-sm text-muted">
           {status === 'pending'
-            ? `Ya le enviamos una invitación a ${email}. Si no la encuentra, reenvíala: el enlace anterior deja de funcionar.`
-            : `Escribe el correo de ${first} y envíale la invitación. Con el enlace crea su contraseña y entra al panel.`}
+            ? `Invitación enviada a ${email}. Reenviarla anula el enlace anterior.`
+            : `Envía la invitación para que ${first} cree su contraseña.`}
         </p>
       )}
 
