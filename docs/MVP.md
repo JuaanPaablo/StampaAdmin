@@ -5,7 +5,7 @@ elige la opción más simple y coherente con lo existente, y déjalo anotado en 
 
 ## Producto
 
-Tres superficies en la misma app Next.js (este repo), servida en `https://app.stampaecu.app` (`NEXT_PUBLIC_APP_URL`):
+Tres superficies en la misma app Next.js (este repo), servida en `https://stampaecu.app` (`NEXT_PUBLIC_APP_URL`):
 
 | Superficie | Ruta | Quién entra |
 |---|---|---|

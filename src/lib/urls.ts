@@ -1,6 +1,6 @@
 /**
  * Direcciones públicas de la app. Todo enlace que sale de la app (QR, correos, WhatsApp) se arma aquí.
- * NEXT_PUBLIC_APP_URL = https://app.stampaecu.app en producción (sin barra final).
+ * NEXT_PUBLIC_APP_URL = https://stampaecu.app en producción (sin barra final).
  * IMPORTANTE: el QR del póster usa customerUrl(slug). Cambiar este formato invalida los pósters impresos.
  */
 
