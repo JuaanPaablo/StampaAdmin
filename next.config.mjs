@@ -14,10 +14,6 @@ const nextConfig = {
     // Las letras de las imágenes de Marketing se leen del disco: hay que incluirlas en la función de Vercel.
     outputFileTracingIncludes: { '/panel/marketing/imagen': ['./src/assets/fonts/**'] }
   },
-  // La página principal es la landing de ventas (HTML estático en public/landing.html, con su JS en public/assets).
-  async rewrites() {
-    return { beforeFiles: [{ source: '/', destination: '/landing.html' }] };
-  },
   async redirects() {
     // El registro público ya no existe: el acceso llega por invitación.
     return [{ source: '/registro', destination: '/ingresar', permanent: true }, { source: '/registro/:path*', destination: '/ingresar', permanent: true }];
