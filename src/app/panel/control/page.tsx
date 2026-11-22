@@ -28,6 +28,8 @@ function Section({ id, title, hint, children }: { id: string; title: string; hin
   );
 }
 
+const AUDIT_PAGE_SIZE = 20;
+
 export default async function ControlPage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
   const ctx = await getContext();
   requireRole(ctx, ['owner', 'manager']);
@@ -51,7 +53,7 @@ export default async function ControlPage({ searchParams }: { searchParams: Reco
     repo.listAlerts(business.id, 200),
     repo.getStaffReport(business.id, range),
     repo.listStampCodes(business.id, 15),
-    repo.listAudit(business.id, 500),
+    repo.listAudit(business.id, 1000),
     repo.listStaff(business.id)
   ]);
 
@@ -65,7 +67,10 @@ export default async function ControlPage({ searchParams }: { searchParams: Reco
   const statuses: Record<string, CodeStatus> = Object.fromEntries(codes.map((c) => [c.id, codeStatus(c, now)]));
 
   const actions = Array.from(new Set(audit.map((e) => e.action))).sort();
-  const filtered = (accion ? audit.filter((e) => e.action === accion) : audit).slice(0, 50);
+  const matching = accion ? audit.filter((e) => e.action === accion) : audit;
+  const pages = Math.max(1, Math.ceil(matching.length / AUDIT_PAGE_SIZE));
+  const page = Math.min(pages, Math.max(1, Number.parseInt(first(searchParams.pagina) ?? '1', 10) || 1));
+  const filtered = matching.slice((page - 1) * AUDIT_PAGE_SIZE, page * AUDIT_PAGE_SIZE);
   const rangeLabel = range === '7d' ? 'los últimos 7 días' : range === '30d' ? 'los últimos 30 días' : 'los últimos 90 días';
 
   return (
@@ -98,7 +103,7 @@ export default async function ControlPage({ searchParams }: { searchParams: Reco
 
       <Section id="actividad" title="Registro de actividad">
         <AuditSection entries={filtered} actions={actions} selected={accion} range={range} staffNames={staffNames} timezone={business.timezone}
-          vocab={{ reward: v.reward, ticket: v.ticket }} />
+          vocab={{ reward: v.reward, ticket: v.ticket }} page={page} pages={pages} total={matching.length} pageSize={AUDIT_PAGE_SIZE} />
       </Section>
     </div>
   );

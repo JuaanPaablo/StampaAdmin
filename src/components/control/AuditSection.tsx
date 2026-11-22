@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { btnClass, EmptyState, Select, Table, Td, Th } from '@/components/ui';
 import type { AuditEntry } from '@/lib/contracts';
 import { dayClock } from '@/components/register/time';
@@ -5,10 +6,19 @@ import type { Vocabulary } from '@/lib/templates';
 import { auditLabel } from './labels';
 import { localizeTicket } from '@/lib/format';
 
-export function AuditSection({ entries, actions, selected, range, staffNames, timezone, vocab }: {
+export function AuditSection({ entries, actions, selected, range, staffNames, timezone, vocab, page = 1, pages = 1, total, pageSize = 20 }: {
   entries: AuditEntry[]; actions: string[]; selected: string; range: string; staffNames: Record<string, string>; timezone: string;
-  vocab: Pick<Vocabulary, 'reward' | 'ticket'>;
+  vocab: Pick<Vocabulary, 'reward' | 'ticket'>; page?: number; pages?: number; total?: number; pageSize?: number;
 }) {
+  const pageHref = (p: number) => {
+    const q = new URLSearchParams({ range });
+    if (selected) q.set('accion', selected);
+    if (p > 1) q.set('pagina', String(p));
+    return '/panel/control?' + q.toString() + '#actividad';
+  };
+  const count = total ?? entries.length;
+  const from = (page - 1) * pageSize + 1;
+  const to = from + entries.length - 1;
   const exportHref = '/panel/control/exportar' + (selected ? '?accion=' + encodeURIComponent(selected) : '');
   return (
     <>
@@ -43,6 +53,18 @@ export function AuditSection({ entries, actions, selected, range, staffNames, ti
             ))}
           </tbody>
         </Table>
+      )}
+      {count > 0 && (
+        <nav aria-label="Páginas del registro" className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-muted">
+          <span>Mostrando {from} a {to} de {count}</span>
+          {pages > 1 && (
+            <div className="flex items-center gap-2">
+              {page > 1 ? <Link href={pageHref(page - 1)} scroll={false} className={btnClass('ghost', 'sm')} rel="prev">Anterior</Link> : null}
+              <span className="inline-flex h-9 items-center px-2">Página {page} de {pages}</span>
+              {page < pages ? <Link href={pageHref(page + 1)} scroll={false} className={btnClass('ghost', 'sm')} rel="next">Siguiente</Link> : null}
+            </div>
+          )}
+        </nav>
       )}
     </>
   );
