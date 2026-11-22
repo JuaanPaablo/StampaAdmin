@@ -63,8 +63,7 @@ export default function IngresarPage({ searchParams }: { searchParams?: { next?:
         <div className="mb-10 flex justify-center lg:hidden"><Wordmark dark /></div>
         <div className="mx-auto flex w-full max-w-[400px] flex-1 flex-col justify-center">
           <h1 className="font-display text-[28px] font-bold tracking-tight text-navy">Iniciar sesión</h1>
-          <p className="mt-1.5 text-sm text-muted">Ingresa con el correo y la contraseña de tu cuenta Stampa.</p>
-          <div className="mt-8"><LoginForm next={next} /></div>
+          <div className="mt-6"><LoginForm next={next} /></div>
           <p className="mt-10 text-center text-sm text-muted">
             ¿Aún no eres cliente?{' '}
             <a href="mailto:hola@stampa.app" className="rounded font-semibold text-navy underline underline-offset-2">Escríbenos</a>

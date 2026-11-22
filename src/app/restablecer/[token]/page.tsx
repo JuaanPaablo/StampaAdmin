@@ -26,7 +26,7 @@ export default async function ResetPage({ params }: { params: { token: string } 
   return (
     <AuthShell
       title="Cambia tu contraseña"
-      subtitle={<>Para <strong className="break-all font-semibold text-navy">{info.email}</strong>. Después entras directo a tu panel.</>}
+      subtitle={<span className="break-all">{info.email}</span>}
     >
       <SetPasswordForm token={token} mode="reset" email={info.email} />
     </AuthShell>

@@ -24,10 +24,8 @@ export default async function SuspendidoPage() {
         <div className="mb-10 flex justify-center"><Wordmark /></div>
         <h1 className="font-display text-[28px] font-bold leading-tight tracking-tight sm:text-[32px]">Tu cuenta está pausada</h1>
         <p className="mt-3 text-[15px] leading-relaxed text-[#C9D6E3]">
-          El panel de <span className="font-semibold text-white">{business.name}</span> está en pausa. Tus clientes ven su tarjeta, pero no pueden sumar sellos por ahora.
-        </p>
-        <p className="mt-3 text-[15px] leading-relaxed text-[#C9D6E3]">
-          {isOwner ? 'Escríbenos por WhatsApp y la reactivamos.' : 'Avísale al dueño del negocio o escríbenos por WhatsApp.'}
+          <span className="font-semibold text-white">{business.name}</span>: tus clientes no pueden sumar sellos por ahora.{' '}
+          {isOwner ? 'Escríbenos y la reactivamos.' : 'Avísale al dueño o escríbenos.'}
         </p>
         <div className="mt-8 flex flex-col gap-3">
           <a href={stampaWhatsappUrl(`Hola, quiero reactivar mi cuenta de Stampa de ${business.name}`)} target="_blank" rel="noopener noreferrer"

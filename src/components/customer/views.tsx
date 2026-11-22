@@ -43,7 +43,7 @@ export function ComingSoon({ business }: { business: Business }) {
       <Isotipo size={56} className="mx-auto" />
       <h1 className="mt-5 font-display text-3xl font-bold">Muy pronto</h1>
       <p className="mt-2 text-[15px] text-white/85">
-        {named ? `La tarjeta de sellos de ${business.name} está casi lista.` : 'Esta tarjeta de sellos está casi lista.'} Vuelve a escanear el código en unos días.
+        {named ? `La tarjeta de ${business.name} está casi lista.` : 'Esta tarjeta está casi lista.'} Vuelve en unos días.
       </p>
     </div>
   );
@@ -54,8 +54,8 @@ export function PausedNoCard({ business, program }: { business: Business; progra
   return (
     <div className="space-y-4">
       <div className="overflow-hidden rounded-3xl bg-white shadow-card ring-1 ring-line/70"><BusinessHeader business={business} program={program} /></div>
-      <Notice tone="warning" title="Este negocio pausó su tarjeta por ahora">
-        No está recibiendo clientes nuevos ni sumando sellos. Si ya tienes tarjeta, ábrela con tu correo.
+      <Notice tone="warning" title="Tarjeta en pausa">
+        No acepta clientes nuevos ni suma sellos. Si ya tienes tarjeta, ábrela con tu correo.
       </Notice>
     </div>
   );

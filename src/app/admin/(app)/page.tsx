@@ -38,7 +38,7 @@ export default async function AdminSummaryPage() {
 
       <h2 className="mb-3 mt-8 font-display text-base font-semibold text-navy">Uso de la plataforma</h2>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
-        <Stat label="Clientes" value={num(summary.customers)} hint="Tarjetas en todos los negocios" />
+        <Stat label="Clientes" value={num(summary.customers)} />
         <Stat label="Sellos" value={num(summary.stamps30d)} hint={`Últimos 30 días · ${num(summary.stampsTotal)} en total`} />
         <Stat label="Canjes" value={num(summary.redemptions30d)} hint={`Últimos 30 días · ${num(summary.redemptionsTotal)} en total`} />
       </div>

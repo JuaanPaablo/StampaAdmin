@@ -32,11 +32,7 @@ export function StatusControl({ businessId, status, name }: { businessId: string
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-sm text-muted">
-        {suspend
-          ? 'Al suspenderlo, el dueño y su equipo no pueden usar el panel y los clientes ven su tarjeta congelada.'
-          : 'Al reactivarlo, el negocio vuelve a funcionar con normalidad.'}
-      </p>
+      {suspend && <p className="text-sm text-muted">El equipo no podrá usar el panel y los clientes verán su tarjeta congelada.</p>}
       {!confirming ? (
         <button type="button" onClick={() => { setRes(null); setConfirming(true); }} className={btnClass(suspend ? 'danger' : 'dark') + ' h-12 self-start'}>
           {suspend ? 'Suspender negocio' : 'Reactivar negocio'}

@@ -59,8 +59,8 @@ export function SignupFlow({ slug, businessName, allowSignup, initialMode = 'alt
       <div className="space-y-4">
         <div>
           <h2 ref={heading} tabIndex={-1} className="font-display text-2xl font-bold text-navy outline-none">Revisa tu correo</h2>
-          <p className="mt-1 text-[15px] text-navy">Te enviamos un código a <strong className="break-all">{state.email}</strong>.</p>
-          <p className="text-sm text-muted">Vence en 10 minutos. Si no lo ves, revisa la carpeta de correo no deseado.</p>
+          <p className="mt-1 text-[15px] text-navy">Código enviado a <strong className="break-all">{state.email}</strong></p>
+          <p className="text-sm text-muted">Vence en 10 min. ¿No llega? Mira en spam.</p>
         </div>
         {state.previewCode && (
           <Notice tone="warning" title={`Tu código es ${state.previewCode}`}>Modo de prueba: el correo no se envió.</Notice>
@@ -98,9 +98,7 @@ export function SignupFlow({ slug, businessName, allowSignup, initialMode = 'alt
       <div>
         <h2 className="font-display text-2xl font-bold text-navy">{alta ? 'Crea tu tarjeta' : 'Abre tu tarjeta'}</h2>
         <p className="mt-1 text-sm text-muted">
-          {alta
-            ? `Es gratis y sin apps que descargar. Te enviaremos un código a tu correo para confirmarlo.`
-            : `Escribe el correo con el que te registraste${businessName ? ` en ${businessName}` : ''}. Te enviaremos un código.`}
+          {alta ? 'Gratis y sin descargar apps.' : `Con el correo que usaste${businessName ? ` en ${businessName}` : ''}.`}
         </p>
       </div>
 

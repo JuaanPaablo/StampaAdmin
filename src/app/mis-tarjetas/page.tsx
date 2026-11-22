@@ -25,7 +25,6 @@ export default async function MyCardsPage() {
     return (
       <CustomerShell>
         <h1 className="mt-2 font-display text-3xl font-bold text-navy">Mis tarjetas</h1>
-        <p className="mt-1 text-[15px] text-muted">Todas tus tarjetas de sellos en un solo lugar.</p>
         <div className="mt-5 rounded-3xl bg-white p-5 shadow-card ring-1 ring-line/70">
           <SignupFlow allowSignup={false} initialMode="ingreso" resume={resume} />
         </div>
@@ -43,7 +42,7 @@ export default async function MyCardsPage() {
       {cards.length === 0 ? (
         <div className="mt-5 rounded-3xl bg-white p-5 text-[15px] text-navy shadow-card ring-1 ring-line/70">
           <p className="font-semibold">Aún no tienes tarjetas con este correo.</p>
-          <p className="mt-1 text-sm text-muted">Escanea el código QR en tu negocio favorito para crear la primera.</p>
+          <p className="mt-1 text-sm text-muted">Escanea el QR de un negocio para crear la primera.</p>
         </div>
       ) : (
         <ul className="mt-5 space-y-3 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">

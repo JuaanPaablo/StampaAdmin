@@ -29,9 +29,8 @@ export function JoinForm({ slug, businessName, email, prefill, stampCode }: { sl
       <input type="hidden" name="slug" value={slug} />
       {stampCode && <input type="hidden" name="stampCode" value={stampCode} />}
       <div>
-        <h2 className="font-display text-2xl font-bold text-navy">¡Qué bueno verte!</h2>
-        <p className="mt-1 text-[15px] text-navy">Únete a la tarjeta de {businessName}.</p>
-        <p className="text-sm text-muted">Usaremos tu correo <strong className="break-all text-navy">{email}</strong>.</p>
+        <h2 className="font-display text-2xl font-bold text-navy">Únete a {businessName}</h2>
+        <p className="mt-1 text-sm text-muted">Con <strong className="break-all text-navy">{email}</strong></p>
       </div>
       {state.error && <Notice tone="error">{state.error}</Notice>}
       <div>

@@ -38,7 +38,7 @@ export default async function StampPage({ params, searchParams }: Props) {
   if (!code) {
     return (
       <CustomerShell>
-        <Notice tone="error" title="Este enlace no trae un código válido">Pide en caja que te muestren el código otra vez o escríbelo a mano en tu tarjeta.</Notice>
+        <Notice tone="error" title="Código no válido">Pide el código otra vez en caja.</Notice>
         <div className="mt-4">{cardLink}</div>
       </CustomerShell>
     );
@@ -68,7 +68,7 @@ export default async function StampPage({ params, searchParams }: Props) {
           <div className="rounded-3xl bg-white p-5 shadow-card ring-1 ring-line/70 lg:p-7">
             <JoinForm slug={business.slug} businessName={business.name} email={session.email} stampCode={code}
               prefill={other ? { name: other.name, day: other.birthday?.d, month: other.birthday?.m, year: other.birthdayYear } : undefined} />
-            <p className="mt-3 text-center text-sm text-muted">Al unirte sumamos tu sello del código {code}.</p>
+            <p className="mt-3 text-center text-sm text-muted">Al unirte sumamos este sello.</p>
           </div>
           <SignOut slug={business.slug} email={session.email} stampCode={code} />
         </Split>
@@ -79,7 +79,7 @@ export default async function StampPage({ params, searchParams }: Props) {
   return (
     <CustomerShell wide>
       <Split aside={<ProgramIntro business={business} program={program} />}>
-        <Notice tone="info" title="Estás a un paso de tu sello">Crea tu tarjeta o ábrela con tu correo. Al terminar sumamos el sello del código {code}.</Notice>
+        <Notice tone="info" title="Estás a un paso de tu sello">Al entrar lo sumamos solo.</Notice>
         <div className="mt-4 rounded-3xl bg-white p-5 shadow-card ring-1 ring-line/70 lg:p-7">
           <SignupFlow slug={business.slug} businessName={business.name} allowSignup stampCode={code}
             resume={pending && pending.stampCode === code ? { mode: pending.mode, email: pending.email } : undefined} />

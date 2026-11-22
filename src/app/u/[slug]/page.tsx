@@ -42,12 +42,12 @@ export default async function CustomerPage({ params, searchParams }: Props) {
       <CustomerShell top={<CardsTopBar index={cardIndex(cards, business.id)} total={cards.length} />}>
         <div className="space-y-4">
           {frozen && (
-            <Notice tone="warning" title="Este negocio pausó su tarjeta por ahora">
-              Tus sellos están guardados. Por ahora no se pueden sumar sellos ni canjear premios.
+            <Notice tone="warning" title="Tarjeta en pausa">
+              Tus sellos están guardados. Por ahora no se suman sellos ni se canjean premios.
             </Notice>
           )}
           {sealed && <Notice tone="success" title={sealedText(mine.customer.stamps, program)} />}
-          {!sealed && searchParams.nueva === '1' && <Notice tone="success" title="¡Tu tarjeta ya está lista!">En cada compra, pide tu código en caja y escanéalo para sumar sellos. Guarda esta página en tu inicio para tenerla a mano.</Notice>}
+          {!sealed && searchParams.nueva === '1' && <Notice tone="success" title="¡Tu tarjeta ya está lista!">En cada compra pide tu código en caja.</Notice>}
           {!sealed && searchParams.hola === '1' && <Notice tone="info" title={`¡Qué bueno verte, ${mine.customer.name.split(' ')[0]}!`} />}
           <LoyaltyCard card={mine} frozen={frozen} pop={sealed} claimSlot={<ClaimForm slug={business.slug} />} />
         </div>

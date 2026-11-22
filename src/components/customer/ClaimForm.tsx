@@ -6,9 +6,12 @@ import { claimAction } from '@/app/u/actions';
 import type { SimpleState } from './types';
 import { fieldInput, linkBtn, Notice, primaryBtn } from './Shell';
 
+/** Botón principal de la tarjeta: más alto para tocarlo fácil con el pulgar. */
+const bigBtn = primaryBtn.replace('h-12', 'h-14').replace('text-base', 'text-lg');
+
 function Submit({ children, pendingText }: { children: string; pendingText: string }) {
   const { pending } = useFormStatus();
-  return <button type="submit" className={primaryBtn} disabled={pending} aria-disabled={pending}>{pending ? pendingText : children}</button>;
+  return <button type="submit" className={bigBtn} disabled={pending} aria-disabled={pending}>{pending ? pendingText : children}</button>;
 }
 
 /** Botón amarillo "Escribir código": abre el campo de 6 dígitos y reclama el sello. */
@@ -20,13 +23,13 @@ export function ClaimForm({ slug }: { slug: string }) {
   useEffect(() => { if (open) input.current?.focus(); }, [open]);
 
   if (!open) {
-    return <button type="button" className={primaryBtn} onClick={() => setOpen(true)}>Escribir código</button>;
+    return <button type="button" className={bigBtn} onClick={() => setOpen(true)}>Escribir código</button>;
   }
   const err = state.fieldErrors?.code ?? state.error;
   return (
     <form action={action} className="space-y-3">
       <input type="hidden" name="slug" value={slug} />
-      <label htmlFor="claim-code" className="block text-sm font-semibold text-navy">Código de 6 números que te dieron en caja</label>
+      <label htmlFor="claim-code" className="block text-sm font-semibold text-navy">Código de caja</label>
       <input
         ref={input} id="claim-code" name="code" inputMode="numeric" autoComplete="off" pattern="[0-9]{6}" maxLength={6}
         value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}

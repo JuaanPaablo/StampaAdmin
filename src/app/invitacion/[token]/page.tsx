@@ -31,8 +31,8 @@ export default async function InvitationPage({ params }: { params: { token: stri
       title="Hola, crea tu contraseña"
       subtitle={
         <>
-          {isNewBusiness ? 'Después configuras tu negocio en pocos minutos.' : <>Vas a entrar al panel de <strong className="font-semibold text-navy">{info.businessName}</strong>.</>}
-          <br />Tu correo de acceso es <strong className="break-all font-semibold text-navy">{info.email}</strong>.
+          {!isNewBusiness && <><strong className="font-semibold text-navy">{info.businessName}</strong> · </>}
+          <span className="break-all">{info.email}</span>
         </>
       }
     >

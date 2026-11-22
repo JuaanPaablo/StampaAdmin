@@ -18,8 +18,8 @@ export const dynamic = 'force-dynamic';
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-0.5 border-b border-line/70 py-2.5 last:border-0 sm:flex-row sm:items-baseline sm:gap-4">
-      <dt className="text-xs font-semibold tracking-wide text-muted sm:w-40 sm:shrink-0">{label}</dt>
+    <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] items-baseline gap-3 border-b border-line/70 py-2.5 last:border-0 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-4">
+      <dt className="text-xs font-semibold tracking-wide text-muted">{label}</dt>
       <dd className="min-w-0 break-words text-sm text-navy">{children}</dd>
     </div>
   );
@@ -40,7 +40,7 @@ export default async function AdminBusinessPage({ params }: { params: { id: stri
       <Link href="/admin/negocios" className="mb-3 inline-flex items-center gap-1 rounded text-sm font-medium text-muted hover:text-navy">← Negocios</Link>
       <PageHeader
         title={name}
-        subtitle={st === 'setup' ? 'El dueño todavía no termina de configurar su negocio.' : undefined}
+        subtitle={st === 'setup' ? 'El dueño aún está configurando.' : undefined}
         actions={st === 'active' ? (
           <a href={customerUrl(b.slug)} target="_blank" rel="noopener noreferrer" className={btnClass('ghost')}>Ver página del cliente</a>
         ) : undefined}
@@ -76,7 +76,7 @@ export default async function AdminBusinessPage({ params }: { params: { id: stri
             <dl>
               <Row label="Nombre">{owner.name}</Row>
               <Row label="Correo">{owner.email ?? 'Sin correo'}</Row>
-              <Row label="Acceso">{owner.invitePending ? 'Invitación pendiente: aún no crea su contraseña' : 'Ya entró y tiene contraseña'}</Row>
+              <Row label="Acceso">{owner.invitePending ? 'Invitación pendiente' : 'Con contraseña'}</Row>
             </dl>
           ) : <p className="text-sm text-muted">Este negocio no tiene dueño registrado.</p>}
           {owner?.email && (

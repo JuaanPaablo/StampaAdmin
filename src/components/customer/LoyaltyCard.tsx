@@ -29,7 +29,7 @@ export function BusinessHeader({ business, program, children }: { business: Pick
         <BusinessLogo url={program?.logoUrl} initials={initials} bg={accent} ink={readableOn(accent)} framing={program?.imageFraming?.logo} />
         <div className="min-w-0">
           <h1 className="font-display text-xl font-bold leading-tight">{business.name}</h1>
-          {program && <p className="mt-0.5 truncate text-sm" style={{ opacity: 0.85 }}>{/^tarjeta de sellos$/i.test(program.name.trim()) ? 'Tarjeta de sellos' : `Tarjeta de sellos · ${program.name}`}</p>}
+          {program && <p className="mt-0.5 truncate text-sm" style={{ opacity: 0.85 }}>{program.name.trim() || 'Tarjeta de sellos'}</p>}
         </div>
       </div>
       {children}
@@ -64,26 +64,25 @@ export function LoyaltyCard({ card, frozen = false, pop = false, claimSlot, nowM
     <div className="space-y-4">
       <article className="overflow-hidden rounded-3xl bg-white shadow-card ring-1 ring-line/70" aria-label={`Tarjeta de ${business.name}`}>
         <BusinessHeader business={business} program={program} />
-        <div className="space-y-5 px-5 pb-5 pt-5">
-          <StampGrid total={total} filled={filled} pop={pop} milestones={gifts} />
-          <StampProgress filled={filled} total={total} />
+        <div className="space-y-4 px-5 pb-5 pt-5">
+          {/* Lo principal primero: premio listo, cuántos sellos llevas y cuánto falta. */}
           {complete ? (
             <div className="rounded-2xl bg-sun px-4 py-3 text-navy">
-              <p className="font-display text-lg font-bold leading-snug">{remainingText(filled, total, program.rewardTitle)}</p>
-              <p className="mt-1 text-sm font-medium">{frozen ? 'Podrás canjearlo cuando el negocio vuelva a atender.' : `Muéstrale esta pantalla al ${vocab.staffRole}.`}</p>
+              <p className="font-display text-xl font-bold leading-snug">{remainingText(filled, total, program.rewardTitle)}</p>
+              <p className="mt-0.5 text-sm font-semibold">{frozen ? 'Canjéalo cuando el negocio vuelva a atender.' : `Muéstrale esta pantalla al ${vocab.staffRole}.`}</p>
             </div>
-          ) : (
-            <>
-              {ready.map((r) => (
-                <div key={r.milestone} className="rounded-2xl bg-sun px-4 py-3 text-navy">
-                  <p className="font-display text-lg font-bold leading-snug">¡Ganaste: {r.title}!</p>
-                  <p className="mt-1 text-sm font-medium">{frozen ? 'Podrás canjearlo cuando el negocio vuelva a atender.' : `Premio del sello ${r.milestone}. Muéstrale esta pantalla al ${vocab.staffRole}.`}</p>
-                </div>
-              ))}
-              <p className="font-display text-lg font-semibold leading-snug text-navy">{remainingText(filled, next.at, next.title)}</p>
-            </>
-          )}
-          {program.rewardDescription && <p className="-mt-3 text-sm text-muted">{program.rewardDescription}</p>}
+          ) : ready.map((r) => (
+            <div key={r.milestone} className="rounded-2xl bg-sun px-4 py-3 text-navy">
+              <p className="font-display text-xl font-bold leading-snug">¡Ganaste: {r.title}!</p>
+              <p className="mt-0.5 text-sm font-semibold">{frozen ? 'Canjéalo cuando el negocio vuelva a atender.' : `Muéstrale esta pantalla al ${vocab.staffRole}.`}</p>
+            </div>
+          ))}
+          <div>
+            <StampProgress filled={filled} total={total} />
+            {!complete && <p className="mt-2 font-display text-lg font-semibold leading-snug text-navy">{remainingText(filled, next.at, next.title)}</p>}
+            {program.rewardDescription && <p className="mt-0.5 text-sm text-muted">{program.rewardDescription}</p>}
+          </div>
+          <StampGrid total={total} filled={filled} pop={pop} milestones={gifts} />
           {!frozen && !complete && claimSlot}
         </div>
       </article>
@@ -91,7 +90,7 @@ export function LoyaltyCard({ card, frozen = false, pop = false, claimSlot, nowM
       <section aria-labelledby="visitas" className="rounded-3xl bg-white px-5 py-4 shadow-card ring-1 ring-line/70">
         <h2 id="visitas" className="text-xs font-semibold uppercase tracking-[0.08em] text-muted">Últimas {vocab.visits}</h2>
         {rows.length === 0 ? (
-          <p className="mt-2 text-sm text-muted">Aún no tienes sellos. ¡Tu primera {vocab.visit} cuenta!</p>
+          <p className="mt-2 text-sm text-muted">Aún no tienes sellos.</p>
         ) : (
           <ul className="mt-1 divide-y divide-line">
             {rows.map((r, i) => (

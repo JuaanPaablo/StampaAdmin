@@ -32,7 +32,7 @@ export function NewAccessForm({ plans, defaultPlan }: { plans: { value: Plan; la
       <Card className="mx-auto max-w-xl">
         <h2 className="font-display text-xl font-bold text-navy">Acceso creado</h2>
         <p className="mt-1 text-sm text-muted">
-          Envía este enlace a <strong className="font-semibold text-navy">{state.to}</strong>. Con él crea su contraseña y configura su negocio.
+          Envía este enlace a <strong className="font-semibold text-navy">{state.to}</strong>.
         </p>
         <div className="mt-5"><AccessLinkPanel url={state.url} kind={state.kind} shareText={state.shareText} emailStatus={state.emailStatus} to={state.to} /></div>
         <div className="mt-6 flex flex-col gap-2 border-t border-line pt-5 sm:flex-row">
@@ -93,7 +93,6 @@ export function NewAccessForm({ plans, defaultPlan }: { plans: { value: Plan; la
           <Link href="/admin/negocios" className={btnClass('ghost') + ' h-12'}>Cancelar</Link>
           <Submit />
         </div>
-        <p className="text-xs text-muted">El dueño pone el nombre, el logo y la tarjeta de su negocio cuando entra por primera vez.</p>
       </form>
     </Card>
   );
@@ -106,7 +105,7 @@ export function AutoRenewToggle({ defaultChecked }: { defaultChecked?: boolean }
       <input type="checkbox" name="autoRenew" defaultChecked={defaultChecked} className="mt-0.5 h-5 w-5 shrink-0 accent-[#001D3D]" />
       <span>
         <span className="block text-sm font-semibold text-navy">Renovar automáticamente cada mes</span>
-        <span className="block text-xs text-muted">Al vencer, la fecha pasa sola al mes siguiente. No tienes que cambiarla a mano.</span>
+        <span className="block text-xs text-muted">Al vencer, la fecha pasa sola al mes siguiente.</span>
       </span>
     </label>
   );

@@ -27,7 +27,7 @@ export default async function AdminBusinessesPage({ searchParams }: { searchPara
 
       <form method="get" role="search" className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="flex flex-1 flex-col gap-1.5">
-          <label htmlFor="q" className="text-xs font-semibold tracking-wide text-muted">Buscar por nombre o correo</label>
+          <label htmlFor="q" className="text-xs font-semibold tracking-wide text-muted">Buscar</label>
           <input id="q" name="q" type="search" defaultValue={q} maxLength={100} placeholder="Ej.: panadería o dueño@correo.com" className={inputClass} />
         </div>
         <div className="flex flex-col gap-1.5 sm:w-52">

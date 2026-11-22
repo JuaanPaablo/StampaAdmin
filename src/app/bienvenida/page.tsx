@@ -49,7 +49,7 @@ function Shell({ children, wide = false }: { children: ReactNode; wide?: boolean
 function Stepper({ step }: { step: number }) {
   return (
     <nav aria-label="Pasos de la configuración" className="mb-6">
-      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted">Paso {step} de {TOTAL_STEPS}</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted">Paso {step} de {TOTAL_STEPS}<span className="sm:hidden"> · {STEPS[step - 1]}</span></p>
       <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-line" aria-hidden="true">
         <div className="h-full rounded-full bg-sun transition-all" style={{ width: `${(step / TOTAL_STEPS) * 100}%` }} />
       </div>
@@ -65,11 +65,11 @@ function Stepper({ step }: { step: number }) {
   );
 }
 
-function StepTitle({ title, text }: { title: string; text: string }) {
+function StepTitle({ title, text }: { title: string; text?: string }) {
   return (
     <header className="mb-5">
       <h1 className="font-display text-2xl font-bold tracking-tight text-navy sm:text-[28px]">{title}</h1>
-      <p className="mt-1 max-w-2xl text-sm text-muted">{text}</p>
+      {text && <p className="mt-1 max-w-2xl text-sm text-muted">{text}</p>}
     </header>
   );
 }
@@ -91,7 +91,7 @@ export default async function BienvenidaPage({ searchParams }: { searchParams?: 
       <Shell>
         <Card className="mx-auto max-w-lg p-6 text-center sm:p-8">
           <h1 className="font-display text-2xl font-bold text-navy">Tu dueño está configurando el negocio</h1>
-          <p className="mt-2 text-sm text-muted">Cuando termine, podrás entrar al panel con tu correo y tu contraseña. Vuelve en un rato.</p>
+          <p className="mt-2 text-sm text-muted">Vuelve en un rato.</p>
           <Link href="/panel" className={btnClass('primary') + ' mt-6'}>Volver a intentar</Link>
         </Card>
       </Shell>
@@ -116,7 +116,7 @@ export default async function BienvenidaPage({ searchParams }: { searchParams?: 
     return (
       <Shell>
         <Stepper step={1} />
-        <StepTitle title={`¡Hola, ${firstName}!`} text="Configura tu negocio en 5 pasos." />
+        <StepTitle title={`¡Hola, ${firstName}!`}  />
         <BusinessStep
           name={hasRealName ? business.name : ''}
           type={business.type}
@@ -132,7 +132,7 @@ export default async function BienvenidaPage({ searchParams }: { searchParams?: 
     return (
       <Shell wide>
         <Stepper step={2} />
-        <StepTitle title="Tu imagen" text="Logo, portada y colores de tu tarjeta. Puedes hacerlo después." />
+        <StepTitle title="Tu imagen" text="Opcional: puedes saltarlo." />
         <ProgramForm maxMilestones={features(business.plan).maxMilestones}
           program={program}
           businessName={business.name}
@@ -205,7 +205,7 @@ export default async function BienvenidaPage({ searchParams }: { searchParams?: 
     return (
       <Shell wide>
         <Stepper step={4} />
-        <StepTitle title="Tu tarjeta" text={`Define cuántos sellos necesita tu ${template.vocab.customer} y qué gana. Mira cómo queda en la vista previa.`} />
+        <StepTitle title="Tu tarjeta" />
         <ProgramForm maxMilestones={features(business.plan).maxMilestones}
           program={program}
           businessName={business.name}
@@ -236,7 +236,7 @@ export default async function BienvenidaPage({ searchParams }: { searchParams?: 
   return (
     <Shell wide>
       <Stepper step={5} />
-      <StepTitle title="¡Todo listo!" text="Revisa tu negocio. Al abrir tu panel, tu tarjeta queda activa y tus clientes ya pueden registrarse." />
+      <StepTitle title="¡Todo listo!" text="Al abrir tu panel, tu tarjeta se activa." />
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
         <Card className="space-y-5">
           <dl className="divide-y divide-line/80">
@@ -247,7 +247,7 @@ export default async function BienvenidaPage({ searchParams }: { searchParams?: 
               </div>
             ))}
           </dl>
-          <p className="text-xs text-muted">Puedes cambiar todo esto después en Tarjeta y Ajustes. La dirección pública no cambia: es la de tu póster QR.</p>
+          <p className="text-xs text-muted">Todo se puede cambiar después, menos la dirección pública (la de tu póster QR).</p>
           <CompleteStep back={backLink(5)} />
         </Card>
         <CardPreview data={{
