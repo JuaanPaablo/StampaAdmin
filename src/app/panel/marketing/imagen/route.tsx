@@ -130,8 +130,9 @@ export async function GET(req: Request) {
     </div>
   ) : (
     <div style={{
-      width: W, height: H, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: pad, background: bg,
-      backgroundImage: light ? undefined : `radial-gradient(circle at 85% 10%, ${alpha(accent, 0.28)} 0%, ${alpha(accent, 0)} 45%)`
+      width: W, height: H, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: pad, backgroundColor: bg,
+      // El motor de imágenes falla con propiedades en undefined: solo se agrega si aplica.
+      ...(light ? {} : { backgroundImage: `radial-gradient(circle at 85% 10%, ${alpha(accent, 0.28)} 0%, ${alpha(accent, 0)} 45%)` })
     }}>
       {header}
       {body}
