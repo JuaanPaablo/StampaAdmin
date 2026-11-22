@@ -242,11 +242,14 @@ export function createSupabaseRepo(): Repo {
     const [program, claims, reds] = await Promise.all([
       getProg(business.id),
       db.from('stamp_claims').select('at').eq('business_id', business.id).eq('customer_id', customer.id).is('voided_at', null).order('at', { ascending: false }).limit(10),
-      db.from('redemptions').select('at').eq('business_id', business.id).eq('customer_id', customer.id).order('at', { ascending: false }).limit(10)
+      db.from('redemptions').select('at, milestone, reward_title').eq('business_id', business.id).eq('customer_id', customer.id).order('at', { ascending: false }).limit(10)
     ]);
     const recent: CustomerCard['recent'] = [
       ...(must(claims, 'Sellos') as Row[]).map((r) => ({ at: iso(r.at)!, kind: 'stamp' as const })),
-      ...(must(reds, 'Canjes') as Row[]).map((r) => ({ at: iso(r.at)!, kind: 'redeem' as const }))
+      ...(must(reds, 'Canjes') as Row[]).map((r) => ({
+        at: iso(r.at)!, kind: 'redeem' as const,
+        ...(r.milestone != null ? { milestone: Number(r.milestone) } : {}), ...(r.reward_title ? { title: String(r.reward_title) } : {})
+      }))
     ].sort((x, y) => Date.parse(y.at) - Date.parse(x.at)).slice(0, 10);
     return { business, program, customer, recent };
   }

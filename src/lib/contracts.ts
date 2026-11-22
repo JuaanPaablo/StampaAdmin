@@ -328,7 +328,8 @@ export interface CustomerCard {
   business: Business;
   program: Program;
   customer: Customer;
-  recent: { at: string; kind: 'stamp' | 'redeem' }[];
+  /** milestone: canje de un premio intermedio (no reinicia la tarjeta). */
+  recent: { at: string; kind: 'stamp' | 'redeem'; milestone?: number; title?: string }[];
 }
 
 export type OtpRequestResult =

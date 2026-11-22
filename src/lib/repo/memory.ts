@@ -882,7 +882,7 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
   function cardOf(b: Business, c: Customer): CustomerCard {
     const recent: CustomerCard['recent'] = [];
     for (const code of bizCodes(b.id)) for (const cl of code.claims) if (cl.customerId === c.id && !cl.voidedAt) recent.push({ at: cl.at, kind: 'stamp' });
-    for (const r of redemptions) if (r.businessId === b.id && r.customerId === c.id) recent.push({ at: r.at, kind: 'redeem' });
+    for (const r of redemptions) if (r.businessId === b.id && r.customerId === c.id) recent.push({ at: r.at, kind: 'redeem', ...(r.milestone != null ? { milestone: r.milestone } : {}), ...(r.rewardTitle ? { title: r.rewardTitle } : {}) });
     recent.sort((x, y) => Date.parse(y.at) - Date.parse(x.at));
     return { business: clone(b), program: clone(prog(b.id)), customer: clone(c), recent: recent.slice(0, 10) };
   }

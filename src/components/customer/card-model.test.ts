@@ -60,6 +60,14 @@ describe('últimas visitas', () => {
     ], 2, 10);
     expect(rows.map((r) => r.label)).toEqual(['Sello 2', 'Sello 1', 'Premio canjeado', 'Sello 10']);
   });
+  it('un premio intermedio no reinicia la numeración', () => {
+    const rows = visitRows([
+      { at: '2026-11-20T15:03:00Z', kind: 'redeem', milestone: 5, title: 'Galleta' },
+      { at: '2026-11-20T15:02:00Z', kind: 'stamp' },
+      { at: '2026-11-20T15:01:00Z', kind: 'stamp' }
+    ], 5, 10);
+    expect(rows.map((r) => r.label)).toEqual(['Premio canjeado: Galleta', 'Sello 5', 'Sello 4']);
+  });
   it('fechas relativas en Guayaquil', () => {
     const now = Date.parse('2026-11-21T20:00:00Z'); // 15:00 en Guayaquil
     expect(visitDate('2026-11-21T15:15:00Z', now)).toBe('Hoy, 10:15');

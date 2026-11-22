@@ -77,15 +77,16 @@ export interface VisitRow { at: string; label: string; kind: 'stamp' | 'redeem' 
 
 /**
  * Numera los sellos de la tarjeta ACTUAL hacia atrás: el más reciente es "Sello <stamps>". Al cruzar un canje, la
- * numeración sigue en la tarjeta anterior (que terminó completa).
+ * numeración sigue en la tarjeta anterior (que terminó completa). Un premio intermedio no reinicia la tarjeta, así que
+ * no cambia la numeración.
  */
 export function visitRows(recent: CustomerCard['recent'], stamps: number, total: number): VisitRow[] {
   let n = Math.max(0, Math.min(stamps, total));
   const rows: VisitRow[] = [];
   for (const r of recent) {
     if (r.kind === 'redeem') {
-      rows.push({ at: r.at, kind: 'redeem', label: 'Premio canjeado' });
-      n = total;
+      rows.push({ at: r.at, kind: 'redeem', label: r.title ? `Premio canjeado: ${r.title}` : 'Premio canjeado' });
+      if (r.milestone == null) n = total;
       continue;
     }
     rows.push({ at: r.at, kind: 'stamp', label: n > 0 ? `Sello ${n}` : 'Sello' });

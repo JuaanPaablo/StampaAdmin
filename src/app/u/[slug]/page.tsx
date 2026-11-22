@@ -47,7 +47,7 @@ export default async function CustomerPage({ params, searchParams }: Props) {
             </Notice>
           )}
           {sealed && <Notice tone="success" title={sealedText(mine.customer.stamps, program)} />}
-          {!sealed && searchParams.nueva === '1' && <Notice tone="success" title="¡Tu tarjeta ya está lista!">Muestra tu código en caja en cada visita y suma sellos.</Notice>}
+          {!sealed && searchParams.nueva === '1' && <Notice tone="success" title="¡Tu tarjeta ya está lista!">En cada compra, pide tu código en caja y escanéalo para sumar sellos. Guarda esta página en tu inicio para tenerla a mano.</Notice>}
           {!sealed && searchParams.hola === '1' && <Notice tone="info" title={`¡Qué bueno verte, ${mine.customer.name.split(' ')[0]}!`} />}
           <LoyaltyCard card={mine} frozen={frozen} pop={sealed} claimSlot={<ClaimForm slug={business.slug} />} />
         </div>
