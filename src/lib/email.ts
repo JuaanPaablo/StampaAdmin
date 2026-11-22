@@ -3,7 +3,7 @@
  *
  * Variables:
  *   RESEND_API_KEY        clave de Resend. Sin ella no se envía nada.
- *   EMAIL_FROM            remitente, p. ej. "Stampa <hola@stampaec.app>" (el dominio debe estar verificado en Resend).
+ *   EMAIL_FROM            remitente, p. ej. "Stampa <hola@stampaecu.app>" (el dominio debe estar verificado en Resend).
  *   STAMPA_EMAIL_PREVIEW  "on" = sin clave, la app MUESTRA en pantalla el código o el enlace (solo para pruebas).
  *                         En desarrollo (NODE_ENV !== 'production') la vista previa está activa por defecto.
  *
@@ -46,7 +46,7 @@ export async function sendEmail(msg: EmailMessage): Promise<EmailResult> {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        from: process.env.EMAIL_FROM?.trim() || 'Stampa <hola@stampaec.app>',
+        from: process.env.EMAIL_FROM?.trim() || 'Stampa <hola@stampaecu.app>',
         to: [msg.to], subject: msg.subject, text: msg.text, html: msg.html
       })
     });

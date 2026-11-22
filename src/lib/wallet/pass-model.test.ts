@@ -6,7 +6,7 @@ const program = {
   logoText: 'PZ', milestones: [{ at: 5, title: 'Bebida' }], terms: 'Un sello por visita.'
 };
 const biz = { name: 'Pizzería Demo' };
-const url = 'https://app.stampaec.app/u/pizzeria-demo';
+const url = 'https://app.stampaecu.app/u/pizzeria-demo';
 
 describe('pase de Wallet', () => {
   it('calcula progreso y próximo premio', () => {

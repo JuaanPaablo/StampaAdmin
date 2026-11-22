@@ -15,7 +15,7 @@ Objetivo: cuando el cliente se registra o abre su tarjeta, puede guardarla en Ap
 
 ### Apple (cuenta Apple Developer, US$99 al año)
 1. Inscribirte en el Apple Developer Program (como organización si tienes RUC; tarda unos días por la verificación).
-2. Certificates, Identifiers & Profiles → Identifiers → **Pass Type IDs** → crear, por ejemplo `pass.app.stampaec`.
+2. Certificates, Identifiers & Profiles → Identifiers → **Pass Type IDs** → crear, por ejemplo `pass.app.stampaecu`.
 3. En ese Pass Type ID → **Create Certificate**: subir un CSR y descargar el certificado `.cer`.
 4. Exportarlo como `.p12` con contraseña (Acceso a Llaveros en Mac, u openssl en Windows: te guío).
 5. Descargar el certificado intermedio **Apple WWDR G4**.

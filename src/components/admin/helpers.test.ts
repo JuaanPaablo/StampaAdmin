@@ -79,7 +79,7 @@ describe('lista de negocios', () => {
 
 describe('compartir el enlace', () => {
   it('arma el mensaje de WhatsApp y el estado del correo', () => {
-    expect(accessShareText('invite', 'https://app.stampaec.app/invitacion/x')).toBe('Hola, ya tienes acceso a Stampa. Crea tu contraseña y configura tu negocio aquí: https://app.stampaec.app/invitacion/x');
+    expect(accessShareText('invite', 'https://app.stampaecu.app/invitacion/x')).toBe('Hola, ya tienes acceso a Stampa. Crea tu contraseña y configura tu negocio aquí: https://app.stampaecu.app/invitacion/x');
     expect(emailStatusOf({ sent: true })).toBe('sent');
     expect(emailStatusOf({ sent: false, preview: true })).toBe('preview');
     expect(emailStatusOf({ sent: false, preview: false })).toBe('failed');
