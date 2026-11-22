@@ -6,7 +6,7 @@ import { stampCells, stampColumns } from './card-model';
  * pendiente = borde punteado con su número; el último, el premio, resaltado en amarillo.
  * `pop` anima el último sello ganado (solo si el sistema no pide reducir el movimiento).
  */
-export function StampGrid({ total, filled, pop = false }: { total: number; filled: number; pop?: boolean }) {
+export function StampGrid({ total, filled, pop = false, milestones }: { total: number; filled: number; pop?: boolean; milestones?: Map<number, string> }) {
   const cells = stampCells(total, filled);
   const cols = stampColumns(cells.length);
   const lastEarned = Math.min(filled, cells.length) - 1;
@@ -19,8 +19,10 @@ export function StampGrid({ total, filled, pop = false }: { total: number; fille
         style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
       >
         {cells.map((c, i) => {
+          const gift = milestones?.get(c.n);
           const label = c.reward
             ? `${c.n}: premio${c.earned ? ', ganado' : ''}`
+            : gift ? `Sello ${c.n}: ${gift}${c.earned ? ', ganado' : ''}`
             : `Sello ${c.n}${c.earned ? ', ganado' : ', pendiente'}`;
           const anim = pop && i === lastEarned ? ' stampa-pop' : '';
           if (c.earned) {
@@ -31,9 +33,10 @@ export function StampGrid({ total, filled, pop = false }: { total: number; fille
               </li>
             );
           }
-          if (c.reward) {
+          if (c.reward || gift) {
             return (
               <li key={c.n} aria-label={label}
+                title={gift}
                 className="flex aspect-square flex-col items-center justify-center rounded-full border-[2.5px] border-dashed border-[#B88A00] bg-[#FFF4CC] text-navy">
                 <GiftIcon />
                 <span className="font-display text-[11px] font-bold leading-none tabular-nums">{c.n}</span>

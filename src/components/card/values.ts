@@ -1,4 +1,4 @@
-import type { Program } from '@/lib/contracts';
+import type { Milestone, Program } from '@/lib/contracts';
 import type { Vocabulary } from '@/lib/templates';
 import { money, parseMoney } from '@/lib/format';
 
@@ -9,6 +9,8 @@ export interface FormValues {
   birthdayReward: string; rewardExpiresDays: string; terms: string;
   requireAmount: boolean; minSpend: string;
   codeTtlSeconds: number; maxSeatsWithoutApproval: number; cooldownMinutes: number;
+  /** Premios intermedios (vacío = solo el premio final). */
+  milestones: Milestone[];
 }
 
 export const centsToInput = (c: number) => (c / 100).toFixed(2).replace('.', ',');
@@ -19,7 +21,8 @@ export function valuesFromProgram(p: Program): FormValues {
     bg: p.colors.bg, accent: p.colors.accent, ink: p.colors.ink, logoText: p.logoText,
     birthdayReward: p.birthdayReward ?? '', rewardExpiresDays: p.rewardExpiresDays ? String(p.rewardExpiresDays) : '', terms: p.terms ?? '',
     requireAmount: p.requireAmount, minSpend: centsToInput(p.minSpendCentsPerStamp),
-    codeTtlSeconds: p.codeTtlSeconds, maxSeatsWithoutApproval: p.maxSeatsWithoutApproval, cooldownMinutes: p.cooldownMinutes
+    codeTtlSeconds: p.codeTtlSeconds, maxSeatsWithoutApproval: p.maxSeatsWithoutApproval, cooldownMinutes: p.cooldownMinutes,
+    milestones: (p.milestones ?? []).map((m) => ({ ...m }))
   };
 }
 
@@ -50,6 +53,8 @@ export function describeChanges(base: Program, v: FormValues, vocab: Vocabulary)
   }
   text('rewardTitle', 'Premio', base.rewardTitle, v.rewardTitle);
   text('rewardDescription', 'Descripción del premio', base.rewardDescription ?? '', v.rewardDescription);
+  const ms = (l: Milestone[]) => l.length === 0 ? 'ninguno' : [...l].sort((a, b) => a.at - b.at).map((m) => `sello ${m.at}: ${m.title.trim()}`).join(', ');
+  if (ms(base.milestones ?? []) !== ms(v.milestones)) out.push({ key: 'milestones', label: 'Premios en el camino', from: short(ms(base.milestones ?? [])), to: short(ms(v.milestones)) });
   const colorChanged = base.colors.bg.toLowerCase() !== v.bg.toLowerCase() || base.colors.accent.toLowerCase() !== v.accent.toLowerCase() || base.colors.ink.toLowerCase() !== v.ink.toLowerCase();
   if (colorChanged) out.push({ key: 'colors', label: 'Colores de la tarjeta', from: 'anteriores', to: 'nuevos' });
   text('logoText', 'Iniciales del logo', base.logoText, v.logoText);

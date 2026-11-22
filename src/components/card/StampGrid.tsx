@@ -37,10 +37,13 @@ export interface StampGridProps {
   ink: string;
   /** Texto para lectores de pantalla. */
   label?: string;
+  /** Sellos con premio intermedio. */
+  milestones?: number[];
 }
 
 /** Rejilla de círculos. El último es el premio. */
-export function StampGrid({ total, filled, bg, accent, ink, label }: StampGridProps) {
+export function StampGrid({ total, filled, bg, accent, ink, label, milestones }: StampGridProps) {
+  const gifts = new Set(milestones ?? []);
   const cols = gridColumns(total);
   const done = Math.max(0, Math.min(total, filled));
   return (
@@ -51,7 +54,7 @@ export function StampGrid({ total, filled, bg, accent, ink, label }: StampGridPr
       style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
     >
       {Array.from({ length: total }, (_, i) => {
-        const isReward = i === total - 1;
+        const isReward = i === total - 1 || gifts.has(i + 1);
         const isFilled = i < done;
         const base: CSSProperties = { aspectRatio: '1 / 1' };
         if (isReward) {

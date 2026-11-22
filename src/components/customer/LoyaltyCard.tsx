@@ -2,7 +2,8 @@ import type { ReactNode } from 'react';
 import type { Business, CustomerCard, Program } from '@/lib/contracts';
 import { getTemplate } from '@/lib/templates';
 import { readableOn } from '@/components/card/contrast';
-import { logoInitials, remainingCount, remainingText, visitDate, visitRows } from './card-model';
+import { logoInitials, remainingText, visitDate, visitRows } from './card-model';
+import { framingStyle, milestoneMap, nextReward, pendingRewards } from '@/lib/rewards';
 import { BusinessLogo } from './Shell';
 import { StampGrid, StampProgress } from './Stamps';
 
@@ -20,12 +21,12 @@ export function BusinessHeader({ business, program, children }: { business: Pick
       {program?.coverUrl && (
         <div className="relative h-28 w-full">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={program.coverUrl} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
+          <img src={program.coverUrl} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" style={framingStyle(program.imageFraming?.cover)} />
           <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, transparent 30%, ${bg})` }} />
         </div>
       )}
       <div className={'flex items-center gap-3 px-5 pb-5 ' + (program?.coverUrl ? '-mt-8 relative' : 'pt-5')}>
-        <BusinessLogo url={program?.logoUrl} initials={initials} bg={accent} ink={readableOn(accent)} />
+        <BusinessLogo url={program?.logoUrl} initials={initials} bg={accent} ink={readableOn(accent)} framing={program?.imageFraming?.logo} />
         <div className="min-w-0">
           <h1 className="font-display text-xl font-bold leading-tight">{business.name}</h1>
           {program && <p className="mt-0.5 truncate text-sm" style={{ opacity: 0.85 }}>{/^tarjeta de sellos$/i.test(program.name.trim()) ? 'Tarjeta de sellos' : `Tarjeta de sellos · ${program.name}`}</p>}
@@ -51,7 +52,10 @@ export function LoyaltyCard({ card, frozen = false, pop = false, claimSlot, nowM
   const { business, program, customer } = card;
   const total = program.stampsRequired;
   const filled = Math.min(customer.stamps, total);
-  const complete = remainingCount(filled, total) === 0;
+  const complete = filled >= total;
+  const ready = pendingRewards(customer, program).filter((r) => r.milestone !== undefined);
+  const next = nextReward(filled, program);
+  const gifts = milestoneMap(program);
   const vocab = getTemplate(business.type).vocab;
   const rows = visitRows(card.recent, customer.stamps, total).slice(0, 5);
   const tz = business.timezone || 'America/Guayaquil';
@@ -61,7 +65,7 @@ export function LoyaltyCard({ card, frozen = false, pop = false, claimSlot, nowM
       <article className="overflow-hidden rounded-3xl bg-white shadow-card ring-1 ring-line/70" aria-label={`Tarjeta de ${business.name}`}>
         <BusinessHeader business={business} program={program} />
         <div className="space-y-5 px-5 pb-5 pt-5">
-          <StampGrid total={total} filled={filled} pop={pop} />
+          <StampGrid total={total} filled={filled} pop={pop} milestones={gifts} />
           <StampProgress filled={filled} total={total} />
           {complete ? (
             <div className="rounded-2xl bg-sun px-4 py-3 text-navy">
@@ -69,7 +73,15 @@ export function LoyaltyCard({ card, frozen = false, pop = false, claimSlot, nowM
               <p className="mt-1 text-sm font-medium">{frozen ? 'Podrás canjearlo cuando el negocio vuelva a atender.' : `Muéstrale esta pantalla al ${vocab.staffRole}.`}</p>
             </div>
           ) : (
-            <p className="font-display text-lg font-semibold leading-snug text-navy">{remainingText(filled, total, program.rewardTitle)}</p>
+            <>
+              {ready.map((r) => (
+                <div key={r.milestone} className="rounded-2xl bg-sun px-4 py-3 text-navy">
+                  <p className="font-display text-lg font-bold leading-snug">¡Ganaste: {r.title}!</p>
+                  <p className="mt-1 text-sm font-medium">{frozen ? 'Podrás canjearlo cuando el negocio vuelva a atender.' : `Premio del sello ${r.milestone}. Muéstrale esta pantalla al ${vocab.staffRole}.`}</p>
+                </div>
+              ))}
+              <p className="font-display text-lg font-semibold leading-snug text-navy">{remainingText(filled, next.at, next.title)}</p>
+            </>
           )}
           {program.rewardDescription && <p className="-mt-3 text-sm text-muted">{program.rewardDescription}</p>}
           {!frozen && !complete && claimSlot}

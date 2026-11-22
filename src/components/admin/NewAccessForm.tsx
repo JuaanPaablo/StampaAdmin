@@ -6,6 +6,7 @@ import { Card, btnClass, inputClass } from '@/components/ui';
 import { createAccessAction, type AccessLinkState } from '@/lib/admin-actions';
 import type { Plan } from '@/lib/contracts';
 import { cn } from '@/lib/cn';
+import { todayEc } from '@/lib/plan-rules';
 import { AccessLinkPanel } from './AccessLinkPanel';
 
 function Submit() {
@@ -71,10 +72,12 @@ export function NewAccessForm({ plans, defaultPlan }: { plans: { value: Plan; la
           </div>
           <div className="flex flex-col gap-1.5">
             <label htmlFor="expires" className={label}>Vence el (opcional)</label>
-            <input id="expires" name="expires" type="date" defaultValue={v.expires ?? ''} aria-invalid={!!fe.expires} aria-describedby={fe.expires ? 'expires-err' : 'expires-hint'} className={cn(inputClass, 'h-12', fe.expires && 'border-bad')} />
+            <input id="expires" name="expires" type="date" min={todayEc()} defaultValue={v.expires ?? ''} aria-invalid={!!fe.expires} aria-describedby={fe.expires ? 'expires-err' : 'expires-hint'} className={cn(inputClass, 'h-12', fe.expires && 'border-bad')} />
             {err('expires') ?? <p id="expires-hint" className="text-xs text-muted">Vacío = sin vencimiento.</p>}
           </div>
         </div>
+
+        <AutoRenewToggle defaultChecked={v.autoRenew === 'on'} />
 
         <div className="flex flex-col gap-1.5">
           <label htmlFor="note" className={label}>Nota interna (opcional)</label>
@@ -93,5 +96,18 @@ export function NewAccessForm({ plans, defaultPlan }: { plans: { value: Plan; la
         <p className="text-xs text-muted">El dueño pone el nombre, el logo y la tarjeta de su negocio cuando entra por primera vez.</p>
       </form>
     </Card>
+  );
+}
+
+/** Casilla "Renovar automáticamente cada mes" (la usan dar acceso y editar plan). */
+export function AutoRenewToggle({ defaultChecked }: { defaultChecked?: boolean }) {
+  return (
+    <label className="flex cursor-pointer items-start gap-3 rounded-xl bg-surface px-4 py-3">
+      <input type="checkbox" name="autoRenew" defaultChecked={defaultChecked} className="mt-0.5 h-5 w-5 shrink-0 accent-[#001D3D]" />
+      <span>
+        <span className="block text-sm font-semibold text-navy">Renovar automáticamente cada mes</span>
+        <span className="block text-xs text-muted">Al vencer, la fecha pasa sola al mes siguiente. No tienes que cambiarla a mano.</span>
+      </span>
+    </label>
   );
 }

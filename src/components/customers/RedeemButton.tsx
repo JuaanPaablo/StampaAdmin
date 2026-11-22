@@ -12,7 +12,7 @@ function Confirm() {
 }
 
 /** Canje con confirmación dentro de la página (sin confirm() del navegador). */
-export function RedeemButton({ customerId, customerName, rewardTitle, ready = true }: { customerId: string; customerName: string; rewardTitle: string; ready?: boolean }) {
+export function RedeemButton({ customerId, customerName, rewardTitle, ready = true, milestone }: { customerId: string; customerName: string; rewardTitle: string; ready?: boolean; milestone?: number }) {
   const [asking, setAsking] = useState(false);
   const [state, action] = useFormState(redeemRewardAction, initialFormState);
 
@@ -24,12 +24,13 @@ export function RedeemButton({ customerId, customerName, rewardTitle, ready = tr
     <div className="mt-4 flex flex-col gap-3">
       {state.error && <p role="alert" className="rounded-xl bg-[#FBE0DE] px-3 py-2 text-sm text-[#9B2A22]">{state.error}</p>}
       {!asking ? (
-        <Button type="button" onClick={() => setAsking(true)} aria-expanded={false}>Canjear premio</Button>
+        <Button type="button" onClick={() => setAsking(true)} aria-expanded={false}>{milestone ? `Canjear: ${rewardTitle}` : 'Canjear premio'}</Button>
       ) : (
         <form action={action} className="rounded-xl bg-surface p-4" aria-label="Confirmar canje">
           <input type="hidden" name="customerId" value={customerId} />
+          {milestone && <input type="hidden" name="milestone" value={milestone} />}
           <p className="text-sm text-navy">
-            ¿Entregar <strong>{rewardTitle}</strong> a <strong>{customerName}</strong>? La tarjeta volverá a empezar y no se puede deshacer.
+            ¿Entregar <strong>{rewardTitle}</strong> a <strong>{customerName}</strong>? {milestone ? 'Sigue sumando sellos en la misma tarjeta.' : 'La tarjeta volverá a empezar.'} No se puede deshacer.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Confirm />

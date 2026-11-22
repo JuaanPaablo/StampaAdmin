@@ -149,10 +149,11 @@ export async function redeemAction(_prev: ActionState, fd: FormData): Promise<Ac
   const customerId = idSchema.safeParse(text(fd, 'customerId'));
   if (!customerId.success) return { ok: false, error: 'Falta el ' + ctx.template.vocab.customer + '.' };
   try {
-    const r = await ctx.repo.redeemReward(ctx.business.id, customerId.data, ctx.staff.id);
+    const m = Number(text(fd, 'milestone'));
+    const r = await ctx.repo.redeemReward(ctx.business.id, customerId.data, ctx.staff.id, Number.isInteger(m) && m > 0 ? m : undefined);
     revalidateAll();
     revalidatePath('/panel/clientes');
-    return { ok: true, message: 'Canje registrado para ' + r.customerName + '.' };
+    return { ok: true, message: 'Canje registrado para ' + r.customerName + (r.rewardTitle ? ': ' + r.rewardTitle : '') + '.' };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : 'No se pudo registrar el canje.' };
   }

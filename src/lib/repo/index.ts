@@ -19,11 +19,15 @@ export interface Repo {
   getBusiness(id: string): Promise<Business | null>;
   /** Crea negocio + programa con la plantilla del tipo + dueño. Devuelve el negocio y el staffId del dueño. */
   createBusiness(input: NewBusinessInput): Promise<{ business: Business; ownerId: string }>;
-  updateBusiness(id: string, patch: Partial<Pick<Business, 'name' | 'city' | 'timezone' | 'type'>>): Promise<Business>;
+  updateBusiness(id: string, patch: Partial<Pick<Business, 'name' | 'city' | 'province' | 'timezone' | 'type'>>): Promise<Business>;
 
   /* Sucursales */
+  /** Sin las eliminadas, en orden de creación. */
   listLocations(businessId: string): Promise<Location[]>;
+  /** Crear una nueva respeta el límite del plan (PLAN_MAX_LOCATIONS). */
   upsertLocation(businessId: string, loc: Partial<Location> & { name: string }): Promise<Location>;
+  /** La oculta para siempre (el historial de sellos la conserva). Debe quedar al menos una. */
+  deleteLocation(businessId: string, id: string, actorId?: string): Promise<void>;
 
   /* Equipo */
   listStaff(businessId: string): Promise<Staff[]>;
@@ -66,7 +70,8 @@ export interface Repo {
 
   /* Premios */
   listRedeemable(businessId: string): Promise<CustomerRow[]>;
-  redeemReward(businessId: string, customerId: string, staffId: string): Promise<Redemption>;
+  /** milestone: sello del premio intermedio; sin él, el premio final. */
+  redeemReward(businessId: string, customerId: string, staffId: string, milestone?: number): Promise<Redemption>;
   listRedemptions(businessId: string, limit?: number): Promise<Redemption[]>;
 
   /* Analítica y control */
@@ -89,8 +94,8 @@ export interface Repo {
   getPlatformSummary(): Promise<PlatformSummary>;
   /** Solo 'active' | 'suspended'. Reactivar un negocio que nunca terminó el asistente lo devuelve a 'setup'. */
   setBusinessStatus(id: string, status: Exclude<BusinessStatus, 'setup'>): Promise<Business>;
-  /** planExpiresAt null = sin vencimiento. note undefined = no cambia. */
-  updateBusinessPlan(id: string, plan: Plan, planExpiresAt: string | null, note?: string): Promise<Business>;
+  /** planExpiresAt null = sin vencimiento. note / autoRenew undefined = no cambia. */
+  updateBusinessPlan(id: string, plan: Plan, planExpiresAt: string | null, note?: string, autoRenew?: boolean): Promise<Business>;
 
   /* Cuentas de administrador (tabla aparte del equipo de los negocios) */
   verifyAdminCredentials(email: string, password: string): Promise<{ adminId: string } | null>;

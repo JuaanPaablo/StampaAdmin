@@ -1,12 +1,13 @@
 import { Card, EmptyState } from '@/components/ui';
-import type { CustomerRow, Redemption } from '@/lib/contracts';
+import type { CustomerRow, Milestone, Redemption } from '@/lib/contracts';
+import { pendingRewards } from '@/lib/rewards';
 import { ago } from '@/lib/format';
 import { redeemAction } from '@/app/panel/caja/actions';
 import { ActionButton } from './ActionButton';
 
 /** "Listos para canjear" y últimos canjes. Ancla #premios. */
-export function RewardsSection({ redeemable, redemptions, stampsRequired, rewardTitle, vocab, staffNames }: {
-  redeemable: CustomerRow[]; redemptions: Redemption[]; stampsRequired: number; rewardTitle: string;
+export function RewardsSection({ redeemable, redemptions, stampsRequired, rewardTitle, milestones, vocab, staffNames }: {
+  redeemable: CustomerRow[]; redemptions: Redemption[]; stampsRequired: number; rewardTitle: string; milestones?: Milestone[];
   vocab: { customer: string; customers: string; reward: string }; staffNames: Record<string, string>;
 }) {
   return (
@@ -14,21 +15,21 @@ export function RewardsSection({ redeemable, redemptions, stampsRequired, reward
       <h2 id="premios-h" className="mb-3 font-display text-lg font-semibold text-navy">Listos para canjear</h2>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <h3 className="mb-1 text-sm font-semibold text-navy">{rewardTitle}</h3>
-          <p className="mb-3 text-xs text-muted">{redeemable.length === 1 ? '1 ' + vocab.customer + ' completó' : redeemable.length + ' ' + vocab.customers + ' completaron'} su tarjeta de {stampsRequired} sellos.</p>
+          <h3 className="mb-1 text-sm font-semibold text-navy">Premios pendientes</h3>
+          <p className="mb-3 text-xs text-muted">{redeemable.length === 1 ? '1 ' + vocab.customer + ' tiene' : redeemable.length + ' ' + vocab.customers + ' tienen'} un premio por recibir.</p>
           {redeemable.length === 0 ? (
             <EmptyState title={'Ningún ' + vocab.reward + ' pendiente'} text={'Cuando un ' + vocab.customer + ' llegue a ' + stampsRequired + ' sellos, aparece aquí para entregarle su ' + vocab.reward + '.'} />
           ) : (
             <ul className="divide-y divide-line">
-              {redeemable.map((c) => (
-                <li key={c.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+              {redeemable.flatMap((c) => pendingRewards(c, { stampsRequired, rewardTitle, milestones }).map((p) => (
+                <li key={c.id + ':' + (p.milestone ?? 'final')} className="flex flex-wrap items-center justify-between gap-3 py-3">
                   <div className="min-w-0">
                     <p className="truncate text-[15px] font-semibold text-navy">{c.name}</p>
-                    <p className="text-xs text-muted">{c.stamps} de {stampsRequired} sellos</p>
+                    <p className="text-xs text-muted">{p.title} · {p.milestone ? `sello ${p.milestone}` : `${c.stamps} de ${stampsRequired} sellos`}</p>
                   </div>
-                  <ActionButton action={redeemAction} fields={{ customerId: c.id }} label="Canjear" pendingText="Canjeando…" />
+                  <ActionButton action={redeemAction} fields={p.milestone ? { customerId: c.id, milestone: String(p.milestone) } : { customerId: c.id }} label="Canjear" pendingText="Canjeando…" />
                 </li>
-              ))}
+              )))}
             </ul>
           )}
         </Card>
@@ -40,7 +41,7 @@ export function RewardsSection({ redeemable, redemptions, stampsRequired, reward
             <ul className="divide-y divide-line">
               {redemptions.map((r) => (
                 <li key={r.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-                  <span className="min-w-0 truncate font-medium text-navy">{r.customerName}</span>
+                  <span className="min-w-0 truncate font-medium text-navy">{r.customerName}{r.rewardTitle ? <span className="font-normal text-muted"> · {r.rewardTitle}</span> : null}</span>
                   <span className="shrink-0 text-xs text-muted">{ago(r.at)}{staffNames[r.staffId] ? ' · ' + staffNames[r.staffId] : ''}</span>
                 </li>
               ))}

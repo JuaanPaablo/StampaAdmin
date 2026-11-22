@@ -6,7 +6,10 @@ import { STAMPA_WHATSAPP_DISPLAY, customerUrl, stampaWhatsappUrl } from '@/lib/u
 import { Badge, Card, PageHeader, btnClass } from '@/components/ui';
 import { ActionForm, FormField } from '@/components/shell/action-form';
 import { TIMEZONES } from '@/components/shell/labels';
-import { saveLocationAction, updateBusinessAction } from './actions';
+import { PlaceFields } from '@/components/shell/PlaceFields';
+import { provinceOfCity } from '@/lib/ecuador';
+import { locationLimitText, maxLocations } from '@/lib/plan-rules';
+import { deleteLocationAction, saveLocationAction, updateBusinessAction } from './actions';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Ajustes · Stampa' };
@@ -28,6 +31,7 @@ export default async function AjustesPage() {
   const typeOptions = BUSINESS_TYPES.map((t) => ({ value: t.type, label: t.label }));
   const publicUrl = customerUrl(business.slug);
   const expiry = daysToExpiry(business.planExpiresAt);
+  const limit = maxLocations(business.plan);
 
   return (
     <div className="flex flex-col gap-6">
@@ -43,7 +47,7 @@ export default async function AjustesPage() {
         <ActionForm action={updateBusinessAction} submitLabel="Guardar cambios" className="mt-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField name="name" label="Nombre del negocio" defaultValue={business.name} maxLength={60} required />
-            <FormField name="city" label="Ciudad" defaultValue={business.city ?? ''} maxLength={60} autoComplete="address-level2" />
+            <div className="sm:col-span-2"><PlaceFields province={business.province ?? provinceOfCity(business.city)} city={business.city} /></div>
             <FormField name="timezone" label="Zona horaria" defaultValue={business.timezone} options={tzOptions} hint="Define la hora de los sellos, reportes y horarios." />
             <FormField name="type" label="Tipo de negocio" defaultValue={business.type} options={typeOptions} hint="Cambiar el tipo actualiza las palabras del panel y las sugerencias. No modifica la tarjeta que ya creaste: su premio y sus reglas se quedan como están." />
           </div>
@@ -53,9 +57,9 @@ export default async function AjustesPage() {
       <Card className="sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-display text-lg font-bold text-navy">Sucursales</h2>
-          <Badge tone="info">{locations.filter((l) => l.active).length} activas</Badge>
+          <Badge tone="info">{locations.length} de {limit}</Badge>
         </div>
-        <p className="mt-1 text-sm text-muted">Cada código de sello puede quedar asociado a una sucursal. Desactiva las que ya no uses: su historial se conserva.</p>
+        <p className="mt-1 text-sm text-muted">{locationLimitText(business.plan, PLAN_LABEL[business.plan])} Al eliminar una, sus sellos anteriores se conservan.</p>
 
         {locations.length === 0 ? (
           <p className="mt-4 rounded-xl border border-dashed border-[#C9D6E3] px-4 py-6 text-center text-sm text-muted">Aún no tienes sucursales. Agrega la primera aquí abajo.</p>
@@ -65,26 +69,30 @@ export default async function AjustesPage() {
               <li key={l.id} className="rounded-xl bg-surface p-4">
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <span className="text-xs font-semibold uppercase tracking-wider text-muted">Sucursal</span>
-                  <Badge tone={l.active ? 'ok' : 'neutral'}>{l.active ? 'Activa' : 'Inactiva'}</Badge>
                 </div>
-                <ActionForm action={saveLocationAction} submitLabel="Guardar" size="sm" variant="dark" actionsClassName="mt-3">
+                <ActionForm key={l.id + l.name + (l.address ?? '')} action={saveLocationAction} submitLabel="Guardar" size="sm" variant="dark" actionsClassName="mt-3">
                   <input type="hidden" name="id" value={l.id} />
                   <div className="grid gap-3 sm:grid-cols-2">
                     <FormField name="name" label="Nombre" defaultValue={l.name} maxLength={60} required />
                     <FormField name="address" label="Dirección" defaultValue={l.address ?? ''} maxLength={120} autoComplete="street-address" />
                   </div>
                 </ActionForm>
-                <ActionForm action={saveLocationAction} submitLabel={l.active ? 'Desactivar' : 'Activar'} variant={l.active ? 'danger' : 'ghost'} size="sm" className="mt-2" actionsClassName="mt-0">
-                  <input type="hidden" name="id" value={l.id} />
-                  <input type="hidden" name="name" value={l.name} />
-                  <input type="hidden" name="address" value={l.address ?? ''} />
-                  <input type="hidden" name="active" value={l.active ? 'false' : 'true'} />
-                </ActionForm>
+                {locations.length > 1 && (
+                  <ActionForm key={"del-" + l.id} action={deleteLocationAction} submitLabel={`Eliminar ${l.name}`} variant="danger" size="sm" className="mt-2" actionsClassName="mt-0">
+                    <input type="hidden" name="id" value={l.id} />
+                  </ActionForm>
+                )}
               </li>
             ))}
           </ul>
         )}
 
+        {locations.length >= limit ? (
+          <p className="mt-5 rounded-xl bg-[#FFF4CC] px-4 py-3 text-sm text-navy">
+            Llegaste al máximo de tu plan.{' '}
+            <a href={stampaWhatsappUrl(`Hola, quiero ampliar mi plan de Stampa para ${business.name} y agregar más sucursales`)} target="_blank" rel="noopener noreferrer" className="font-semibold underline underline-offset-4">Escríbenos para ampliarlo</a>.
+          </p>
+        ) : (
         <div className="mt-5 border-t border-line pt-5">
           <h3 className="font-display text-base font-semibold text-navy">Agregar sucursal</h3>
           <ActionForm action={saveLocationAction} submitLabel="Agregar sucursal" resetOnSuccess className="mt-3">
@@ -94,8 +102,10 @@ export default async function AjustesPage() {
             </div>
           </ActionForm>
         </div>
+        )}
       </Card>
 
+      <span id="plan" className="-mb-6 block scroll-mt-6" aria-hidden="true" />
       <Card className="sm:p-6">
         <h2 className="font-display text-lg font-bold text-navy">Plan</h2>
         <dl className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -104,7 +114,7 @@ export default async function AjustesPage() {
             <dd className="mt-1 font-display text-2xl font-bold text-navy">{PLAN_LABEL[business.plan]}</dd>
           </div>
           <div className="rounded-xl bg-surface p-4">
-            <dt className="text-xs font-semibold text-muted">Vence el</dt>
+            <dt className="text-xs font-semibold text-muted">{business.autoRenew ? 'Se renueva el' : 'Vence el'}</dt>
             <dd className="mt-1 font-display text-2xl font-bold text-navy">{business.planExpiresAt ? longDate(business.planExpiresAt, business.timezone) : 'Sin fecha de vencimiento'}</dd>
           </div>
         </dl>

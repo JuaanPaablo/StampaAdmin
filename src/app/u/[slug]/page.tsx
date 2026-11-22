@@ -6,6 +6,17 @@ import { CustomerShell, Notice, Split } from '@/components/customer/Shell';
 import { SignupFlow } from '@/components/customer/SignupFlow';
 import { cardIndex, CardsTopBar, ComingSoon, PausedNoCard, ProgramIntro, SignOut } from '@/components/customer/views';
 import { stampedText } from '@/components/customer/card-model';
+import { milestoneMap, nextReward } from '@/lib/rewards';
+import type { Program } from '@/lib/contracts';
+
+/** "¡Sello 4 de 10! Ganaste: Postre gratis." o "¡Sello 5 de 10! Te faltan 2 para tu postre." */
+function sealedText(stamps: number, program: Program): string {
+  const total = program.stampsRequired;
+  const gift = milestoneMap(program).get(stamps);
+  if (gift) return `¡Sello ${stamps} de ${total}! Ganaste: ${gift}.`;
+  const next = nextReward(stamps, program);
+  return stampedText(stamps, next.at, next.title).replace(`de ${next.at}!`, `de ${total}!`);
+}
 import { customerMetadata, loadCustomerPage } from './data';
 
 export const dynamic = 'force-dynamic';
@@ -35,7 +46,7 @@ export default async function CustomerPage({ params, searchParams }: Props) {
               Tus sellos están guardados. Por ahora no se pueden sumar sellos ni canjear premios.
             </Notice>
           )}
-          {sealed && <Notice tone="success" title={stampedText(mine.customer.stamps, total, program.rewardTitle)} />}
+          {sealed && <Notice tone="success" title={sealedText(mine.customer.stamps, program)} />}
           {!sealed && searchParams.nueva === '1' && <Notice tone="success" title="¡Tu tarjeta ya está lista!">Muestra tu código en caja en cada visita y suma sellos.</Notice>}
           {!sealed && searchParams.hola === '1' && <Notice tone="info" title={`¡Qué bueno verte, ${mine.customer.name.split(' ')[0]}!`} />}
           <LoyaltyCard card={mine} frozen={frozen} pop={sealed} claimSlot={<ClaimForm slug={business.slug} />} />

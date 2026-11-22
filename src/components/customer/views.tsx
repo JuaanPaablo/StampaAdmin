@@ -4,6 +4,7 @@ import { signOutAction } from '@/app/u/actions';
 import { PLACEHOLDER_BUSINESS_NAME } from '@/lib/mvp-rules';
 import { Isotipo } from '@/components/shell/logo';
 import { rewardPhrase } from './card-model';
+import { cleanMilestones, lcfirst, milestoneMap } from '@/lib/rewards';
 import { BusinessHeader } from './LoyaltyCard';
 import { Notice } from './Shell';
 import { StampGrid } from './Stamps';
@@ -70,8 +71,16 @@ export function ProgramIntro({ business, program }: { business: Business; progra
           Junta {program.stampsRequired} sellos y gana tu {rewardPhrase(program.rewardTitle)}.
         </p>
         {program.rewardDescription && <p className="-mt-2 text-sm text-muted">{program.rewardDescription}</p>}
-        <StampGrid total={program.stampsRequired} filled={0} />
-        {program.birthdayReward && <p className="text-sm text-muted">Y en tu cumpleaños: {program.birthdayReward.charAt(0).toLowerCase() + program.birthdayReward.slice(1)}.</p>}
+        <StampGrid total={program.stampsRequired} filled={0} milestones={milestoneMap(program)} />
+        {cleanMilestones(program.milestones, program.stampsRequired).length > 0 && (
+          <ul className="space-y-1 text-sm text-navy">
+            {cleanMilestones(program.milestones, program.stampsRequired).map((m) => (
+              <li key={m.at}><strong className="font-semibold">Sello {m.at}:</strong> {m.title}</li>
+            ))}
+            <li><strong className="font-semibold">Sello {program.stampsRequired}:</strong> {program.rewardTitle}</li>
+          </ul>
+        )}
+        {program.birthdayReward && <p className="text-sm text-muted">Y en tu cumpleaños: {lcfirst(program.birthdayReward)}.</p>}
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import { lcfirst } from '@/lib/rewards';
 import type { CustomerCard } from '@/lib/contracts';
 
 /** Lógica pura de la tarjeta del cliente (sin React ni Node: también corre en el navegador). Probada en card-model.test.ts. */
@@ -34,7 +35,6 @@ export function stampColumns(total: number): number {
   return 5;
 }
 
-const lcfirst = (s: string) => (s ? s.charAt(0).toLowerCase() + s.slice(1) : s);
 /** "Café gratis" → "café gratis" (para usarlo dentro de una frase). */
 export function rewardPhrase(reward: string): string {
   return lcfirst((reward ?? '').trim()) || 'premio';

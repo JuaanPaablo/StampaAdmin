@@ -13,7 +13,12 @@ import { ActionForm, FormField } from '@/components/shell/action-form';
 import { ProgramForm } from '@/components/card/ProgramForm';
 import { BusinessImages } from '@/components/card/BusinessImages';
 import { CardPreview } from '@/components/card/CardPreview';
-import { saveLocationAction } from '@/app/panel/ajustes/actions';
+import { deleteLocationAction, saveLocationAction } from '@/app/panel/ajustes/actions';
+import { PLAN_LABEL } from '@/lib/mvp-rules';
+import { locationLimitText, maxLocations } from '@/lib/plan-rules';
+import { provinceOfCity } from '@/lib/ecuador';
+import { cleanMilestones } from '@/lib/rewards';
+import { stampaWhatsappUrl } from '@/lib/urls';
 import { BusinessStep } from './BusinessStep';
 import { CompleteStep } from './CompleteStep';
 import { finishLocationsStep, saveCardStep, saveColorsStep, skipImageStep } from './actions';
@@ -92,7 +97,8 @@ export default async function BienvenidaPage({ searchParams }: { searchParams?: 
     );
   }
 
-  const locations = (await repo.listLocations(business.id)).filter((l) => l.active);
+  const locations = await repo.listLocations(business.id);
+  const limit = maxLocations(business.plan);
   const hasRealName = business.name !== PLACEHOLDER_BUSINESS_NAME;
   let progress = await readProgress(business.id);
   if (!hasRealName) progress = 0;
@@ -109,12 +115,13 @@ export default async function BienvenidaPage({ searchParams }: { searchParams?: 
     return (
       <Shell>
         <Stepper step={1} />
-        <StepTitle title={`¡Hola, ${firstName}! Empecemos por tu negocio`} text="En 5 pasos cortos dejas lista tu tarjeta de sellos. Todo se guarda en cada paso." />
+        <StepTitle title={`¡Hola, ${firstName}!`} text="Configura tu negocio en 5 pasos." />
         <BusinessStep
           name={hasRealName ? business.name : ''}
           type={business.type}
           city={business.city ?? ''}
-          types={BUSINESS_TYPES.map((t) => ({ type: t.type, label: t.label, tagline: t.tagline }))}
+          province={business.province ?? provinceOfCity(business.city) ?? ''}
+          types={BUSINESS_TYPES.map((t) => ({ type: t.type, label: t.label }))}
         />
       </Shell>
     );
@@ -124,7 +131,7 @@ export default async function BienvenidaPage({ searchParams }: { searchParams?: 
     return (
       <Shell wide>
         <Stepper step={2} />
-        <StepTitle title="Tu imagen" text="Sube tu logo y una foto de portada, y elige los colores de tu tarjeta. Puedes saltar este paso y hacerlo después." />
+        <StepTitle title="Tu imagen" text="Logo, portada y colores de tu tarjeta. Puedes hacerlo después." />
         <ProgramForm
           program={program}
           businessName={business.name}
@@ -133,7 +140,7 @@ export default async function BienvenidaPage({ searchParams }: { searchParams?: 
           templateColors={template.program.colors}
           action={saveColorsStep}
           wizardStep="colores"
-          imagesSlot={<BusinessImages logoUrl={program.logoUrl} coverUrl={program.coverUrl} logoText={program.logoText} title="Logo y foto de portada" />}
+          imagesSlot={<BusinessImages logoUrl={program.logoUrl} coverUrl={program.coverUrl} logoText={program.logoText} framing={program.imageFraming} title="Logo y foto de portada" />}
           extraActions={<>
             {backLink(2)}
             <button type="submit" formAction={skipImageStep} formNoValidate className={btnClass('ghost')}>Saltar por ahora</button>
@@ -147,12 +154,12 @@ export default async function BienvenidaPage({ searchParams }: { searchParams?: 
     return (
       <Shell>
         <Stepper step={3} />
-        <StepTitle title="Tus sucursales" text="Agrega al menos un local. Cada sello queda asociado a la sucursal donde se dio." />
+        <StepTitle title="Tus sucursales" text={`${locations.length} de ${limit} · ${locationLimitText(business.plan, PLAN_LABEL[business.plan])}`} />
         <div className="space-y-4">
           {locations.map((l, i) => (
             <Card key={l.id}>
               <p className="mb-3 text-xs font-semibold uppercase tracking-[0.08em] text-muted">Sucursal {i + 1}</p>
-              <ActionForm action={saveLocationAction} submitLabel="Guardar" size="sm" variant="dark" actionsClassName="mt-3">
+              <ActionForm key={l.id + l.name + (l.address ?? '')} action={saveLocationAction} submitLabel="Guardar" size="sm" variant="dark" actionsClassName="mt-3">
                 <input type="hidden" name="id" value={l.id} />
                 <div className="grid gap-3 sm:grid-cols-2">
                   <FormField name="name" label="Nombre" defaultValue={l.name} maxLength={60} required />
@@ -160,25 +167,29 @@ export default async function BienvenidaPage({ searchParams }: { searchParams?: 
                 </div>
               </ActionForm>
               {locations.length > 1 && (
-                <ActionForm action={saveLocationAction} submitLabel="Quitar" variant="danger" size="sm" className="mt-2" actionsClassName="mt-0">
+                <ActionForm key={"del-" + l.id} action={deleteLocationAction} submitLabel={`Eliminar ${l.name}`} variant="danger" size="sm" className="mt-2" actionsClassName="mt-0">
                   <input type="hidden" name="id" value={l.id} />
-                  <input type="hidden" name="name" value={l.name} />
-                  <input type="hidden" name="address" value={l.address ?? ''} />
-                  <input type="hidden" name="active" value="false" />
                 </ActionForm>
               )}
             </Card>
           ))}
-          <Card className="border-2 border-dashed border-[#C9D6E3] shadow-none ring-0">
-            <h2 className="font-display text-base font-semibold text-navy">{locations.length === 0 ? 'Tu primera sucursal' : 'Agregar otra sucursal'}</h2>
-            <ActionForm action={saveLocationAction} submitLabel={locations.length === 0 ? 'Agregar sucursal' : 'Agregar'} resetOnSuccess className="mt-3"
-              variant={locations.length === 0 ? 'primary' : 'ghost'}>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <FormField name="name" label="Nombre" placeholder="Ej. Local principal" defaultValue={locations.length === 0 ? 'Principal' : undefined} maxLength={60} required />
-                <FormField name="address" label="Dirección (opcional)" maxLength={120} autoComplete="street-address" />
-              </div>
-            </ActionForm>
-          </Card>
+          {locations.length < limit ? (
+            <Card className="border-2 border-dashed border-[#C9D6E3] shadow-none ring-0">
+              <h2 className="font-display text-base font-semibold text-navy">{locations.length === 0 ? 'Tu primera sucursal' : 'Agregar otra sucursal'}</h2>
+              <ActionForm action={saveLocationAction} submitLabel={locations.length === 0 ? 'Agregar sucursal' : 'Agregar'} resetOnSuccess className="mt-3"
+                variant={locations.length === 0 ? 'primary' : 'ghost'}>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <FormField name="name" label="Nombre" placeholder="Ej. Local principal" defaultValue={locations.length === 0 ? 'Principal' : undefined} maxLength={60} required />
+                  <FormField name="address" label="Dirección (opcional)" maxLength={120} autoComplete="street-address" />
+                </div>
+              </ActionForm>
+            </Card>
+          ) : (
+            <p className="rounded-xl bg-[#FFF4CC] px-4 py-3 text-sm text-navy">
+              Llegaste al máximo de tu plan.{' '}
+              <a href={stampaWhatsappUrl(`Hola, quiero ampliar mi plan de Stampa para ${business.name} y agregar más sucursales`)} target="_blank" rel="noopener noreferrer" className="font-semibold underline underline-offset-4">Escríbenos para ampliarlo</a>.
+            </p>
+          )}
           <form action={finishLocationsStep} className="flex flex-wrap items-center gap-3 pt-2">
             <button type="submit" disabled={locations.length === 0} className={btnClass('primary')}>Seguir</button>
             {backLink(3)}
@@ -212,9 +223,10 @@ export default async function BienvenidaPage({ searchParams }: { searchParams?: 
   const rows: { label: string; value: string }[] = [
     { label: 'Negocio', value: business.name },
     { label: 'Tipo', value: template.label },
-    { label: 'Ciudad', value: business.city || 'Sin ciudad' },
+    { label: 'Ciudad', value: [business.city, business.province].filter(Boolean).join(', ') || 'Sin ciudad' },
     { label: 'Sucursales', value: locations.map((l) => l.name).join(', ') || 'Ninguna' },
-    { label: 'Premio', value: `${program.rewardTitle} al juntar ${program.stampsRequired} sellos` },
+    ...cleanMilestones(program.milestones, program.stampsRequired).map((m) => ({ label: `Premio del sello ${m.at}`, value: m.title })),
+    { label: 'Premio final', value: `${program.rewardTitle} al juntar ${program.stampsRequired} sellos` },
     { label: 'Sello', value: program.requireAmount ? `Uno por cada ${money(program.minSpendCentsPerStamp)} de consumo` : `Uno por ${template.vocab.visit}` },
     { label: 'Cumpleaños', value: program.birthdayReward || 'Sin regalo' },
     { label: 'Tu dirección pública', value: customerUrl(business.slug) }
@@ -240,7 +252,8 @@ export default async function BienvenidaPage({ searchParams }: { searchParams?: 
         <CardPreview data={{
           businessName: business.name, programName: program.name, stampsRequired: program.stampsRequired, rewardTitle: program.rewardTitle,
           bg: program.colors.bg, accent: program.colors.accent, ink: program.colors.ink, logoText: program.logoText,
-          logoUrl: program.logoUrl || undefined, coverUrl: program.coverUrl || undefined
+          logoUrl: program.logoUrl || undefined, coverUrl: program.coverUrl || undefined,
+          milestones: program.milestones, logoFraming: program.imageFraming?.logo, coverFraming: program.imageFraming?.cover
         }} />
       </div>
     </Shell>

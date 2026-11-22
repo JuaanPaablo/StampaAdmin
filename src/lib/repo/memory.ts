@@ -17,6 +17,8 @@ import { normalizeEmail, validateEmail } from '../credentials';
 import { hashPassword, hashPasswordSync, validatePassword, verifyPassword } from '../password';
 import { AttemptLimiter, LOCK_MS, MAX_FAILED_LOGINS } from '../login-throttle';
 import { getTemplate } from '../templates';
+import { effectiveExpiry, maxLocations } from '../plan-rules';
+import { cleanMilestones } from '../rewards';
 import type { Repo } from './index';
 import type { AccessTokenKind, AdminAccount, AdminBusinessRow, BusinessSetupInput, CustomerCard, IssuedToken, PlatformSummary } from '../contracts';
 import { INVITE_TTL_HOURS, RESET_TTL_MINUTES } from '../contracts';
@@ -69,6 +71,11 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
 
   const businesses: Business[] = [];
   const locations: Location[] = [];
+  /** Sucursales eliminadas: se ocultan, pero el historial de sellos las conserva. */
+  const deletedLocs = new Set<string>();
+  /** Planes con renovación automática: la fecha avanza de mes en mes al vencer. */
+  const rollAll = () => { for (const b of businesses) if (b.autoRenew) b.planExpiresAt = effectiveExpiry(b.planExpiresAt, true, clock()); };
+  const liveLocs = (businessId: string) => locations.filter((l) => l.businessId === businessId && !deletedLocs.has(l.id));
   const staff: StaffRec[] = [];
   const programs: Program[] = [];
   const customers: Customer[] = [];
@@ -137,8 +144,8 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
 
   const repo: Repo = {
     /* ---------- Negocios ---------- */
-    async listBusinesses() { return clone(businesses); },
-    async getBusiness(id) { const b = businesses.find((x) => x.id === id); return b ? clone(b) : null; },
+    async listBusinesses() { rollAll(); return clone(businesses); },
+    async getBusiness(id) { rollAll(); const b = businesses.find((x) => x.id === id); return b ? clone(b) : null; },
 
     async createBusiness(input: NewBusinessInput) {
       const name = input.name?.trim() ?? '';
@@ -169,6 +176,7 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
       const b = biz(id);
       if (patch.name !== undefined) { if (patch.name.trim().length < 2) fail('Escribe el nombre del negocio.'); b.name = patch.name.trim(); }
       if (patch.city !== undefined) b.city = patch.city.trim() || undefined;
+      if (patch.province !== undefined) b.province = patch.province.trim() || undefined;
       if (patch.timezone !== undefined) b.timezone = patch.timezone;
       if (patch.type !== undefined) b.type = patch.type;
       log(id, undefined, 'business.update', 'Se actualizaron los datos del negocio.');
@@ -176,20 +184,31 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
     },
 
     /* ---------- Sucursales ---------- */
-    async listLocations(businessId) { return clone(locations.filter((l) => l.businessId === businessId)); },
+    async listLocations(businessId) { return clone(liveLocs(businessId)); },
     async upsertLocation(businessId, loc) {
       biz(businessId);
       if (!loc.name?.trim()) fail('Escribe el nombre de la sucursal.');
-      const existing = loc.id ? locations.find((l) => l.id === loc.id && l.businessId === businessId) : undefined;
+      const existing = loc.id ? liveLocs(businessId).find((l) => l.id === loc.id) : undefined;
+      if (loc.id && !existing) fail('No encontramos esa sucursal.');
       if (existing) {
         existing.name = loc.name.trim();
         if (loc.address !== undefined) existing.address = loc.address;
         if (loc.active !== undefined) existing.active = loc.active;
         return clone(existing);
       }
+      const limit = maxLocations(biz(businessId).plan);
+      if (liveLocs(businessId).length >= limit) fail(`Tu plan permite ${limit === 1 ? '1 sucursal' : `hasta ${limit} sucursales`}. Escríbenos para ampliarlo.`);
       const created: Location = { id: newId('loc', businessId), businessId, name: loc.name.trim(), address: loc.address, active: loc.active ?? true };
       locations.push(created);
       return clone(created);
+    },
+
+    async deleteLocation(businessId, id, actorId) {
+      const live = liveLocs(businessId);
+      const loc = live.find((l) => l.id === id) ?? fail('No encontramos esa sucursal.');
+      if (live.length <= 1) fail('Debe quedar al menos una sucursal.');
+      deletedLocs.add(loc.id); loc.active = false;
+      log(businessId, actorId, 'location.delete', `Se eliminó la sucursal ${loc.name}.`);
     },
 
     /* ---------- Equipo ---------- */
@@ -449,15 +468,26 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
       return clone(rows);
     },
 
-    async redeemReward(businessId, customerId, staffId) {
+    async redeemReward(businessId, customerId, staffId, milestone) {
       const program = prog(businessId);
       const c = findCustomer(businessId, customerId) ?? fail('No encontramos a ese cliente.');
       if (!staff.some((s) => s.id === staffId && s.businessId === businessId && s.active)) fail('Esta persona no está activa en este negocio.');
-      if (c.stamps < program.stampsRequired) fail(`Aún no completa la tarjeta: tiene ${c.stamps} de ${program.stampsRequired} sellos.`);
-      c.stamps -= program.stampsRequired; c.rewardsRedeemed++;
-      const r: Redemption = { id: newId('can', businessId), businessId, customerId, customerName: c.name, staffId, at: nowIso() };
+      let title = program.rewardTitle;
+      if (milestone === undefined) {
+        if (c.stamps < program.stampsRequired) fail(`Aún no completa la tarjeta: tiene ${c.stamps} de ${program.stampsRequired} sellos.`);
+        c.stamps -= program.stampsRequired; c.milestonesClaimed = [];
+      } else {
+        const m = cleanMilestones(program.milestones, program.stampsRequired).find((x) => x.at === milestone) ?? fail('Ese premio ya no existe en la tarjeta.');
+        if (c.stamps < m.at) fail(`Aún no llega al sello ${m.at}: tiene ${c.stamps}.`);
+        if ((c.milestonesClaimed ?? []).includes(m.at)) fail('Ese premio ya se canjeó en esta tarjeta.');
+        c.milestonesClaimed = [...(c.milestonesClaimed ?? []), m.at];
+        title = m.title;
+      }
+      c.rewardsRedeemed++;
+      const r: Redemption = { id: newId('can', businessId), businessId, customerId, customerName: c.name, staffId, at: nowIso(), milestone, rewardTitle: title };
+      if (milestone === undefined) delete r.milestone;
       redemptions.push(r);
-      log(businessId, staffId, 'redeem', `Premio canjeado a ${c.name}: ${program.rewardTitle}.`);
+      log(businessId, staffId, 'redeem', `Premio canjeado a ${c.name}: ${title}.`);
       return clone(r);
     },
 
@@ -491,7 +521,8 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
       const business: Business = {
         id, name: PLACEHOLDER_BUSINESS_NAME, slug, type: 'otro', country: 'EC', currency: 'USD', timezone: 'America/Guayaquil',
         plan: input.plan, createdAt: at, status: 'setup',
-        planExpiresAt: input.planExpiresAt ? new Date(input.planExpiresAt).toISOString() : undefined
+        planExpiresAt: input.planExpiresAt ? new Date(input.planExpiresAt).toISOString() : undefined,
+        autoRenew: !!input.autoRenew && !!input.planExpiresAt
       };
       const owner: StaffRec = {
         id: newId('emp', id), businessId: id, name: email.split('@')[0].slice(0, 80) || 'Dueño', role: 'owner', active: true,
@@ -506,15 +537,18 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
     },
 
     async listAdminBusinesses() {
+      rollAll();
       return businesses.map(adminRow).sort((a, b) => Date.parse(b.business.createdAt) - Date.parse(a.business.createdAt));
     },
 
     async getAdminBusiness(id) {
+      rollAll();
       const b = businesses.find((x) => x.id === id);
       return b ? adminRow(b) : null;
     },
 
     async getPlatformSummary(): Promise<PlatformSummary> {
+      rollAll();
       const now = clock();
       const since = now - 30 * DAY;
       const st = (b: Business) => b.status ?? 'active';
@@ -554,12 +588,13 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
       return clone(b);
     },
 
-    async updateBusinessPlan(id, plan, planExpiresAt, note) {
+    async updateBusinessPlan(id, plan, planExpiresAt, note, autoRenew) {
       const b = biz(id);
       if (!PLANS.includes(plan)) fail('Elige un plan válido.');
       if (planExpiresAt && Number.isNaN(Date.parse(planExpiresAt))) fail('La fecha de vencimiento no es válida.');
       b.plan = plan;
       b.planExpiresAt = planExpiresAt ? new Date(planExpiresAt).toISOString() : undefined;
+      if (autoRenew !== undefined) b.autoRenew = autoRenew && !!b.planExpiresAt;
       if (note !== undefined) { if (note.trim()) notes.set(id, note.trim().slice(0, 500)); else notes.delete(id); }
       log(id, undefined, 'business.plan', `Plan ${plan}${b.planExpiresAt ? ` hasta ${b.planExpiresAt.slice(0, 10)}` : ' sin vencimiento'}.`);
       return clone(b);
@@ -686,7 +721,7 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
       if (name.length > 80) fail('El nombre es demasiado largo (máximo 80 letras).');
       if (name.toLowerCase() === PLACEHOLDER_BUSINESS_NAME.toLowerCase()) fail('Escribe el nombre real de tu negocio.');
       const typeChanged = b.type !== input.type;
-      b.name = name; b.type = input.type; b.city = input.city?.trim() || undefined;
+      b.name = name; b.type = input.type; b.city = input.city?.trim() || undefined; b.province = input.province?.trim() || undefined;
       if (b.status === 'setup') {
         const base = slugify(name);
         let slug = base;
@@ -705,7 +740,7 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
       const b = biz(businessId);
       if (b.status === 'suspended') fail('Tu cuenta está suspendida. Escríbenos por WhatsApp.');
       if (b.name === PLACEHOLDER_BUSINESS_NAME) fail('Primero escribe el nombre de tu negocio.');
-      if (!locations.some((l) => l.businessId === businessId && l.active)) fail('Agrega al menos una sucursal.');
+      if (!liveLocs(businessId).some((l) => l.active)) fail('Agrega al menos una sucursal.');
       if (b.status === 'setup') { b.status = 'active'; b.setupCompletedAt = nowIso(); }
       log(businessId, actorId, 'business.ready', `${b.name} terminó su configuración.`);
       return clone(b);
@@ -723,6 +758,7 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
 
     /* ---------- Clientes (página pública) ---------- */
     async getBusinessBySlug(slug) {
+      rollAll();
       const b = businesses.find((x) => x.slug === slug);
       return b ? clone(b) : null;
     },

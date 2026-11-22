@@ -65,7 +65,7 @@ export default async function AdminBusinessesPage({ searchParams }: { searchPara
                     </Td>
                     <Td><StatusBadge business={r.business} /></Td>
                     <Td>{PLAN_LABEL[r.business.plan]}</Td>
-                    <Td><ExpiryText planExpiresAt={r.business.planExpiresAt} now={now} /></Td>
+                    <Td><ExpiryText planExpiresAt={r.business.planExpiresAt} autoRenew={r.business.autoRenew} now={now} /></Td>
                     <Td className="text-right">{num(r.stats.customers)}</Td>
                     <Td className="text-right">{num(r.stats.stamps30d)}</Td>
                     <Td className="whitespace-nowrap text-muted">{r.stats.lastActivityAt ? ago(r.stats.lastActivityAt, now) : 'Sin actividad'}</Td>
@@ -90,7 +90,7 @@ export default async function AdminBusinessesPage({ searchParams }: { searchPara
                     </div>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-navy">
                       <span>Plan {PLAN_LABEL[r.business.plan]}</span>
-                      <ExpiryText planExpiresAt={r.business.planExpiresAt} now={now} />
+                      <ExpiryText planExpiresAt={r.business.planExpiresAt} autoRenew={r.business.autoRenew} now={now} />
                     </div>
                     <p className="text-xs text-muted">
                       {num(r.stats.customers)} clientes · {num(r.stats.stamps30d)} sellos en 30 días · {r.stats.lastActivityAt ? ago(r.stats.lastActivityAt, now) : 'sin actividad'}

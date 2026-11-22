@@ -4,6 +4,7 @@ import { getContext } from '@/lib/context';
 import { requireRole } from '@/lib/auth';
 import { ago, dateShort, dateTime } from '@/lib/format';
 import { cn } from '@/lib/cn';
+import { lcfirst, nextReward, pendingRewards } from '@/lib/rewards';
 import { Badge, Card, PageHeader } from '@/components/ui';
 import { NotesForm, RedeemButton, SegmentBadge, StampDots, birthdayLabel, contactHref, contactLabel } from '@/components/customers';
 
@@ -19,7 +20,9 @@ export default async function ClienteDetallePage({ params }: { params: { id: str
   if (!detail) notFound();
   const { customer: c } = detail;
   const history = [...detail.history].sort((a, b) => (a.at < b.at ? 1 : -1));
-  const ready = c.segment === 'por_canjear' || c.stamps >= program.stampsRequired;
+  const pending = pendingRewards(c, program);
+  const ready = pending.length > 0;
+  const next = nextReward(c.stamps, program);
   const now = Date.now();
 
   const EVENT = {
@@ -39,11 +42,13 @@ export default async function ClienteDetallePage({ params }: { params: { id: str
         <div className="flex flex-col gap-4">
           <StampDots filled={c.stamps} total={program.stampsRequired} colors={program.colors} logoText={program.logoText} title={program.name} subtitle={`Premio: ${program.rewardTitle}`} />
           <Card>
-            <h2 className="font-display text-base font-semibold text-navy">{ready ? 'Tarjeta completa' : 'Premio'}</h2>
+            <h2 className="font-display text-base font-semibold text-navy">{ready ? 'Premio por canjear' : 'Premio'}</h2>
             <p className="mt-1 text-sm text-muted">
-              {ready ? `${c.name} ya puede canjear: ${program.rewardTitle}.` : `Le faltan ${Math.max(0, program.stampsRequired - c.stamps)} sellos para ${program.rewardTitle.toLowerCase()}.`}
+              {ready ? `${c.name} ya puede canjear: ${pending.map((p) => p.title).join(', ')}.` : `Le faltan ${Math.max(0, next.at - c.stamps)} sellos para ${lcfirst(next.title)}.`}
             </p>
-            <RedeemButton customerId={c.id} customerName={c.name} rewardTitle={program.rewardTitle} ready={ready} />
+            {pending.map((p) => (
+              <RedeemButton key={p.milestone ?? 'final'} customerId={c.id} customerName={c.name} rewardTitle={p.title} milestone={p.milestone} />
+            ))}
           </Card>
           <Card>
             <h2 className="font-display text-base font-semibold text-navy">Resumen</h2>

@@ -83,7 +83,8 @@ export async function createAccessAction(_prev: AccessLinkState, formData: FormD
     email: String(formData.get('email') ?? ''), plan: String(formData.get('plan') ?? ''),
     expires: String(formData.get('expires') ?? ''), note: String(formData.get('note') ?? '')
   };
-  const values = { email: raw.email.slice(0, 254), plan: raw.plan.slice(0, 20), expires: raw.expires.slice(0, 20), note: raw.note.slice(0, 500) };
+  const autoRenew = formData.get('autoRenew') === 'on';
+  const values = { email: raw.email.slice(0, 254), plan: raw.plan.slice(0, 20), expires: raw.expires.slice(0, 20), note: raw.note.slice(0, 500), autoRenew: autoRenew ? 'on' : '' };
   const parsed = accessSchema.safeParse(raw);
   const fieldErrors: Record<string, string> = {};
   if (!parsed.success) {
@@ -96,12 +97,14 @@ export async function createAccessAction(_prev: AccessLinkState, formData: FormD
   if (!(PLANS as string[]).includes(parsed.data.plan)) fieldErrors.plan = 'Elige un plan.';
   const exp = parseDateInput(parsed.data.expires);
   if ('error' in exp) fieldErrors.expires = exp.error;
+  else if (exp.value && Date.parse(exp.value) < Date.now()) fieldErrors.expires = 'Elige hoy o una fecha futura.';
+  else if (autoRenew && !exp.value) fieldErrors.expires = 'Para renovar cada mes, elige el primer vencimiento.';
   if (Object.keys(fieldErrors).length > 0 || 'error' in exp) return { status: 'error', error: 'Revisa los campos marcados.', fieldErrors, values };
 
   let created: Awaited<ReturnType<typeof repo.createBusinessAccess>>;
   try {
     created = await repo.createBusinessAccess({
-      ownerEmail: email, plan: parsed.data.plan as Plan, planExpiresAt: exp.value ?? undefined, note: parsed.data.note.trim() || undefined
+      ownerEmail: email, plan: parsed.data.plan as Plan, planExpiresAt: exp.value ?? undefined, note: parsed.data.note.trim() || undefined, autoRenew
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : '';
@@ -157,12 +160,16 @@ export async function updatePlanAction(formData: FormData): Promise<AdminActionR
   const note = String(formData.get('note') ?? '');
   const fieldErrors: Record<string, string> = {};
   if (!(PLANS as string[]).includes(plan)) fieldErrors.plan = 'Elige un plan.';
+  const autoRenew = formData.get('autoRenew') === 'on';
   const exp = parseDateInput(formData.get('expires'));
+  const unchanged = String(formData.get('expires') ?? '') === String(formData.get('currentExpires') ?? '');
   if ('error' in exp) fieldErrors.expires = exp.error;
+  else if (exp.value && Date.parse(exp.value) < Date.now() && !unchanged) fieldErrors.expires = 'Elige hoy o una fecha futura.';
+  else if (autoRenew && !exp.value) fieldErrors.expires = 'Para renovar cada mes, elige el próximo vencimiento.';
   if (note.length > 500) fieldErrors.note = 'La nota puede tener hasta 500 letras.';
   if (Object.keys(fieldErrors).length > 0 || 'error' in exp) return { ok: false, fieldErrors };
   try {
-    await repo.updateBusinessPlan(id, plan as Plan, exp.value, note);
+    await repo.updateBusinessPlan(id, plan as Plan, exp.value, note, autoRenew);
     revalidatePath('/admin', 'layout');
     return { ok: true, message: 'Cambios guardados.' };
   } catch (e) {

@@ -136,7 +136,7 @@ export default async function CodePage({ params }: { params: { id: string } }) {
           customers={customers.slice(0, 80).map((c) => ({ id: c.id, name: c.name }))} />
       )}
 
-      <RewardsSection redeemable={redeemable} redemptions={redemptions} stampsRequired={program.stampsRequired} rewardTitle={program.rewardTitle}
+      <RewardsSection redeemable={redeemable} redemptions={redemptions} stampsRequired={program.stampsRequired} rewardTitle={program.rewardTitle} milestones={program.milestones}
         vocab={{ customer: v.customer, customers: v.customers, reward: v.reward }} staffNames={staffNames} />
 
       <RecentCodes codes={codes} statuses={statuses} ticketWord={v.ticket} showAmount={program.requireAmount} excludeId={code.id} />

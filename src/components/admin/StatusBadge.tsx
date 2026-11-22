@@ -10,8 +10,11 @@ export function StatusBadge({ business }: { business: Pick<Business, 'status'> }
 }
 
 /** Vencimiento con aviso: rojo si venció, ámbar si vence en 7 días o menos. */
-export function ExpiryText({ planExpiresAt, now, className }: { planExpiresAt?: string; now: number; className?: string }) {
+export function ExpiryText({ planExpiresAt, now, className, autoRenew }: { planExpiresAt?: string; now: number; className?: string; autoRenew?: boolean }) {
   const e = expiryInfo(planExpiresAt, now);
+  if (autoRenew && planExpiresAt) {
+    return <span className={cn('text-sm whitespace-nowrap text-navy', className)}>Renueva cada mes · {e.label.replace(/^Vence el /, '').replace(/^Vence /, '')}</span>;
+  }
   if (e.tone === 'bad' || e.tone === 'warn') {
     return (
       <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold leading-none whitespace-nowrap',

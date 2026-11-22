@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Isotipo } from '@/components/shell/logo';
+import type { ImageFraming } from '@/lib/contracts';
+import { framingStyle } from '@/lib/rewards';
 
 /**
  * Marco de las páginas del cliente: móvil primero, sin la navegación del panel. Stampa firma discretamente al pie.
@@ -37,7 +39,7 @@ export function Split({ aside, children }: { aside: ReactNode; children: ReactNo
 }
 
 /** Logo del negocio (imagen o iniciales). */
-export function BusinessLogo({ url, initials, bg, ink, size = 56 }: { url?: string; initials: string; bg: string; ink: string; size?: number }) {
+export function BusinessLogo({ url, initials, bg, ink, size = 56, framing }: { url?: string; initials: string; bg: string; ink: string; size?: number; framing?: Partial<ImageFraming> }) {
   return (
     <span
       className="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-2xl font-display font-bold ring-2 ring-white/70"
@@ -46,7 +48,7 @@ export function BusinessLogo({ url, initials, bg, ink, size = 56 }: { url?: stri
     >
       {url
         // eslint-disable-next-line @next/next/no-img-element
-        ? <img src={url} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
+        ? <img src={url} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" style={framingStyle(framing)} />
         : initials}
     </span>
   );

@@ -55,9 +55,9 @@ export default async function AdminBusinessPage({ params }: { params: { id: stri
           <dl>
             <Row label="Estado"><StatusBadge business={b} /></Row>
             <Row label="Plan">{PLAN_LABEL[b.plan]}</Row>
-            <Row label="Vencimiento"><ExpiryText planExpiresAt={b.planExpiresAt} now={now} /></Row>
+            <Row label="Vencimiento"><ExpiryText planExpiresAt={b.planExpiresAt} autoRenew={b.autoRenew} now={now} /></Row>
             <Row label="Tipo">{st === 'setup' && b.type === 'otro' ? 'Sin elegir' : getTemplate(b.type).label}</Row>
-            {b.city && <Row label="Ciudad">{b.city}</Row>}
+            {b.city && <Row label="Ciudad">{[b.city, b.province].filter(Boolean).join(", ")}</Row>}
             <Row label="Dirección pública"><span className="font-mono text-[13px]">/u/{b.slug}</span>{st === 'setup' && <span className="text-muted"> (provisional)</span>}</Row>
             <Row label="Acceso creado">{formatDate(b.createdAt)}</Row>
             {b.setupCompletedAt && <Row label="Configurado">{formatDate(b.setupCompletedAt)}</Row>}
@@ -86,7 +86,7 @@ export default async function AdminBusinessPage({ params }: { params: { id: stri
         <Card>
           <h2 className="mb-4 font-display text-base font-semibold text-navy">Plan y vencimiento</h2>
           <PlanForm
-            businessId={b.id} plan={b.plan} expires={toDateInput(b.planExpiresAt)} note={note ?? ''}
+            businessId={b.id} plan={b.plan} expires={toDateInput(b.planExpiresAt)} note={note ?? ''} autoRenew={b.autoRenew}
             plans={PLANS.map((p) => ({ value: p, label: PLAN_LABEL[p] }))}
           />
         </Card>

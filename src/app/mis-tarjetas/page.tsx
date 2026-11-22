@@ -58,7 +58,7 @@ export default async function MyCardsPage() {
               <li key={business.id}>
                 <Link href={customerPath(business.slug)} className="block h-full overflow-hidden rounded-3xl bg-white shadow-card ring-1 ring-line/70 transition hover:ring-navy/40">
                   <div className="flex items-center gap-3 px-4 py-3" style={{ background: bg, color: ink }}>
-                    <BusinessLogo url={program.logoUrl} initials={logoInitials(program.logoText, business.name)} bg={accent} ink={readableOn(accent)} size={44} />
+                    <BusinessLogo url={program.logoUrl} initials={logoInitials(program.logoText, business.name)} bg={accent} ink={readableOn(accent)} size={44} framing={program.imageFraming?.logo} />
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-display text-base font-bold">{business.name}</p>
                       <p className="truncate text-xs" style={{ opacity: 0.85 }}>{/^tarjeta de sellos$/i.test(program.name.trim()) ? 'Tarjeta de sellos' : `Tarjeta de sellos · ${program.name}`}</p>

@@ -1,3 +1,4 @@
+import { pendingRewards } from '../rewards';
 import type {
   CodeStatus, Customer, CustomerSegment, Program, StaffReportRow, StampCode
 } from '../contracts';
@@ -101,8 +102,8 @@ export function flagStaff(rows: Omit<StaffReportRow, 'ratio' | 'flagged'>[]): St
  * por_canjear (tarjeta completa) > nuevo (creado hace menos de 14 días) > activo (visita hace menos de 21 días)
  * > en_riesgo (21 a 45) > inactivo (más de 45). Sin visitas se cuenta desde la creación.
  */
-export function segmentOf(customer: Pick<Customer, 'createdAt' | 'lastVisitAt' | 'stamps'>, program: Pick<Program, 'stampsRequired'>, now: Date = new Date()): CustomerSegment {
-  if (customer.stamps >= program.stampsRequired) return 'por_canjear';
+export function segmentOf(customer: Pick<Customer, 'createdAt' | 'lastVisitAt' | 'stamps' | 'milestonesClaimed'>, program: Pick<Program, 'stampsRequired'> & Partial<Pick<Program, 'rewardTitle' | 'milestones'>>, now: Date = new Date()): CustomerSegment {
+  if (pendingRewards(customer, { rewardTitle: program.rewardTitle ?? '', ...program }).length > 0) return 'por_canjear';
   const t = now.getTime();
   if ((t - Date.parse(customer.createdAt)) / DAY_MS < 14) return 'nuevo';
   const since = (t - Date.parse(customer.lastVisitAt ?? customer.createdAt)) / DAY_MS;

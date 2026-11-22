@@ -6,8 +6,9 @@ import { z } from 'zod';
 import { getSetupContext } from '@/lib/context';
 import { parseMoney } from '@/lib/format';
 import { TEMPLATES } from '@/lib/templates';
+import { validatePlace } from '@/lib/ecuador';
 import type { BusinessType } from '@/lib/contracts';
-import { programSchema, type ProgramFormState } from '@/components/card/schema';
+import { parseMilestonesField, programSchema, type ProgramFormState } from '@/components/card/schema';
 import { clearProgress, markStepDone } from './progress';
 
 /**
@@ -33,16 +34,20 @@ async function setupOrBack() {
 const businessSchema = z.object({
   name: z.string().trim().min(2, 'Escribe el nombre de tu negocio.').max(80, 'Máximo 80 letras.'),
   type: z.string().refine((v): v is BusinessType => v in TEMPLATES, 'Elige el tipo de tu negocio.'),
-  city: z.string().trim().max(60, 'Máximo 60 letras.').default('')
+  province: z.string().trim().max(60).default(''),
+  city: z.string().trim().max(60).default('')
 });
 
 /** Paso 1: nombre, tipo y ciudad. */
 export async function saveBusinessStep(_prev: StepState, fd: FormData): Promise<StepState> {
   const ctx = await setupOrBack();
-  const parsed = businessSchema.safeParse({ name: fd.get('name') ?? '', type: fd.get('type') ?? '', city: fd.get('city') ?? '' });
-  if (!parsed.success) return { ok: false, message: 'Revisa los campos marcados.', errors: zodErrors(parsed.error) };
+  const parsed = businessSchema.safeParse({ name: fd.get('name') ?? '', type: fd.get('type') ?? '', province: fd.get('province') ?? '', city: fd.get('city') ?? '' });
+  const placeErr = validatePlace(parsed.success ? parsed.data.province : undefined, parsed.success ? parsed.data.city : undefined);
+  if (!parsed.success || placeErr.province || placeErr.city) {
+    return { ok: false, message: 'Revisa los campos marcados.', errors: { ...(parsed.success ? {} : zodErrors(parsed.error)), ...placeErr } };
+  }
   try {
-    await ctx.repo.saveBusinessSetup(ctx.business.id, { name: parsed.data.name, type: parsed.data.type as BusinessType, city: parsed.data.city || undefined }, ctx.staff.id);
+    await ctx.repo.saveBusinessSetup(ctx.business.id, { name: parsed.data.name, type: parsed.data.type as BusinessType, province: parsed.data.province, city: parsed.data.city }, ctx.staff.id);
   } catch (e) {
     const msg = e instanceof Error ? e.message : '';
     // Los errores de validación del repo vienen en español y hablan del nombre.
@@ -103,10 +108,13 @@ export async function saveCardStep(_prev: ProgramFormState, fd: FormData): Promi
   if (requireAmount && (minSpend < 50 || minSpend > 50000)) {
     return { ok: false, message: 'Revisa los campos marcados.', errors: { minSpend: 'Indica un monto entre $0,50 y $500,00.' } };
   }
+  const ms = parseMilestonesField(fd.get('milestones'), d.stampsRequired);
+  if ('error' in ms) return { ok: false, message: 'Revisa los campos marcados.', errors: { milestones: ms.error } };
   try {
     await ctx.repo.updateProgram(ctx.business.id, {
       stampsRequired: d.stampsRequired,
       rewardTitle: d.rewardTitle,
+      milestones: ms.value,
       birthdayReward: d.birthdayReward,
       requireAmount,
       minSpendCentsPerStamp: requireAmount ? minSpend : ctx.program.minSpendCentsPerStamp

@@ -6,6 +6,7 @@ import { getContext } from '@/lib/context';
 import { hasRole } from '@/lib/auth';
 import { TEMPLATES } from '@/lib/templates';
 import type { BusinessType } from '@/lib/contracts';
+import { validatePlace } from '@/lib/ecuador';
 
 export interface ActionResult { ok: boolean; error?: string; message?: string; fieldErrors?: Record<string, string> }
 
@@ -21,7 +22,8 @@ const validTz = (tz: string) => { try { new Intl.DateTimeFormat('es-EC', { timeZ
 
 const businessSchema = z.object({
   name: z.string().trim().min(2, 'Escribe el nombre del negocio.').max(60, 'Máximo 60 caracteres.'),
-  city: z.string().trim().max(60, 'Máximo 60 caracteres.').optional(),
+  province: z.string().trim().max(60).default(''),
+  city: z.string().trim().max(60).default(''),
   timezone: z.string().refine(validTz, 'Elige una zona horaria válida.'),
   type: z.string().refine((v): v is BusinessType => v in TEMPLATES, 'Elige un tipo de negocio.')
 });
@@ -30,11 +32,16 @@ export async function updateBusinessAction(fd: FormData): Promise<ActionResult> 
   const ctx = await getContext();
   if (!hasRole(ctx, ['owner'])) return NO_PERMISSION;
   const parsed = businessSchema.safeParse({
-    name: String(fd.get('name') ?? ''), city: String(fd.get('city') ?? ''), timezone: String(fd.get('timezone') ?? ''), type: String(fd.get('type') ?? '')
+    name: String(fd.get('name') ?? ''), province: String(fd.get('province') ?? ''), city: String(fd.get('city') ?? ''),
+    timezone: String(fd.get('timezone') ?? ''), type: String(fd.get('type') ?? '')
   });
   if (!parsed.success) return errors(parsed.error);
+  const place = validatePlace(parsed.data.province, parsed.data.city);
+  if (place.province || place.city) return { ok: false, fieldErrors: place as Record<string, string> };
   try {
-    await ctx.repo.updateBusiness(ctx.business.id, { name: parsed.data.name, city: parsed.data.city || undefined, timezone: parsed.data.timezone, type: parsed.data.type as BusinessType });
+    await ctx.repo.updateBusiness(ctx.business.id, {
+      name: parsed.data.name, province: parsed.data.province, city: parsed.data.city, timezone: parsed.data.timezone, type: parsed.data.type as BusinessType
+    });
   } catch {
     return { ok: false, error: 'No pudimos guardar los cambios. Inténtalo de nuevo.' };
   }
@@ -48,30 +55,44 @@ const locationSchema = z.object({
   address: z.string().trim().max(120, 'Máximo 120 caracteres.').optional()
 });
 
-/** Crea o edita una sucursal. Si viene el campo "active" ('true' o 'false') también la activa o desactiva. */
+/** Mensajes del repo que se pueden mostrar tal cual (límite del plan, sucursal inexistente). */
+const repoMessage = (e: unknown, fallback: string) =>
+  e instanceof Error && /plan|sucursal/i.test(e.message) ? e.message : fallback;
+
+/** Crea o edita una sucursal. Crear respeta el límite del plan. También la usa el asistente de bienvenida. */
 export async function saveLocationAction(fd: FormData): Promise<ActionResult> {
-  // También la usa el asistente de bienvenida (paso "Tus sucursales"): el dueño de un negocio en configuración pasa.
   const ctx = await getContext({ allowSetup: true });
   if (!hasRole(ctx, ['owner'])) return NO_PERMISSION;
   const parsed = locationSchema.safeParse({ id: String(fd.get('id') ?? '') || undefined, name: String(fd.get('name') ?? ''), address: String(fd.get('address') ?? '') });
   if (!parsed.success) return errors(parsed.error);
-  const activeRaw = fd.get('active');
   try {
     const all = await ctx.repo.listLocations(ctx.business.id);
     const current = parsed.data.id ? all.find((l) => l.id === parsed.data.id) : undefined;
     if (parsed.data.id && !current) return { ok: false, error: 'No encontramos esa sucursal.' };
-    const active = activeRaw === null ? current?.active ?? true : activeRaw === 'true';
-    if (current && current.active && !active && all.filter((l) => l.active).length <= 1) {
-      return { ok: false, error: 'Debe quedar al menos una sucursal activa.' };
-    }
     if (all.some((l) => l.id !== parsed.data.id && l.name.trim().toLowerCase() === parsed.data.name.toLowerCase())) {
       return { ok: false, fieldErrors: { name: 'Ya tienes una sucursal con ese nombre.' } };
     }
-    await ctx.repo.upsertLocation(ctx.business.id, { ...(current ?? {}), id: parsed.data.id, name: parsed.data.name, address: parsed.data.address || undefined, active });
-  } catch {
-    return { ok: false, error: 'No pudimos guardar la sucursal. Inténtalo de nuevo.' };
+    await ctx.repo.upsertLocation(ctx.business.id, { ...(current ?? {}), id: parsed.data.id, name: parsed.data.name, address: parsed.data.address || undefined, active: true });
+  } catch (e) {
+    return { ok: false, error: repoMessage(e, 'No pudimos guardar la sucursal. Inténtalo de nuevo.') };
   }
   revalidatePath('/panel/ajustes');
   revalidatePath('/bienvenida');
-  return { ok: true, message: activeRaw === null ? (parsed.data.id ? 'Sucursal guardada.' : 'Sucursal agregada.') : 'Listo.' };
+  return { ok: true, message: parsed.data.id ? 'Sucursal guardada.' : 'Sucursal agregada.' };
+}
+
+/** Elimina una sucursal: deja de verse en todas partes; los sellos que ya dio conservan su historial. */
+export async function deleteLocationAction(fd: FormData): Promise<ActionResult> {
+  const ctx = await getContext({ allowSetup: true });
+  if (!hasRole(ctx, ['owner'])) return NO_PERMISSION;
+  const id = String(fd.get('id') ?? '').slice(0, 64);
+  if (!id) return { ok: false, error: 'No encontramos esa sucursal.' };
+  try {
+    await ctx.repo.deleteLocation(ctx.business.id, id, ctx.staff.id);
+  } catch (e) {
+    return { ok: false, error: repoMessage(e, 'No pudimos eliminar la sucursal. Inténtalo de nuevo.') };
+  }
+  revalidatePath('/panel/ajustes');
+  revalidatePath('/bienvenida');
+  return { ok: true, message: 'Sucursal eliminada.' };
 }

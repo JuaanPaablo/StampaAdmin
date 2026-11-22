@@ -4,7 +4,8 @@ import { getContext } from '@/lib/context';
 import { requireRole } from '@/lib/auth';
 import { customerUrl } from '@/lib/urls';
 import { btnClass, PageHeader } from '@/components/ui';
-import { PosterSheet, type PosterSize } from '@/components/card/PosterSheet';
+import { POSTER_FONTS_HREF, type PosterSize } from '@/components/card/PosterSheet';
+import { PosterDesigner } from '@/components/card/PosterDesigner';
 import { PrintButton } from '@/components/card/PrintButton';
 
 export const dynamic = 'force-dynamic';
@@ -46,17 +47,13 @@ export default async function PosterPage({ searchParams }: { searchParams?: { ta
           Al imprimir elige papel {size.toUpperCase()}, orientación vertical y escala al 100 %. Activa los gráficos de fondo para que se vean los colores.
         </p>
       </div>
-      <PosterSheet
-        size={size}
-        businessName={business.name}
-        logoText={program.logoText}
-        logoUrl={program.logoUrl || undefined}
-        accent={program.colors.accent}
-        signupUrl={signupUrl}
-        qrSvg={qrSvg}
-        rewardTitle={program.rewardTitle}
-        stampsRequired={program.stampsRequired}
-      />
+      {/* eslint-disable-next-line @next/next/no-page-custom-font */}
+      <link rel="stylesheet" href={POSTER_FONTS_HREF} />
+      <PosterDesigner initial={program.poster} sheet={{
+        size, businessName: business.name, logoText: program.logoText, logoUrl: program.logoUrl || undefined,
+        logoFraming: program.imageFraming?.logo, colors: program.colors, signupUrl, qrSvg,
+        rewardTitle: program.rewardTitle, stampsRequired: program.stampsRequired
+      }} />
     </>
   );
 }

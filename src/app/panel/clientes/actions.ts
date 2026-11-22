@@ -97,11 +97,15 @@ export async function redeemRewardAction(_prev: FormState, formData: FormData): 
   if (!customerId) return { ok: false, error: 'Falta el cliente.' };
   try {
     const { repo, business, staff, template } = await getContext();
-    const r = await repo.redeemReward(business.id, customerId, staff.id);
+    const m = Number(formData.get('milestone') ?? '');
+    const milestone = Number.isInteger(m) && m > 0 ? m : undefined;
+    const r = await repo.redeemReward(business.id, customerId, staff.id, milestone);
     revalidatePath(`/panel/clientes/${customerId}`);
     revalidatePath('/panel/clientes');
     revalidatePath('/panel');
-    return { ok: true, message: `Canje registrado para ${r.customerName}. La tarjeta volvió a empezar (${template.vocab.reward} entregado).` };
+    return { ok: true, message: milestone
+      ? `Canje registrado para ${r.customerName}: ${r.rewardTitle ?? template.vocab.reward}. Sigue sumando sellos en la misma tarjeta.`
+      : `Canje registrado para ${r.customerName}. La tarjeta volvió a empezar (${template.vocab.reward} entregado).` };
   } catch (e) {
     return { ok: false, error: e instanceof Error && e.message ? e.message : 'No se pudo canjear. Revisa que la tarjeta esté completa.' };
   }

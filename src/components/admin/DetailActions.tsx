@@ -6,6 +6,8 @@ import { btnClass, inputClass } from '@/components/ui';
 import { resendAccessAction, setStatusAction, updatePlanAction, type AccessLinkState, type AdminActionResult } from '@/lib/admin-actions';
 import type { BusinessStatus, Plan } from '@/lib/contracts';
 import { cn } from '@/lib/cn';
+import { todayEc } from '@/lib/plan-rules';
+import { AutoRenewToggle } from './NewAccessForm';
 import { AccessLinkPanel } from './AccessLinkPanel';
 
 const label = 'text-xs font-semibold tracking-wide text-muted';
@@ -58,8 +60,8 @@ export function StatusControl({ businessId, status, name }: { businessId: string
 }
 
 /** Plan, vencimiento y nota interna. */
-export function PlanForm({ businessId, plan, expires, note, plans }: {
-  businessId: string; plan: Plan; expires: string; note: string; plans: { value: Plan; label: string }[];
+export function PlanForm({ businessId, plan, expires, note, plans, autoRenew }: {
+  businessId: string; plan: Plan; expires: string; note: string; plans: { value: Plan; label: string }[]; autoRenew?: boolean;
 }) {
   const [pending, start] = useTransition();
   const [res, setRes] = useState<AdminActionResult | null>(null);
@@ -74,6 +76,7 @@ export function PlanForm({ businessId, plan, expires, note, plans }: {
   return (
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
       <input type="hidden" name="businessId" value={businessId} />
+      <input type="hidden" name="currentExpires" value={expires} />
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <label htmlFor="plan" className={label}>Plan</label>
@@ -84,10 +87,11 @@ export function PlanForm({ businessId, plan, expires, note, plans }: {
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="expires" className={label}>Vence el</label>
-          <input id="expires" name="expires" type="date" defaultValue={expires} className={cn(inputClass, 'h-12', fe.expires && 'border-bad')} aria-describedby="expires-hint" />
+          <input id="expires" name="expires" type="date" min={expires && expires < todayEc() ? expires : todayEc()} defaultValue={expires} className={cn(inputClass, 'h-12', fe.expires && 'border-bad')} aria-describedby="expires-hint" />
           {fe.expires ? <p role="alert" className="text-xs text-bad">{fe.expires}</p> : <p id="expires-hint" className="text-xs text-muted">Vacío = sin vencimiento. Vencer no suspende el negocio.</p>}
         </div>
       </div>
+      <AutoRenewToggle defaultChecked={autoRenew} />
       <div className="flex flex-col gap-1.5">
         <label htmlFor="note" className={label}>Nota interna</label>
         <textarea id="note" name="note" maxLength={500} defaultValue={note} className={cn(inputClass, 'h-auto min-h-24 py-2.5')} />

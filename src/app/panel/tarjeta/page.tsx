@@ -26,7 +26,7 @@ export default async function TarjetaPage() {
         vocab={template.vocab}
         rewardIdeas={template.rewardIdeas}
         templateColors={template.program.colors}
-        imagesSlot={<BusinessImages logoUrl={program.logoUrl} coverUrl={program.coverUrl} logoText={program.logoText} />}
+        imagesSlot={<BusinessImages logoUrl={program.logoUrl} coverUrl={program.coverUrl} logoText={program.logoText} framing={program.imageFraming} />}
       />
     </>
   );

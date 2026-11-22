@@ -4,7 +4,8 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { useFormState } from 'react-dom';
 import { saveProgram } from '@/app/panel/tarjeta/actions';
 import { Card, Input, Textarea, Select } from '@/components/ui';
-import type { Program } from '@/lib/contracts';
+import type { Milestone, Program } from '@/lib/contracts';
+import { MAX_MILESTONES, validateMilestones } from '@/lib/rewards';
 import type { Vocabulary } from '@/lib/templates';
 import { money, parseMoney } from '@/lib/format';
 import { CardPreview } from './CardPreview';
@@ -63,6 +64,61 @@ function ColorField({ id, name, label, value, onChange, error, describedExtra }:
           onChange={(e) => onChange(e.target.value)} aria-invalid={!valid} aria-describedby={describedBy(id, undefined, error ?? (valid ? undefined : 'x'), describedExtra)} />
       </div>
     </FormField>
+  );
+}
+
+/** Premio solo al final, o también premios en el camino (de menos a más). */
+function MilestonesField({ value, onChange, total, rewardTitle, error }: {
+  value: Milestone[]; onChange: (v: Milestone[]) => void; total: number; rewardTitle: string; error?: string;
+}) {
+  const [mode, setMode] = useState<'final' | 'camino'>(value.length ? 'camino' : 'final');
+  const live = mode === 'camino' ? value : [];
+  const localErr = mode === 'camino' && value.length ? validateMilestones(value, total) : null;
+  const shownErr = error ?? localErr ?? undefined;
+  const free = (skip?: number) => Array.from({ length: total - 1 }, (_, i) => i + 1).filter((n) => n === skip || !value.some((m) => m.at === n));
+  const add = () => {
+    const used = new Set(value.map((m) => m.at));
+    const guess = [Math.round(total / 2), Math.round(total / 3), Math.round((2 * total) / 3), 1].find((n) => n >= 1 && n < total && !used.has(n)) ?? free()[0];
+    if (guess) onChange([...value, { at: guess, title: '' }]);
+  };
+  const pick = (m: 'final' | 'camino') => { setMode(m); if (m === 'camino' && value.length === 0) add(); };
+  return (
+    <fieldset className="space-y-3" aria-describedby={shownErr ? 'milestones-err' : undefined}>
+      <legend className="text-xs font-semibold tracking-wide text-muted">¿Cuándo das premios?</legend>
+      <input type="hidden" name="milestones" value={JSON.stringify(live.map((m) => ({ at: m.at, title: m.title.trim() })))} />
+      <div className="grid gap-2 sm:grid-cols-2">
+        {([['final', 'Solo al completar', `Un premio en el sello ${total}.`], ['camino', 'También en el camino', 'Premios que van de menos a más.']] as const).map(([id, title, text]) => (
+          <label key={id} className={'cursor-pointer rounded-xl p-3 ring-1 ring-inset transition focus-within:ring-2 focus-within:ring-navy ' + (mode === id ? 'bg-navy text-white ring-navy' : 'bg-white text-navy ring-[#C9D6E3] hover:bg-surface')}>
+            <input type="radio" name="milestonesMode" value={id} checked={mode === id} onChange={() => pick(id)} className="sr-only" />
+            <span className="block font-display text-sm font-semibold">{title}</span>
+            <span className={'mt-0.5 block text-xs ' + (mode === id ? 'text-white/75' : 'text-muted')}>{text}</span>
+          </label>
+        ))}
+      </div>
+      {mode === 'camino' && (
+        <div className="space-y-2 rounded-xl bg-surface p-3">
+          {value.map((m, i) => (
+            <div key={i} className="grid grid-cols-[128px_minmax(0,1fr)_auto] items-center gap-2">
+              <Select aria-label={`Sello del premio ${i + 1}`} value={m.at} onChange={(e) => onChange(value.map((x, j) => (j === i ? { ...x, at: Number(e.target.value) } : x)))}>
+                {free(m.at).map((n) => <option key={n} value={n}>Sello {n}</option>)}
+              </Select>
+              <Input aria-label={`Premio del sello ${m.at}`} value={m.title} maxLength={50} placeholder="Ej. Postre gratis"
+                onChange={(e) => onChange(value.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))} />
+              <button type="button" onClick={() => { const next = value.filter((_, j) => j !== i); onChange(next); if (!next.length) setMode('final'); }}
+                className="h-11 rounded-xl px-3 text-xs font-semibold text-navy ring-1 ring-inset ring-[#C9D6E3] hover:bg-white" aria-label={`Quitar el premio del sello ${m.at}`}>Quitar</button>
+            </div>
+          ))}
+          <div className="grid grid-cols-[128px_minmax(0,1fr)] items-center gap-2 text-sm">
+            <span className="px-1 font-semibold text-navy">Sello {total}</span>
+            <span className="truncate text-navy">{rewardTitle || 'Tu premio final'} <span className="text-muted">(final)</span></span>
+          </div>
+          {value.length < MAX_MILESTONES && value.length < total - 1 && (
+            <button type="button" onClick={add} className="text-sm font-semibold text-navy underline underline-offset-4">+ Agregar otro premio</button>
+          )}
+        </div>
+      )}
+      {shownErr && <p id="milestones-err" role="alert" className="text-xs font-medium text-bad">{shownErr}</p>}
+    </fieldset>
   );
 }
 
@@ -125,7 +181,8 @@ export function ProgramForm({ program, businessName, vocab, rewardIdeas, templat
       <aside aria-label="Vista previa de la tarjeta" className="lg:sticky lg:top-6 lg:col-start-2 lg:row-start-1">
         <CardPreview data={{
           businessName, programName: v.name, stampsRequired: v.stampsRequired, rewardTitle: v.rewardTitle, bg: v.bg, accent: v.accent, ink: v.ink,
-          logoText: v.logoText, logoUrl: program.logoUrl || undefined, coverUrl: program.coverUrl || undefined
+          logoText: v.logoText, logoUrl: program.logoUrl || undefined, coverUrl: program.coverUrl || undefined,
+          milestones: v.milestones, logoFraming: program.imageFraming?.logo, coverFraming: program.imageFraming?.cover
         }} />
       </aside>
 
@@ -155,7 +212,7 @@ export function ProgramForm({ program, businessName, vocab, rewardIdeas, templat
                   <output htmlFor="stampsRequired" className="w-12 shrink-0 rounded-xl bg-surface py-2 text-center font-display text-lg font-bold tabular-nums text-navy">{v.stampsRequired}</output>
                 </div>
               </FormField>
-              <FormField id="rewardTitle" label="Título del premio" error={err.rewardTitle}>
+              <FormField id="rewardTitle" label="Premio final" error={err.rewardTitle}>
                 <Input id="rewardTitle" name="rewardTitle" value={v.rewardTitle} maxLength={50} required onChange={(e) => set('rewardTitle', e.target.value)}
                   aria-invalid={!!err.rewardTitle} aria-describedby={describedBy('rewardTitle', undefined, err.rewardTitle, rewardIdeas.length ? 'rewardTitle-ideas' : undefined)} />
                 {rewardIdeas.length > 0 && (
@@ -169,6 +226,7 @@ export function ProgramForm({ program, businessName, vocab, rewardIdeas, templat
                   </div>
                 )}
               </FormField>
+              <MilestonesField value={v.milestones} onChange={(x) => set('milestones', x)} total={v.stampsRequired} rewardTitle={v.rewardTitle} error={err.milestones} />
               {show.premioExtra && (
                 <FormField id="rewardDescription" label="Descripción del premio" optional error={err.rewardDescription}>
                   <Input id="rewardDescription" name="rewardDescription" value={v.rewardDescription} maxLength={120} onChange={(e) => set('rewardDescription', e.target.value)}

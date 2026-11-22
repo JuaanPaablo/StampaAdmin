@@ -30,6 +30,10 @@ export interface Business {
   planExpiresAt?: string;          // vencimiento del plan (lo fija Stampa; el cobro es por WhatsApp)
   suspendedAt?: string;
   setupCompletedAt?: string;
+  /** Provincia (Ecuador). `city` guarda el cantón. */
+  province?: string;
+  /** El plan se renueva solo cada mes al vencer (Stampa cobra por WhatsApp). */
+  autoRenew?: boolean;
 }
 
 export interface Location {
@@ -75,6 +79,29 @@ export interface Program {
   rewardExpiresDays?: number;
   /** MVP. Foto de portada de la tarjeta (URL pública). */
   coverUrl?: string;
+  /** Premios intermedios antes del final, ordenados por sello: [{ at: 4, title: "Postre gratis" }]. Máximo 3. */
+  milestones?: Milestone[];
+  /** Encuadre del logo y la portada (posición y zoom). */
+  imageFraming?: { logo?: ImageFraming; cover?: ImageFraming };
+  /** Diseño del póster con QR. */
+  poster?: PosterStyle;
+}
+
+export interface Milestone { at: number; title: string }
+/** x, y: 0..100 (% de object-position). zoom: 1..3. */
+export interface ImageFraming { x: number; y: number; zoom: number }
+export type PosterTheme = 'stampa' | 'tarjeta' | 'claro' | 'sol' | 'personal';
+export type PosterFont = 'sora' | 'redonda' | 'clasica' | 'impacto' | 'manuscrita';
+export interface PosterStyle {
+  theme?: PosterTheme;
+  font?: PosterFont;
+  /** Solo con theme 'personal'. */
+  bg?: string;
+  accent?: string;
+  ink?: string;
+  /** Título grande. Vacío = "Pide tu sello aquí". */
+  title?: string;
+  showReward?: boolean;
 }
 
 export type ContactKind = 'whatsapp' | 'email';
@@ -99,6 +126,8 @@ export interface Customer {
   birthdayYear?: number;
   /** MVP. Cuándo confirmó su correo con el código de 6 dígitos. */
   emailVerifiedAt?: string;
+  /** Sellos intermedios ya canjeados en la tarjeta actual. */
+  milestonesClaimed?: number[];
 }
 
 export type CustomerSegment = 'nuevo' | 'activo' | 'en_riesgo' | 'inactivo' | 'por_canjear';
@@ -141,6 +170,9 @@ export interface Redemption {
   customerName: string;
   staffId: string;
   at: string;
+  /** Sello del premio intermedio; ausente = premio final. */
+  milestone?: number;
+  rewardTitle?: string;
 }
 
 export type AlertKind =
@@ -266,6 +298,7 @@ export interface NewBusinessAccessInput {
   ownerEmail: string;
   plan: Plan;
   planExpiresAt?: string;          // ISO; opcional
+  autoRenew?: boolean;
   note?: string;                   // nota interna de Stampa (p. ej. "Pizzería, 5 sucursales")
 }
 
@@ -288,7 +321,7 @@ export interface PlatformSummary {
 export interface AdminAccount { id: string; email: string; createdAt: string; lastLoginAt?: string }
 
 /** Datos que el dueño completa en el asistente de bienvenida. */
-export interface BusinessSetupInput { name: string; type: BusinessType; city?: string }
+export interface BusinessSetupInput { name: string; type: BusinessType; city?: string; province?: string }
 
 /** Lo que ve el cliente en su teléfono. */
 export interface CustomerCard {

@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import type { Milestone } from '@/lib/contracts';
+import { validateMilestones } from '@/lib/rewards';
 
 /** Esquema y tipos del formulario de tarjeta. No lleva 'use server' para poder exportar valores. */
 
@@ -33,3 +35,15 @@ export const programSchema = z.object({
   cooldownMinutes: z.coerce.number().refine((v) => (COOLDOWN_OPTIONS as readonly number[]).includes(v), 'Elige una de las opciones.')
 });
 export type ProgramInput = z.infer<typeof programSchema>;
+
+/** Lee el campo oculto `milestones` (JSON) del formulario y lo valida contra los sellos de la tarjeta. */
+export function parseMilestonesField(raw: unknown, stampsRequired: number): { value: Milestone[] } | { error: string } {
+  if (typeof raw !== 'string' || raw.trim() === '') return { value: [] };
+  let list: unknown;
+  try { list = JSON.parse(raw); } catch { return { error: 'Revisa los premios intermedios.' }; }
+  if (!Array.isArray(list)) return { error: 'Revisa los premios intermedios.' };
+  const items: Milestone[] = list.map((m) => ({ at: Number((m as Milestone)?.at), title: String((m as Milestone)?.title ?? '') }));
+  const err = validateMilestones(items, stampsRequired);
+  if (err) return { error: err };
+  return { value: items.map((m) => ({ at: m.at, title: m.title.trim() })).sort((a, b) => a.at - b.at) };
+}

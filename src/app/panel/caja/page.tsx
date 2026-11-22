@@ -40,7 +40,7 @@ export default async function CajaPage() {
         <RecentCodes codes={codes} statuses={statuses} ticketWord={v.ticket} showAmount={program.requireAmount} />
       </div>
 
-      <RewardsSection redeemable={redeemable} redemptions={redemptions} stampsRequired={program.stampsRequired} rewardTitle={program.rewardTitle}
+      <RewardsSection redeemable={redeemable} redemptions={redemptions} stampsRequired={program.stampsRequired} rewardTitle={program.rewardTitle} milestones={program.milestones}
         vocab={{ customer: v.customer, customers: v.customers, reward: v.reward }} staffNames={staffNames} />
     </div>
   );

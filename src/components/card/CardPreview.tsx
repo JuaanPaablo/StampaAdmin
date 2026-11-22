@@ -4,6 +4,8 @@ import { useId, useState } from 'react';
 import { alpha, contrastRatio, normalizeHex, readableOn } from './contrast';
 import { Isotype, StampGrid } from './StampGrid';
 import { safeImageUrl } from './images';
+import { framingStyle, lcfirst } from '@/lib/rewards';
+import type { ImageFraming, Milestone } from '@/lib/contracts';
 
 export interface PreviewData {
   businessName: string;
@@ -15,6 +17,9 @@ export interface PreviewData {
   logoUrl?: string;
   /** Foto de portada (opcional). */
   coverUrl?: string;
+  milestones?: Milestone[];
+  logoFraming?: Partial<ImageFraming>;
+  coverFraming?: Partial<ImageFraming>;
 }
 
 type Mode = 'tarjeta' | 'apple' | 'google';
@@ -24,7 +29,6 @@ const MODES: { id: Mode; label: string }[] = [
   { id: 'google', label: 'Google Wallet' }
 ];
 
-const lcfirst = (s: string) => (s ? s.charAt(0).toLowerCase() + s.slice(1) : s);
 
 export function remainingMessage(remaining: number, reward: string): string {
   const r = lcfirst(reward.trim() || 'premio');
@@ -32,7 +36,7 @@ export function remainingMessage(remaining: number, reward: string): string {
   return remaining === 1 ? `Te falta 1 sello para tu ${r}` : `Te faltan ${remaining} sellos para tu ${r}`;
 }
 
-function Logo({ text, url, accent, size }: { text: string; url?: string; accent: string; size: number }) {
+function Logo({ text, url, accent, size, framing }: { text: string; url?: string; accent: string; size: number; framing?: Partial<ImageFraming> }) {
   const [failed, setFailed] = useState<string | null>(null);
   const safe = safeImageUrl(url);
   const showImg = !!safe && failed !== safe;
@@ -44,7 +48,7 @@ function Logo({ text, url, accent, size }: { text: string; url?: string; accent:
     >
       {showImg
         // eslint-disable-next-line @next/next/no-img-element
-        ? <img src={safe} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" onError={() => setFailed(safe ?? null)} />
+        ? <img src={safe} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" style={framingStyle(framing)} onError={() => setFailed(safe ?? null)} />
         : (text || '?').slice(0, 3).toUpperCase()}
     </span>
   );
@@ -83,7 +87,11 @@ export function CardPreview({ data }: { data: PreviewData }) {
   const ink = normalizeHex(data.ink) ?? '#FFFFFF';
   const remaining = total - filled;
   const cover = safeImageUrl(data.coverUrl);
-  const message = remainingMessage(remaining, data.rewardTitle);
+  const marks = (data.milestones ?? []).filter((m) => m.at >= 1 && m.at < total && m.title.trim()).sort((a, b) => a.at - b.at);
+  const nextGift = marks.find((m) => m.at > filled);
+  const justWon = marks.find((m) => m.at === filled);
+  const message = justWon ? `¡Ganaste: ${justWon.title}!` : nextGift ? remainingMessage(nextGift.at - filled, nextGift.title) : remainingMessage(remaining, data.rewardTitle);
+  const gridMarks = marks.map((m) => m.at);
   const onKey = (e: React.KeyboardEvent, i: number) => {
     if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
     e.preventDefault();
@@ -110,17 +118,17 @@ export function CardPreview({ data }: { data: PreviewData }) {
           <div className="overflow-hidden rounded-3xl shadow-card" style={{ background: bg, color: ink }}>
             {cover && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={cover} alt="" referrerPolicy="no-referrer" className="aspect-[3/1] w-full object-cover" />
+              <div className="aspect-[3/1] w-full overflow-hidden"><img src={cover} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" style={framingStyle(data.coverFraming)} /></div>
             )}
             <div className="p-5">
             <div className="flex items-center gap-3">
-              <Logo text={data.logoText} url={data.logoUrl} accent={accent} size={44} />
+              <Logo text={data.logoText} url={data.logoUrl} accent={accent} size={44} framing={data.logoFraming} />
               <div className="min-w-0">
                 <p className="truncate text-xs" style={{ color: alpha(ink, 0.75) }}>{data.businessName}</p>
                 <p className="truncate font-display text-base font-bold">{data.programName || 'Tu tarjeta'}</p>
               </div>
             </div>
-            <div className="mt-5"><StampGrid total={total} filled={filled} bg={bg} accent={accent} ink={ink} /></div>
+            <div className="mt-5"><StampGrid total={total} filled={filled} bg={bg} accent={accent} ink={ink} milestones={gridMarks} /></div>
             <div className="mt-5">
               <Progress value={filled} total={total} accent={accent} ink={ink} />
               <p className="mt-2 text-sm font-semibold" >{message}</p>
@@ -137,7 +145,7 @@ export function CardPreview({ data }: { data: PreviewData }) {
           <div className="mx-auto w-full max-w-[300px] overflow-hidden rounded-2xl shadow-card ring-1 ring-black/10" style={{ background: bg, color: ink }}>
             <div className="flex items-center justify-between gap-2 px-4 pt-4">
               <div className="flex min-w-0 items-center gap-2">
-                <Logo text={data.logoText} url={data.logoUrl} accent={accent} size={28} />
+                <Logo text={data.logoText} url={data.logoUrl} accent={accent} size={28} framing={data.logoFraming} />
                 <span className="truncate text-sm font-semibold">{data.businessName}</span>
               </div>
               <div className="text-right">
@@ -168,7 +176,7 @@ export function CardPreview({ data }: { data: PreviewData }) {
           <div className="mx-auto w-full max-w-[320px] overflow-hidden rounded-3xl bg-white shadow-card ring-1 ring-black/10">
             <div className="px-4 pb-4 pt-4" style={{ background: bg, color: ink }}>
               <div className="flex items-center gap-2">
-                <Logo text={data.logoText} url={data.logoUrl} accent={accent} size={28} />
+                <Logo text={data.logoText} url={data.logoUrl} accent={accent} size={28} framing={data.logoFraming} />
                 <span className="truncate text-sm font-semibold">{data.businessName}</span>
               </div>
               <p className="mt-4 font-display text-xl font-bold leading-tight">{data.programName || 'Tu tarjeta'}</p>

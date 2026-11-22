@@ -11,6 +11,7 @@ import {
   type AnalyticsInput, type Rejection
 } from '../domain/analytics';
 import { getTemplate } from '../templates';
+import { effectiveExpiry, maxLocations } from '../plan-rules';
 import { normalizeEmail, validateEmail } from '../credentials';
 import { hashPassword, validatePassword, verifyPassword } from '../password';
 import { AttemptLimiter, LOCK_MS, MAX_FAILED_LOGINS } from '../login-throttle';
@@ -85,8 +86,8 @@ export function createSupabaseRepo(): Repo {
   const toBusiness = (r: Row): Business => ({
     id: r.id, name: r.name, slug: r.slug, type: r.type, city: nn(r.city), country: r.country, currency: 'USD',
     timezone: r.timezone, plan: r.plan, createdAt: iso(r.created_at)!,
-    status: r.status ?? 'active', planExpiresAt: iso(r.plan_expires_at), suspendedAt: iso(r.suspended_at),
-    setupCompletedAt: iso(r.setup_completed_at)
+    status: r.status ?? 'active', planExpiresAt: effectiveExpiry(iso(r.plan_expires_at), !!r.auto_renew), suspendedAt: iso(r.suspended_at),
+    setupCompletedAt: iso(r.setup_completed_at), province: nn(r.province), autoRenew: !!r.auto_renew
   });
   const toLocation = (r: Row): Location => ({ id: r.id, businessId: r.business_id, name: r.name, address: nn(r.address), active: r.active });
   const toStaff = (r: Row): Staff => ({
@@ -98,14 +99,15 @@ export function createSupabaseRepo(): Repo {
     rewardDescription: nn(r.reward_description), requireAmount: r.require_amount, minSpendCentsPerStamp: r.min_spend_cents_per_stamp,
     codeTtlSeconds: r.code_ttl_seconds, maxSeatsWithoutApproval: r.max_seats_without_approval, cooldownMinutes: r.cooldown_minutes,
     colors: r.colors, logoText: r.logo_text, logoUrl: nn(r.logo_url), terms: nn(r.terms), birthdayReward: nn(r.birthday_reward),
-    rewardExpiresDays: nn(r.reward_expires_days), coverUrl: nn(r.cover_url)
+    rewardExpiresDays: nn(r.reward_expires_days), coverUrl: nn(r.cover_url),
+    milestones: Array.isArray(r.milestones) ? r.milestones : [], imageFraming: r.image_framing ?? {}, poster: r.poster ?? {}
   });
   const toCustomer = (r: Row): Customer => ({
     id: r.id, businessId: r.business_id, name: r.name, contact: r.contact, contactKind: r.contact_kind,
     birthday: r.birthday_d != null && r.birthday_m != null ? { d: r.birthday_d, m: r.birthday_m } : undefined,
     consentAt: iso(r.consent_at)!, createdAt: iso(r.created_at)!, stamps: r.stamps, totalStamps: r.total_stamps,
     rewardsRedeemed: r.rewards_redeemed, lastVisitAt: iso(r.last_visit_at), wallet: nn(r.wallet), notes: nn(r.notes),
-    birthdayYear: nn(r.birthday_y), emailVerifiedAt: iso(r.email_verified_at)
+    birthdayYear: nn(r.birthday_y), emailVerifiedAt: iso(r.email_verified_at), milestonesClaimed: r.milestones_claimed ?? []
   });
   const toClaim = (r: Row): StampClaim => ({
     id: r.id, codeId: r.code_id, customerId: r.customer_id, customerName: r.customer_name, at: iso(r.at)!,
@@ -118,7 +120,8 @@ export function createSupabaseRepo(): Repo {
     claims: ((r.stamp_claims ?? []) as Row[]).map(toClaim).sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
   });
   const toRedemption = (r: Row): Redemption => ({
-    id: r.id, businessId: r.business_id, customerId: r.customer_id, customerName: r.customer_name, staffId: r.staff_id, at: iso(r.at)!
+    id: r.id, businessId: r.business_id, customerId: r.customer_id, customerName: r.customer_name, staffId: r.staff_id, at: iso(r.at)!,
+    milestone: nn(r.milestone), rewardTitle: nn(r.reward_title)
   });
   const toAudit = (r: Row): AuditEntry => ({ id: r.id, businessId: r.business_id, staffId: nn(r.staff_id), action: r.action, detail: r.detail, at: iso(r.at)! });
   const toRejection = (r: Row): Rejection => ({
@@ -272,6 +275,7 @@ export function createSupabaseRepo(): Repo {
       const upd: Row = {};
       if (patch.name !== undefined) { if (patch.name.trim().length < 2) throw new Error('Escribe el nombre del negocio.'); upd.name = patch.name.trim(); }
       if (patch.city !== undefined) upd.city = patch.city.trim() || null;
+      if (patch.province !== undefined) upd.province = patch.province.trim() || null;
       if (patch.timezone !== undefined) upd.timezone = patch.timezone;
       if (patch.type !== undefined) upd.type = patch.type;
       if (Object.keys(upd).length) must(await db.from('businesses').update(upd).eq('id', id).select('id').single(), 'Negocio');
@@ -280,15 +284,30 @@ export function createSupabaseRepo(): Repo {
     },
 
     async listLocations(businessId) {
-      return (must(await db.from('locations').select('*').eq('business_id', businessId).order('name'), 'Sucursales') as Row[]).map(toLocation);
+      return (must(await db.from('locations').select('*').eq('business_id', businessId).is('deleted_at', null).order('created_at').order('id'), 'Sucursales') as Row[]).map(toLocation);
     },
     async upsertLocation(businessId, loc) {
       if (!loc.name?.trim()) throw new Error('Escribe el nombre de la sucursal.');
+      const live = await repo.listLocations(businessId);
+      if (loc.id && !live.some((l) => l.id === loc.id)) throw new Error('No encontramos esa sucursal.');
+      if (!loc.id) {
+        const limit = maxLocations((await getBiz(businessId)).plan);
+        if (live.length >= limit) throw new Error(`Tu plan permite ${limit === 1 ? '1 sucursal' : `hasta ${limit} sucursales`}. Escríbenos para ampliarlo.`);
+      }
       const row: Row = { business_id: businessId, name: loc.name.trim() };
       if (loc.id) row.id = loc.id;
       if (loc.address !== undefined) row.address = loc.address;
       if (loc.active !== undefined) row.active = loc.active;
       return toLocation(must(await db.from('locations').upsert(row).select('*').single(), 'Sucursal'));
+    },
+
+    async deleteLocation(businessId, id, actorId) {
+      const live = await repo.listLocations(businessId);
+      const loc = live.find((l) => l.id === id);
+      if (!loc) throw new Error('No encontramos esa sucursal.');
+      if (live.length <= 1) throw new Error('Debe quedar al menos una sucursal.');
+      must(await db.from('locations').update({ deleted_at: new Date().toISOString(), active: false }).eq('business_id', businessId).eq('id', id), 'Sucursal');
+      await logAudit(businessId, actorId, 'location.delete', `Se eliminó la sucursal ${loc.name}.`);
     },
 
     async listStaff(businessId) { return listStaffRows(businessId); },
@@ -371,7 +390,7 @@ export function createSupabaseRepo(): Repo {
         requireAmount: 'require_amount', minSpendCentsPerStamp: 'min_spend_cents_per_stamp', codeTtlSeconds: 'code_ttl_seconds',
         maxSeatsWithoutApproval: 'max_seats_without_approval', cooldownMinutes: 'cooldown_minutes', colors: 'colors',
         logoText: 'logo_text', logoUrl: 'logo_url', terms: 'terms', birthdayReward: 'birthday_reward', rewardExpiresDays: 'reward_expires_days',
-        coverUrl: 'cover_url'
+        coverUrl: 'cover_url', milestones: 'milestones', imageFraming: 'image_framing', poster: 'poster'
       };
       const upd: Row = {};
       const changed: string[] = [];
@@ -479,8 +498,8 @@ export function createSupabaseRepo(): Repo {
 
     async listRedeemable(businessId) { return (await repo.listCustomers(businessId, { segment: 'por_canjear' })); },
 
-    async redeemReward(businessId, customerId, staffId) {
-      const r = await rpcOrThrow('redeem_reward', { p_business_id: businessId, p_customer_id: customerId, p_staff_id: staffId });
+    async redeemReward(businessId, customerId, staffId, milestone) {
+      const r = await rpcOrThrow('redeem_reward', { p_business_id: businessId, p_customer_id: customerId, p_staff_id: staffId, p_milestone: milestone ?? null });
       return toRedemption(must(await db.from('redemptions').select('*').eq('id', r.redemption_id).single(), 'Canje'));
     },
 
@@ -531,6 +550,7 @@ export function createSupabaseRepo(): Repo {
         p_slug: provisionalSlug(), p_owner_name: email.split('@')[0].slice(0, 80) || 'Dueño', p_program: getTemplate('otro').program,
         p_token_hash: hashToken(token), p_invite_ttl_seconds: INVITE_TTL_HOURS * 3600
       });
+      if (input.autoRenew && input.planExpiresAt) must(await db.from('businesses').update({ auto_renew: true }).eq('id', r.business_id), 'Negocio');
       const invite: IssuedToken = { token, kind: 'invite', expiresAt: iso(r.expires_at)! };
       return { business: await getBiz(r.business_id), ownerId: r.owner_id as string, invite };
     },
@@ -542,11 +562,11 @@ export function createSupabaseRepo(): Repo {
     async getPlatformSummary(): Promise<PlatformSummary> {
       const now = Date.now();
       const [rows, totals] = await Promise.all([
-        fetchAll((f, t) => db.from('businesses').select('id,status,plan_expires_at').order('id').range(f, t), 'Negocios'),
+        fetchAll((f, t) => db.from('businesses').select('id,status,plan_expires_at,auto_renew').order('id').range(f, t), 'Negocios'),
         rpc('platform_stats', {})
       ]);
       const st = (r: Row) => (r.status ?? 'active') as string;
-      const exp = (r: Row) => (r.plan_expires_at ? Date.parse(r.plan_expires_at) : Infinity);
+      const exp = (r: Row) => { const e = effectiveExpiry(iso(r.plan_expires_at), !!r.auto_renew, now); return e ? Date.parse(e) : Infinity; };
       return {
         businesses: {
           total: rows.length,
@@ -582,12 +602,13 @@ export function createSupabaseRepo(): Repo {
       return getBiz(id);
     },
 
-    async updateBusinessPlan(id, plan, planExpiresAt, note) {
+    async updateBusinessPlan(id, plan, planExpiresAt, note, autoRenew) {
       await getBiz(id);
       if (!PLANS.includes(plan)) fail('Elige un plan válido.');
       if (planExpiresAt && Number.isNaN(Date.parse(planExpiresAt))) fail('La fecha de vencimiento no es válida.');
       const exp = planExpiresAt ? new Date(planExpiresAt).toISOString() : null;
       const upd: Row = { plan, plan_expires_at: exp };
+      if (autoRenew !== undefined) upd.auto_renew = autoRenew && !!exp;
       if (note !== undefined) upd.admin_note = note.trim() ? note.trim().slice(0, 500) : null;
       must(await db.from('businesses').update(upd).eq('id', id), 'Negocio');
       await logAudit(id, null, 'business.plan', `Plan ${plan}${exp ? ` hasta ${exp.slice(0, 10)}` : ' sin vencimiento'}.`);
@@ -704,7 +725,7 @@ export function createSupabaseRepo(): Repo {
       if (name.length > 80) fail('El nombre es demasiado largo (máximo 80 letras).');
       if (name.toLowerCase() === PLACEHOLDER_BUSINESS_NAME.toLowerCase()) fail('Escribe el nombre real de tu negocio.');
       const typeChanged = b.type !== input.type;
-      const upd: Row = { name, type: input.type, city: input.city?.trim() || null };
+      const upd: Row = { name, type: input.type, city: input.city?.trim() || null, province: input.province?.trim() || null };
       if (b.status === 'setup') {
         // Mientras no esté activo, el slug sigue al nombre (-2, -3... si ya existe). Después ya no cambia: el QR impreso depende de él.
         const base = slugify(name);
@@ -732,7 +753,7 @@ export function createSupabaseRepo(): Repo {
       const b = await getBiz(businessId);
       if (b.status === 'suspended') fail('Tu cuenta está suspendida. Escríbenos por WhatsApp.');
       if (b.name === PLACEHOLDER_BUSINESS_NAME) fail('Primero escribe el nombre de tu negocio.');
-      const locs = must(await db.from('locations').select('id').eq('business_id', businessId).eq('active', true).limit(1), 'Sucursales') as Row[];
+      const locs = must(await db.from('locations').select('id').eq('business_id', businessId).eq('active', true).is('deleted_at', null).limit(1), 'Sucursales') as Row[];
       if (!locs.length) fail('Agrega al menos una sucursal.');
       if (b.status === 'setup') {
         must(await db.from('businesses').update({ status: 'active', setup_completed_at: new Date().toISOString() }).eq('id', businessId).eq('status', 'setup'), 'Negocio');

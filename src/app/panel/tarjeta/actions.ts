@@ -5,8 +5,11 @@ import { getContext } from '@/lib/context';
 import { hasRole } from '@/lib/auth';
 import { parseMoney } from '@/lib/format';
 import { IMAGE_TYPES, MAX_IMAGE_BYTES } from '@/lib/mvp-rules';
-import { programSchema, type ProgramFormState } from '@/components/card/schema';
+import { parseMilestonesField, programSchema, type ProgramFormState } from '@/components/card/schema';
 import type { ImageActionResult, ImageKind } from '@/components/card/images';
+import { cleanFraming } from '@/lib/rewards';
+import { z } from 'zod';
+import type { PosterStyle } from '@/lib/contracts';
 
 function revalidateCard(): void {
   revalidatePath('/panel/tarjeta');
@@ -36,6 +39,8 @@ export async function saveProgram(_prev: ProgramFormState, formData: FormData): 
   if (requireAmount && (minSpend < 50 || minSpend > 50000)) {
     return { ok: false, message: 'Revisa los campos marcados. No se guardó nada.', errors: { minSpend: 'Indica un monto entre $0,50 y $500,00.' } };
   }
+  const ms = parseMilestonesField(formData.get('milestones'), d.stampsRequired);
+  if ('error' in ms) return { ok: false, message: 'Revisa los campos marcados. No se guardó nada.', errors: { milestones: ms.error } };
 
   try {
     await ctx.repo.updateProgram(ctx.business.id, {
@@ -43,6 +48,7 @@ export async function saveProgram(_prev: ProgramFormState, formData: FormData): 
       stampsRequired: d.stampsRequired,
       rewardTitle: d.rewardTitle,
       rewardDescription: d.rewardDescription,
+      milestones: ms.value,
       colors: { bg: d.bg.toUpperCase(), accent: d.accent.toUpperCase(), ink: d.ink.toUpperCase() },
       logoText: d.logoText.toUpperCase(),
       birthdayReward: d.birthdayReward,
@@ -82,6 +88,9 @@ export async function uploadImageAction(fd: FormData): Promise<ImageActionResult
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const url = await ctx.repo.uploadBusinessImage(ctx.business.id, kind as ImageKind, { bytes, contentType: file.type });
+    // Imagen nueva: vuelve al encuadre centrado.
+    const { [kind as ImageKind]: _old, ...rest } = ctx.program.imageFraming ?? {};
+    await ctx.repo.updateProgram(ctx.business.id, { imageFraming: rest }, ctx.staff.id);
     revalidateCard();
     return { ok: true, url };
   } catch (e) {
@@ -98,10 +107,58 @@ export async function removeImageAction(fd: FormData): Promise<ImageActionResult
   const kind = fd.get('kind');
   if (typeof kind !== 'string' || !(KINDS as string[]).includes(kind)) return { ok: false, error: 'No sabemos qué imagen quieres quitar.' };
   try {
-    await ctx.repo.updateProgram(ctx.business.id, kind === 'logo' ? { logoUrl: '' } : { coverUrl: '' }, ctx.staff.id);
+    const { [kind as ImageKind]: _old, ...rest } = ctx.program.imageFraming ?? {};
+    await ctx.repo.updateProgram(ctx.business.id, kind === 'logo' ? { logoUrl: '', imageFraming: rest } : { coverUrl: '', imageFraming: rest }, ctx.staff.id);
   } catch {
     return { ok: false, error: 'No pudimos quitar la imagen. Intenta de nuevo.' };
   }
   revalidateCard();
+  return { ok: true };
+}
+
+/** Guarda el encuadre (posición y zoom) del logo o la portada. FormData: kind, x, y, zoom. */
+export async function saveFramingAction(fd: FormData): Promise<ImageActionResult> {
+  const ctx = await getContext({ allowSetup: true });
+  if (!hasRole(ctx, ['owner', 'manager'])) return NO_PERMISSION;
+  const kind = fd.get('kind');
+  if (typeof kind !== 'string' || !(KINDS as string[]).includes(kind)) return { ok: false, error: 'No sabemos qué imagen quieres ajustar.' };
+  const framing = cleanFraming({ x: Number(fd.get('x')), y: Number(fd.get('y')), zoom: Number(fd.get('zoom')) });
+  try {
+    const current = ctx.program.imageFraming ?? {};
+    await ctx.repo.updateProgram(ctx.business.id, { imageFraming: { ...current, [kind]: framing } }, ctx.staff.id);
+  } catch {
+    return { ok: false, error: 'No pudimos guardar el encuadre. Intenta de nuevo.' };
+  }
+  revalidateCard();
+  return { ok: true };
+}
+
+const THEMES = ['stampa', 'tarjeta', 'claro', 'sol', 'personal'] as const;
+const FONTS = ['sora', 'redonda', 'clasica', 'impacto', 'manuscrita'] as const;
+const posterSchema = z.object({
+  theme: z.enum(THEMES),
+  font: z.enum(FONTS),
+  bg: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  accent: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  ink: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  title: z.string().trim().max(40, 'El título puede tener hasta 40 letras.').default(''),
+  showReward: z.boolean().default(true)
+});
+
+/** Guarda el diseño del póster con QR (tema, letra, colores propios, título). */
+export async function savePosterAction(design: unknown): Promise<{ ok: boolean; error?: string }> {
+  const ctx = await getContext();
+  if (!hasRole(ctx, ['owner', 'manager'])) return { ok: false, error: 'Solo el dueño o un gerente puede cambiar el póster.' };
+  const parsed = posterSchema.safeParse(design);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Revisa el diseño.' };
+  const d = parsed.data;
+  const poster: PosterStyle = { theme: d.theme, font: d.font, title: d.title, showReward: d.showReward };
+  if (d.theme === 'personal') Object.assign(poster, { bg: d.bg?.toUpperCase(), accent: d.accent?.toUpperCase(), ink: d.ink?.toUpperCase() });
+  try {
+    await ctx.repo.updateProgram(ctx.business.id, { poster }, ctx.staff.id);
+  } catch {
+    return { ok: false, error: 'No pudimos guardar el diseño. Intenta de nuevo.' };
+  }
+  revalidatePath('/panel/tarjeta/poster');
   return { ok: true };
 }
