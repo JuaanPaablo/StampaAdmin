@@ -26,6 +26,15 @@ export function emailPreviewEnabled(): boolean {
   return process.env.NODE_ENV !== 'production';
 }
 
+/**
+ * Producción sin Resend: los flujos PÚBLICOS (recuperar contraseña, ingreso de un cliente existente) nunca muestran el
+ * código o el enlace en pantalla, aunque STAMPA_EMAIL_PREVIEW=on: cualquiera podría escribir el correo de otra persona
+ * y quedarse con su cuenta. Las invitaciones que ve el dueño o el administrador sí pueden mostrarse.
+ */
+export function publicPreviewBlocked(): boolean {
+  return process.env.VERCEL_ENV === 'production' && !emailConfigured();
+}
+
 export async function sendEmail(msg: EmailMessage): Promise<EmailResult> {
   const key = process.env.RESEND_API_KEY?.trim();
   if (!key) {

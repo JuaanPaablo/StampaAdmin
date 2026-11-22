@@ -148,39 +148,69 @@ export async function enhancePhoto(ctx: PanelContext, photoId: string, style: Ph
   if (lastMinute >= 3) return { ok: false, error: 'Vas muy rápido. Espera un minuto y vuelve a intentar.', quota };
 
   const prompt = stylePrompt(style, ctx.business.type, season);
+  const sample = !imageAiConfigured();
+  if (sample && process.env.VERCEL_ENV === 'production') return { ok: false, error: 'La mejora de fotos con IA no está configurada todavía. Avísale a Stampa.', quota };
+
+  // Reserva el cupo ANTES de llamar a la IA: con varios clics simultáneos, los que pasen del límite se deshacen aquí.
+  const since = monthStartIso(ctx.business.timezone);
+  const rec = await ctx.repo.recordMarketing(ctx.business.id, {
+    staffId: ctx.staff.id, kind: 'photo_edit', topic: season ? `${style}:${season}` : style, output: { source: photoId }, model: 'pendiente'
+  });
+  const usedNow = await ctx.repo.countMarketingSince(ctx.business.id, since, ['photo_edit']);
+  if (usedNow > quota.limit) {
+    await ctx.repo.finishMarketing(ctx.business.id, rec.id, null);
+    return { ok: false, error: `Ya usaste tus ${quota.limit} fotos con IA de este mes. Se renuevan el 1 del próximo mes.`, quota: { used: quota.limit, limit: quota.limit, left: 0 } };
+  }
+
   let bytes: Uint8Array;
   let model = 'ejemplo';
-  const sample = !imageAiConfigured();
-  if (sample) {
-    if (process.env.VERCEL_ENV === 'production') return { ok: false, error: 'La mejora de fotos con IA no está configurada todavía. Avísale a Stampa.', quota };
-    // Desarrollo sin clave: copia la original para poder probar el flujo completo sin gastar saldo.
-    bytes = await readImage(source);
-  } else {
-    try {
+  try {
+    if (sample) {
+      // Desarrollo sin clave: copia la original para poder probar el flujo completo sin gastar saldo.
+      bytes = await readImage(source);
+    } else {
       const r = await editPhoto(source, prompt);
       model = r.model;
-      bytes = await readImage(r.url);
-    } catch (e) {
-      return { ok: false, error: e instanceof ImageAiError ? e.message : 'No pudimos mejorar la foto. Intenta de nuevo (no se descontó).', quota };
+      bytes = await readImage(r.url, true);
     }
+  } catch (e) {
+    await ctx.repo.finishMarketing(ctx.business.id, rec.id, null).catch(() => {});
+    return { ok: false, error: e instanceof ImageAiError ? e.message : 'No pudimos mejorar la foto. Intenta de nuevo (no se descontó).', quota };
   }
 
   const photo = await ctx.repo.uploadMarketingPhoto(ctx.business.id, { bytes, contentType: 'image/jpeg' });
-  await ctx.repo.recordMarketing(ctx.business.id, {
-    staffId: ctx.staff.id, kind: 'photo_edit', topic: season ? `${style}:${season}` : style,
-    output: { source: photoId, photo: photo.id }, model
-  });
-  const used = quota.used + 1;
+  await ctx.repo.finishMarketing(ctx.business.id, rec.id, { output: { source: photoId, photo: photo.id }, model });
+  const used = Math.min(quota.limit, usedNow);
   return { ok: true, photo, sample, quota: { used, limit: quota.limit, left: Math.max(0, quota.limit - used) } };
 }
 
+const MAX_AI_BYTES = 10 * 1024 * 1024;
+
 /** Lee una imagen (https o data URL) y comprueba que sea JPG. */
-async function readImage(url: string): Promise<Uint8Array> {
+async function readImage(url: string, fromAi = false): Promise<Uint8Array> {
   if (url.startsWith('data:image/jpeg;base64,')) return new Uint8Array(Buffer.from(url.split(',')[1], 'base64'));
   if (url.startsWith('data:')) throw new ImageAiError('Formato de imagen no soportado.');
-  const res = await fetch(url, { cache: 'no-store' });
-  if (!res.ok) throw new ImageAiError('No pudimos descargar la foto mejorada. Intenta de nuevo.');
-  const bytes = new Uint8Array(await res.arrayBuffer());
+  if (fromAi) {
+    // Solo se descargan resultados de fal (https, dominio fal.media), con límite de tiempo y tamaño.
+    let host = '';
+    try { const u = new URL(url); host = u.protocol === 'https:' ? u.hostname : ''; } catch { /* inválida */ }
+    if (!/(^|\.)fal\.(media|ai)$/.test(host)) { console.warn('[fal] host inesperado', host); throw new ImageAiError('La IA devolvió una dirección inesperada. Intenta de nuevo.'); }
+  }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15_000);
+  let bytes: Uint8Array;
+  try {
+    const res = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
+    if (!res.ok) throw new ImageAiError('No pudimos descargar la foto mejorada. Intenta de nuevo.');
+    if (Number(res.headers.get('content-length') ?? 0) > MAX_AI_BYTES) throw new ImageAiError('La foto mejorada es demasiado grande.');
+    bytes = new Uint8Array(await res.arrayBuffer());
+    if (bytes.byteLength > MAX_AI_BYTES) throw new ImageAiError('La foto mejorada es demasiado grande.');
+  } catch (e) {
+    if (e instanceof ImageAiError) throw e;
+    throw new ImageAiError('No pudimos descargar la foto mejorada. Intenta de nuevo.');
+  } finally {
+    clearTimeout(timer);
+  }
   if (!(bytes[0] === 0xff && bytes[1] === 0xd8)) throw new ImageAiError('La IA devolvió un formato inesperado. Intenta de nuevo.');
   return bytes;
 }

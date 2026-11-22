@@ -1,5 +1,6 @@
 'use server';
 
+import { publicPreviewBlocked } from '@/lib/email';
 import { redirect, RedirectType } from 'next/navigation';
 import { z } from 'zod';
 import { sendOtpEmail } from '@/lib/access-mail';
@@ -24,6 +25,7 @@ import type { FlowField, FlowState, SimpleState } from '@/components/customer/ty
 
 const GENERIC = 'Algo salió mal. Inténtalo de nuevo en unos minutos.';
 const SEND_FAILED = 'No pudimos enviarte el código. Inténtalo de nuevo en unos minutos.';
+const PREVIEW_EXISTING = 'Este correo ya tiene tarjeta. Por ahora ábrela desde el teléfono donde te registraste.';
 const TOO_MANY = 'Pediste demasiados códigos. Espera un rato e inténtalo de nuevo.';
 const BAD_CODE = 'El código no es correcto o ya venció. Revisa el correo o pide uno nuevo.';
 const EXPIRED = 'Pasó demasiado tiempo. Vuelve a escribir tu correo para recibir un código nuevo.';
@@ -67,6 +69,12 @@ async function issueAndSend(pending: PendingSignup, businessName: string | undef
   limiter.fail(ip);
 
   const repo = getRepo();
+  // Producción sin Resend: el código se mostraría en pantalla. Solo se permite para correos nuevos (no hay cuenta que
+  // tomar). Con un correo que ya tiene tarjetas, mostrarlo dejaría entrar a cualquiera como ese cliente.
+  if (publicPreviewBlocked()) {
+    const existing = await repo.listCustomerCards(pending.email).catch(() => []);
+    if (existing.length > 0) return { ...base, step: 'form', error: PREVIEW_EXISTING };
+  }
   let code: string;
   try {
     const r = await repo.requestEmailOtp(pending.email);

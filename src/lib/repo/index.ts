@@ -157,6 +157,8 @@ export interface Repo {
   /** URL de una foto del negocio, o null si el id no es válido o no existe. */
   marketingPhotoUrl(businessId: string, photoId: string): Promise<string | null>;
   listMarketing(businessId: string, limit?: number): Promise<MarketingGeneration[]>;
+  /** Completa un registro reservado (modelo y resultado) o lo borra si la generación falló. */
+  finishMarketing(businessId: string, id: string, patch: { output?: unknown; model?: string } | null): Promise<void>;
   /** Uso por negocio desde `sinceIso` (panel de administrador). */
   marketingUsage(sinceIso: string, businessId?: string): Promise<Record<string, MarketingUsage>>;
 }

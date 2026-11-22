@@ -3,7 +3,7 @@
 import { sendAccessEmail } from '@/lib/access-mail';
 import { requestIp } from '@/lib/admin-session';
 import { normalizeEmail, validateEmail } from '@/lib/credentials';
-import { emailPreviewEnabled } from '@/lib/email';
+import { emailPreviewEnabled, publicPreviewBlocked } from '@/lib/email';
 import { AttemptLimiter } from '@/lib/login-throttle';
 import { getRepo } from '@/lib/repo';
 
@@ -42,7 +42,8 @@ export async function requestPasswordReset(_prev: ForgotState, formData: FormDat
       if (staff?.email) {
         const token = await repo.issueAccessToken(staff.id, 'reset');
         const { result, url } = await sendAccessEmail({ to: staff.email, token });
-        if (!result.sent && result.preview && emailPreviewEnabled()) previewUrl = url;
+        // En producción sin Resend el enlace NUNCA se muestra: sería tomar la cuenta de cualquiera con su correo.
+        if (!result.sent && result.preview && emailPreviewEnabled() && !publicPreviewBlocked()) previewUrl = url;
       }
     }
   } catch (e) {

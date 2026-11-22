@@ -923,6 +923,17 @@ export function createSupabaseRepo(): Repo {
       return db.storage.from('branding').getPublicUrl(`${businessId}/marketing/${photoId}`).data.publicUrl;
     },
 
+    async finishMarketing(businessId, id, patch) {
+      if (patch === null) {
+        must(await db.from('marketing_generations').delete().eq('id', id).eq('business_id', businessId), 'Marketing');
+        return;
+      }
+      const upd: Record<string, unknown> = {};
+      if (patch.output !== undefined) upd.output = patch.output;
+      if (patch.model) upd.model = patch.model;
+      if (Object.keys(upd).length) must(await db.from('marketing_generations').update(upd).eq('id', id).eq('business_id', businessId), 'Marketing');
+    },
+
     async listMarketing(businessId, limit = 30) {
       const rows = must(await db.from('marketing_generations').select('*').eq('business_id', businessId)
         .order('created_at', { ascending: false }).limit(limit), 'Marketing') as Row[];

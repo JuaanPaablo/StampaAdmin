@@ -890,6 +890,13 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
       return marketing.filter((m) => m.businessId === businessId).slice(0, limit);
     },
 
+    async finishMarketing(businessId, id, patch) {
+      const i = marketing.findIndex((m) => m.id === id && m.businessId === businessId);
+      if (i < 0) return;
+      if (patch === null) marketing.splice(i, 1);
+      else marketing[i] = { ...marketing[i], ...(patch.output !== undefined ? { output: patch.output } : {}), ...(patch.model ? { model: patch.model } : {}) };
+    },
+
     async marketingUsage(sinceIso, businessId) {
       const out: Record<string, MarketingUsage> = {};
       for (const m of marketing) {
