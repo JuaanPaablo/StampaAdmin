@@ -29,8 +29,8 @@ export function cleanMilestones(list: Milestone[] | undefined, total: number): M
 }
 
 /** Error en español o null. */
-export function validateMilestones(list: Milestone[], total: number): string | null {
-  if (list.length > MAX_MILESTONES) return `Puedes dar hasta ${MAX_MILESTONES} premios antes del final.`;
+export function validateMilestones(list: Milestone[], total: number, max: number = MAX_MILESTONES): string | null {
+  if (list.length > max) return max === 1 ? 'Tu plan permite 1 premio antes del final.' : `Puedes dar hasta ${max} premios antes del final.`;
   const seen = new Set<number>();
   for (const m of list) {
     if (!Number.isInteger(m.at) || m.at < 1 || m.at >= total) return `Cada premio intermedio debe ir antes del sello ${total}.`;

@@ -1,5 +1,6 @@
 'use server';
 
+import { features } from '@/lib/plans';
 import { revalidatePath } from 'next/cache';
 import { getContext } from '@/lib/context';
 import { hasRole } from '@/lib/auth';
@@ -39,7 +40,7 @@ export async function saveProgram(_prev: ProgramFormState, formData: FormData): 
   if (requireAmount && (minSpend < 50 || minSpend > 50000)) {
     return { ok: false, message: 'Revisa los campos marcados. No se guardó nada.', errors: { minSpend: 'Indica un monto entre $0,50 y $500,00.' } };
   }
-  const ms = parseMilestonesField(formData.get('milestones'), d.stampsRequired);
+  const ms = parseMilestonesField(formData.get('milestones'), d.stampsRequired, features(ctx.business.plan).maxMilestones);
   if ('error' in ms) return { ok: false, message: 'Revisa los campos marcados. No se guardó nada.', errors: { milestones: ms.error } };
 
   try {
@@ -149,6 +150,7 @@ const posterSchema = z.object({
 export async function savePosterAction(design: unknown): Promise<{ ok: boolean; error?: string }> {
   const ctx = await getContext();
   if (!hasRole(ctx, ['owner', 'manager'])) return { ok: false, error: 'Solo el dueño o un gerente puede cambiar el póster.' };
+  if (!features(ctx.business.plan).posterDesign) return { ok: false, error: 'Diseñar el póster está disponible desde el plan Standard.' };
   const parsed = posterSchema.safeParse(design);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Revisa el diseño.' };
   const d = parsed.data;

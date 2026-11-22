@@ -1,3 +1,6 @@
+import { features } from '@/lib/plans';
+import { monthStartIso } from '@/lib/marketing/service';
+import { planPrice } from '@/lib/plans';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { ReactNode } from 'react';
@@ -30,6 +33,7 @@ export default async function AdminBusinessPage({ params }: { params: { id: stri
   const st = businessStatus(b);
   const now = Date.now();
   const name = displayName(b);
+  const ai = (await repo.marketingUsage(monthStartIso(b.timezone), b.id))[b.id] ?? { count: 0, promptTokens: 0, cachedTokens: 0, completionTokens: 0 };
 
   return (
     <>
@@ -87,8 +91,12 @@ export default async function AdminBusinessPage({ params }: { params: { id: stri
           <h2 className="mb-4 font-display text-base font-semibold text-navy">Plan y vencimiento</h2>
           <PlanForm
             businessId={b.id} plan={b.plan} expires={toDateInput(b.planExpiresAt)} note={note ?? ''} autoRenew={b.autoRenew}
-            plans={PLANS.map((p) => ({ value: p, label: PLAN_LABEL[p] }))}
+            plans={PLANS.map((p) => ({ value: p, label: `${PLAN_LABEL[p]} · ${planPrice(p)}` }))}
           />
+          <p className="mt-4 border-t border-line pt-3 text-sm text-muted">
+            Marketing este mes: <strong className="text-navy">{ai.count} de {features(b.plan).aiTexts}</strong> textos con IA
+            {ai.count > 0 && <> · {ai.promptTokens.toLocaleString('es-EC')} tokens de entrada ({ai.cachedTokens.toLocaleString('es-EC')} en caché) y {ai.completionTokens.toLocaleString('es-EC')} de salida</>}
+          </p>
         </Card>
 
         <Card>

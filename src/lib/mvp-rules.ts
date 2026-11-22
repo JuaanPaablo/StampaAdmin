@@ -1,11 +1,9 @@
 import { randomBytes } from 'node:crypto';
-import type { Plan } from './contracts';
 
 /** Reglas compartidas del MVP (las usan el repo en memoria, el de Supabase y la interfaz). Sin dependencias de servidor salvo crypto. */
 
 export const PLACEHOLDER_BUSINESS_NAME = 'Negocio nuevo';
-export const PLANS: Plan[] = ['gratis', 'negocio', 'pro'];
-export const PLAN_LABEL: Record<Plan, string> = { gratis: 'Gratis', negocio: 'Negocio', pro: 'Pro' };
+export { PLANS, PLAN_LABEL } from './plans';
 
 export const OTP_TTL_MINUTES = 10;
 export const OTP_MAX_PER_HOUR = 5;

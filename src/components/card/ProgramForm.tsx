@@ -19,6 +19,8 @@ import { cooldownLabel, describeChanges, ttlLabel, valuesFromProgram, type FormV
 
 export interface ProgramFormProps {
   program: Program;
+  /** Premios intermedios que permite el plan. */
+  maxMilestones?: number;
   businessName: string;
   vocab: Vocabulary;
   rewardIdeas: string[];
@@ -68,12 +70,12 @@ function ColorField({ id, name, label, value, onChange, error, describedExtra }:
 }
 
 /** Premio solo al final, o también premios en el camino (de menos a más). */
-function MilestonesField({ value, onChange, total, rewardTitle, error }: {
-  value: Milestone[]; onChange: (v: Milestone[]) => void; total: number; rewardTitle: string; error?: string;
+function MilestonesField({ value, onChange, total, rewardTitle, error, max = MAX_MILESTONES }: {
+  value: Milestone[]; onChange: (v: Milestone[]) => void; total: number; rewardTitle: string; error?: string; max?: number;
 }) {
   const [mode, setMode] = useState<'final' | 'camino'>(value.length ? 'camino' : 'final');
   const live = mode === 'camino' ? value : [];
-  const localErr = mode === 'camino' && value.length ? validateMilestones(value, total) : null;
+  const localErr = mode === 'camino' && value.length ? validateMilestones(value, total, max) : null;
   const shownErr = error ?? localErr ?? undefined;
   const free = (skip?: number) => Array.from({ length: total - 1 }, (_, i) => i + 1).filter((n) => n === skip || !value.some((m) => m.at === n));
   const add = () => {
@@ -112,8 +114,11 @@ function MilestonesField({ value, onChange, total, rewardTitle, error }: {
             <span className="px-1 font-semibold text-navy">Sello {total}</span>
             <span className="truncate text-navy">{rewardTitle || 'Tu premio final'} <span className="text-muted">(final)</span></span>
           </div>
-          {value.length < MAX_MILESTONES && value.length < total - 1 && (
+          {value.length < max && value.length < total - 1 && (
             <button type="button" onClick={add} className="text-sm font-semibold text-navy underline underline-offset-4">+ Agregar otro premio</button>
+          )}
+          {value.length >= max && max < MAX_MILESTONES && (
+            <p className="text-xs text-muted">Tu plan permite {max} {max === 1 ? 'premio' : 'premios'} antes del final. Con Standard o Pro puedes dar hasta {MAX_MILESTONES}.</p>
           )}
         </div>
       )}
@@ -122,7 +127,7 @@ function MilestonesField({ value, onChange, total, rewardTitle, error }: {
   );
 }
 
-export function ProgramForm({ program, businessName, vocab, rewardIdeas, templateColors, action = saveProgram, wizardStep, imagesSlot, extraActions, submitLabel }: ProgramFormProps) {
+export function ProgramForm({ program, maxMilestones, businessName, vocab, rewardIdeas, templateColors, action = saveProgram, wizardStep, imagesSlot, extraActions, submitLabel }: ProgramFormProps) {
   const [state, formAction] = useFormState<ProgramFormState, FormData>(action, { ok: false });
   const [v, setV] = useState<FormValues>(() => valuesFromProgram(program));
   const set = <K extends keyof FormValues>(k: K, val: FormValues[K]) => setV((p) => ({ ...p, [k]: val }));
@@ -226,7 +231,7 @@ export function ProgramForm({ program, businessName, vocab, rewardIdeas, templat
                   </div>
                 )}
               </FormField>
-              <MilestonesField value={v.milestones} onChange={(x) => set('milestones', x)} total={v.stampsRequired} rewardTitle={v.rewardTitle} error={err.milestones} />
+              <MilestonesField value={v.milestones} onChange={(x) => set('milestones', x)} total={v.stampsRequired} rewardTitle={v.rewardTitle} error={err.milestones} max={maxMilestones} />
               {show.premioExtra && (
                 <FormField id="rewardDescription" label="Descripción del premio" optional error={err.rewardDescription}>
                   <Input id="rewardDescription" name="rewardDescription" value={v.rewardDescription} maxLength={120} onChange={(e) => set('rewardDescription', e.target.value)}

@@ -8,7 +8,7 @@ const DAY = 86_400_000;
 
 function row(id: string, b: Partial<Business>, owner?: Partial<NonNullable<AdminBusinessRow['owner']>>): AdminBusinessRow {
   return {
-    business: { id, name: 'Café Uno', slug: id, type: 'cafeteria', country: 'EC', currency: 'USD', timezone: 'America/Guayaquil', plan: 'negocio', createdAt: new Date(NOW - 10 * DAY).toISOString(), ...b },
+    business: { id, name: 'Café Uno', slug: id, type: 'cafeteria', country: 'EC', currency: 'USD', timezone: 'America/Guayaquil', plan: 'standard', createdAt: new Date(NOW - 10 * DAY).toISOString(), ...b },
     owner: owner ? { staffId: 'emp_' + id, name: 'Ana', email: `${id}@correo.com`, invitePending: false, ...owner } : undefined,
     stats: { customers: 0, stamps30d: 0, redemptions30d: 0 }
   };

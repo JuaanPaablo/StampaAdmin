@@ -19,7 +19,7 @@ function setup() {
 
 /** Negocio nuevo con su dueño ya con contraseña, nombre real, sucursal y asistente terminado. */
 async function activeBusiness(repo: ReturnType<typeof setup>['repo'], email: string, name: string) {
-  const { business, ownerId, invite } = await repo.createBusinessAccess({ ownerEmail: email, plan: 'negocio' });
+  const { business, ownerId, invite } = await repo.createBusinessAccess({ ownerEmail: email, plan: 'standard' });
   await repo.consumeAccessToken(invite.token, PASSWORD, 'Dueña Prueba');
   await repo.saveBusinessSetup(business.id, { name, type: 'cafeteria', city: 'Quito' }, ownerId);
   await repo.upsertLocation(business.id, { name: 'Principal', address: 'Av. Amazonas' });
@@ -69,17 +69,17 @@ describe('alta de negocio por Stampa e invitación', () => {
 
   it('valida correo, plan, fecha y correo repetido', async () => {
     const { repo } = setup();
-    await expect(repo.createBusinessAccess({ ownerEmail: 'no-es-correo', plan: 'gratis' })).rejects.toThrow('Escribe un correo válido.');
+    await expect(repo.createBusinessAccess({ ownerEmail: 'no-es-correo', plan: 'basico' })).rejects.toThrow('Escribe un correo válido.');
     await expect(repo.createBusinessAccess({ ownerEmail: 'a@b.ec', plan: 'oro' as never })).rejects.toThrow('Elige un plan válido.');
-    await expect(repo.createBusinessAccess({ ownerEmail: 'a@b.ec', plan: 'gratis', planExpiresAt: 'mañana' })).rejects.toThrow('La fecha de vencimiento no es válida.');
-    await repo.createBusinessAccess({ ownerEmail: 'a@b.ec', plan: 'gratis' });
-    await expect(repo.createBusinessAccess({ ownerEmail: 'A@B.EC', plan: 'gratis' })).rejects.toThrow(EMAIL_TAKEN);
+    await expect(repo.createBusinessAccess({ ownerEmail: 'a@b.ec', plan: 'basico', planExpiresAt: 'mañana' })).rejects.toThrow('La fecha de vencimiento no es válida.');
+    await repo.createBusinessAccess({ ownerEmail: 'a@b.ec', plan: 'basico' });
+    await expect(repo.createBusinessAccess({ ownerEmail: 'A@B.EC', plan: 'basico' })).rejects.toThrow(EMAIL_TAKEN);
     expect(await repo.listBusinesses()).toHaveLength(1);
   });
 
   it('contraseña débil o nombre inválido no gastan el enlace', async () => {
     const { repo } = setup();
-    const { invite } = await repo.createBusinessAccess({ ownerEmail: 'debil@b.ec', plan: 'gratis' });
+    const { invite } = await repo.createBusinessAccess({ ownerEmail: 'debil@b.ec', plan: 'basico' });
     await expect(repo.consumeAccessToken(invite.token, 'corta')).rejects.toThrow(/10 caracteres/);
     await expect(repo.consumeAccessToken(invite.token, PASSWORD, 'A')).rejects.toThrow('Escribe un nombre de al menos 2 letras.');
     expect(await repo.peekAccessToken(invite.token)).not.toBeNull();
@@ -90,7 +90,7 @@ describe('alta de negocio por Stampa e invitación', () => {
 describe('enlaces de un solo uso', () => {
   it('vence a las 72 h (invitación) y a los 60 min (restablecer)', async () => {
     const { repo, advance } = setup();
-    const { ownerId, invite } = await repo.createBusinessAccess({ ownerEmail: 'vence@b.ec', plan: 'gratis' });
+    const { ownerId, invite } = await repo.createBusinessAccess({ ownerEmail: 'vence@b.ec', plan: 'basico' });
     advance(INVITE_TTL_HOURS * HOUR - 1);
     expect(await repo.peekAccessToken(invite.token)).not.toBeNull();
     advance(1);
@@ -105,7 +105,7 @@ describe('enlaces de un solo uso', () => {
 
   it('reemitir invalida el anterior del mismo tipo', async () => {
     const { repo } = setup();
-    const { ownerId, invite } = await repo.createBusinessAccess({ ownerEmail: 'reemite@b.ec', plan: 'gratis' });
+    const { ownerId, invite } = await repo.createBusinessAccess({ ownerEmail: 'reemite@b.ec', plan: 'basico' });
     const reset = await repo.issueAccessToken(ownerId, 'reset');
     const again = await repo.issueAccessToken(ownerId, 'invite');
     expect(await repo.peekAccessToken(invite.token)).toBeNull();
@@ -117,7 +117,7 @@ describe('enlaces de un solo uso', () => {
 
   it('el enlace de restablecer cambia la contraseña y desbloquea la cuenta', async () => {
     const { repo } = setup();
-    const { ownerId, invite } = await repo.createBusinessAccess({ ownerEmail: 'olvido@b.ec', plan: 'gratis' });
+    const { ownerId, invite } = await repo.createBusinessAccess({ ownerEmail: 'olvido@b.ec', plan: 'basico' });
     await repo.consumeAccessToken(invite.token, PASSWORD);
     for (let i = 0; i < 5; i++) await repo.verifyCredentials('olvido@b.ec', 'mala-contrasena');
     expect(await repo.isLoginLocked('olvido@b.ec')).toBe(true);
@@ -130,7 +130,7 @@ describe('enlaces de un solo uso', () => {
 
   it('no emite para personas desactivadas o sin correo, y el enlace muere si la persona se desactiva', async () => {
     const { repo } = setup();
-    const { business, ownerId } = await repo.createBusinessAccess({ ownerEmail: 'jefa@b.ec', plan: 'gratis' });
+    const { business, ownerId } = await repo.createBusinessAccess({ ownerEmail: 'jefa@b.ec', plan: 'basico' });
     const cajero = await repo.upsertStaff(business.id, { name: 'Luis', role: 'cashier' });
     await expect(repo.issueAccessToken(cajero.id, 'invite')).rejects.toThrow('Esa persona no tiene correo de acceso.');
     await repo.setStaffEmail(business.id, cajero.id, 'luis@b.ec', ownerId);
@@ -145,8 +145,8 @@ describe('enlaces de un solo uso', () => {
 describe('setStaffEmail y findStaffByEmail', () => {
   it('rechaza correos repetidos en toda la plataforma y al cambiar invalida los enlaces', async () => {
     const { repo } = setup();
-    const a = await repo.createBusinessAccess({ ownerEmail: 'uno@a.ec', plan: 'gratis' });
-    const b = await repo.createBusinessAccess({ ownerEmail: 'dos@b.ec', plan: 'gratis' });
+    const a = await repo.createBusinessAccess({ ownerEmail: 'uno@a.ec', plan: 'basico' });
+    const b = await repo.createBusinessAccess({ ownerEmail: 'dos@b.ec', plan: 'basico' });
     await expect(repo.setStaffEmail(b.business.id, b.ownerId, ' UNO@a.ec ', b.ownerId)).rejects.toThrow(EMAIL_TAKEN);
     await expect(repo.setStaffEmail(b.business.id, b.ownerId, 'mal', b.ownerId)).rejects.toThrow('Escribe un correo válido.');
     await expect(repo.setStaffEmail(a.business.id, b.ownerId, 'tres@b.ec')).rejects.toThrow('No encontramos a esa persona del equipo.');
@@ -169,7 +169,7 @@ describe('asistente de bienvenida', () => {
     const first = await activeBusiness(repo, 'luna1@a.ec', 'Café Luna');
     expect(first.business.slug).toBe('cafe-luna');
 
-    const { business, ownerId } = await repo.createBusinessAccess({ ownerEmail: 'luna2@a.ec', plan: 'gratis' });
+    const { business, ownerId } = await repo.createBusinessAccess({ ownerEmail: 'luna2@a.ec', plan: 'basico' });
     await repo.uploadBusinessImage(business.id, 'logo', { bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0, 0, 0]), contentType: 'image/png' });
     const saved = await repo.saveBusinessSetup(business.id, { name: 'Café Luna', type: 'gimnasio' }, ownerId);
     expect(saved.slug).toBe('cafe-luna-2');
@@ -187,7 +187,7 @@ describe('asistente de bienvenida', () => {
 
   it('valida el nombre', async () => {
     const { repo } = setup();
-    const { business } = await repo.createBusinessAccess({ ownerEmail: 'nombre@a.ec', plan: 'gratis' });
+    const { business } = await repo.createBusinessAccess({ ownerEmail: 'nombre@a.ec', plan: 'basico' });
     await expect(repo.saveBusinessSetup(business.id, { name: ' x ', type: 'otro' })).rejects.toThrow('Escribe el nombre de tu negocio.');
     await expect(repo.saveBusinessSetup(business.id, { name: 'negocio NUEVO', type: 'otro' })).rejects.toThrow('Escribe el nombre real de tu negocio.');
     await expect(repo.saveBusinessSetup(business.id, { name: 'a'.repeat(81), type: 'otro' })).rejects.toThrow(/demasiado largo/);
@@ -195,7 +195,7 @@ describe('asistente de bienvenida', () => {
 
   it('completeBusinessSetup exige nombre real y una sucursal activa', async () => {
     const { repo } = setup();
-    const { business, ownerId } = await repo.createBusinessAccess({ ownerEmail: 'listo@a.ec', plan: 'gratis' });
+    const { business, ownerId } = await repo.createBusinessAccess({ ownerEmail: 'listo@a.ec', plan: 'basico' });
     await expect(repo.completeBusinessSetup(business.id, ownerId)).rejects.toThrow('Primero escribe el nombre de tu negocio.');
     await repo.saveBusinessSetup(business.id, { name: 'Flores Ana', type: 'floristeria' }, ownerId);
     await expect(repo.completeBusinessSetup(business.id, ownerId)).rejects.toThrow('Agrega al menos una sucursal.');
@@ -209,7 +209,7 @@ describe('asistente de bienvenida', () => {
 
   it('uploadBusinessImage valida tipo, tamaño y firma', async () => {
     const { repo } = setup();
-    const { business } = await repo.createBusinessAccess({ ownerEmail: 'img@a.ec', plan: 'gratis' });
+    const { business } = await repo.createBusinessAccess({ ownerEmail: 'img@a.ec', plan: 'basico' });
     const jpg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2]);
     await expect(repo.uploadBusinessImage(business.id, 'cover', { bytes: jpg, contentType: 'image/gif' })).rejects.toThrow('La imagen debe ser PNG, JPG o WEBP.');
     await expect(repo.uploadBusinessImage(business.id, 'cover', { bytes: jpg, contentType: 'image/png' })).rejects.toThrow('El archivo no parece una imagen válida.');
@@ -241,7 +241,7 @@ describe('setBusinessStatus', () => {
 
   it('reactivar un negocio que nunca terminó el asistente lo devuelve a setup', async () => {
     const { repo } = setup();
-    const { business } = await repo.createBusinessAccess({ ownerEmail: 'nunca@a.ec', plan: 'gratis' });
+    const { business } = await repo.createBusinessAccess({ ownerEmail: 'nunca@a.ec', plan: 'basico' });
     await repo.setBusinessStatus(business.id, 'suspended');
     expect((await repo.setBusinessStatus(business.id, 'active')).status).toBe('setup');
   });
@@ -256,7 +256,7 @@ describe('setBusinessStatus', () => {
 
   it('un negocio en setup no recibe sellos', async () => {
     const { repo } = setup();
-    const { business, ownerId, invite } = await repo.createBusinessAccess({ ownerEmail: 'setup@a.ec', plan: 'gratis' });
+    const { business, ownerId, invite } = await repo.createBusinessAccess({ ownerEmail: 'setup@a.ec', plan: 'basico' });
     await repo.consumeAccessToken(invite.token, PASSWORD);
     const c = await repo.registerCustomer(business.id, { name: 'Prueba', contact: 'p@p.ec', contactKind: 'email' });
     const made = await repo.createStampCode(business.id, { staffId: ownerId, ticket: 'S-1', amountCents: 1000, seats: 1 });
@@ -357,7 +357,7 @@ describe('clientes de la página pública', () => {
   it('rechaza negocios en setup o suspendidos', async () => {
     const { repo } = setup();
     const msg = 'Este negocio no está recibiendo clientes nuevos por ahora.';
-    const { business: enSetup } = await repo.createBusinessAccess({ ownerEmail: 'rs@a.ec', plan: 'gratis' });
+    const { business: enSetup } = await repo.createBusinessAccess({ ownerEmail: 'rs@a.ec', plan: 'basico' });
     await expect(repo.registerVerifiedCustomer(enSetup.id, { name: 'Ana', email: 'ana@c.ec', birthday: { d: 1, m: 1 } })).rejects.toThrow(msg);
     const { business } = await activeBusiness(repo, 'rs2@a.ec', 'Spa Zen');
     await repo.setBusinessStatus(business.id, 'suspended');
@@ -368,7 +368,7 @@ describe('clientes de la página pública', () => {
     const { repo, advance } = setup();
     const a = await activeBusiness(repo, 'cards1@a.ec', 'Café Uno');
     const b = await activeBusiness(repo, 'cards2@a.ec', 'Café Dos');
-    const { business: enSetup } = await repo.createBusinessAccess({ ownerEmail: 'cards3@a.ec', plan: 'gratis' });
+    const { business: enSetup } = await repo.createBusinessAccess({ ownerEmail: 'cards3@a.ec', plan: 'basico' });
     const ca = await repo.registerVerifiedCustomer(a.business.id, { name: 'Lucía', email: 'lucia@c.ec', birthday: { d: 5, m: 5 } });
     advance(MIN);
     await repo.registerVerifiedCustomer(b.business.id, { name: 'Lucía', email: 'lucia@c.ec', birthday: { d: 5, m: 5 } });
@@ -452,9 +452,9 @@ describe('panel de administrador: resumen y lista de negocios', () => {
     const { repo, now, advance } = setup();
     const activo = await activeBusiness(repo, 'res1@a.ec', 'Café Activo');
     advance(MIN);
-    const vence = await repo.createBusinessAccess({ ownerEmail: 'res2@a.ec', plan: 'negocio', planExpiresAt: new Date(now() + 3 * 24 * HOUR).toISOString(), note: 'Paga por WhatsApp' });
+    const vence = await repo.createBusinessAccess({ ownerEmail: 'res2@a.ec', plan: 'standard', planExpiresAt: new Date(now() + 3 * 24 * HOUR).toISOString(), note: 'Paga por WhatsApp' });
     advance(MIN);
-    await repo.createBusinessAccess({ ownerEmail: 'res3@a.ec', plan: 'gratis', planExpiresAt: new Date(now() - 24 * HOUR).toISOString() });
+    await repo.createBusinessAccess({ ownerEmail: 'res3@a.ec', plan: 'basico', planExpiresAt: new Date(now() - 24 * HOUR).toISOString() });
     advance(MIN);
     const susp = await activeBusiness(repo, 'res4@a.ec', 'Spa Pausa');
     await repo.setBusinessStatus(susp.business.id, 'suspended');

@@ -37,13 +37,13 @@ export const programSchema = z.object({
 export type ProgramInput = z.infer<typeof programSchema>;
 
 /** Lee el campo oculto `milestones` (JSON) del formulario y lo valida contra los sellos de la tarjeta. */
-export function parseMilestonesField(raw: unknown, stampsRequired: number): { value: Milestone[] } | { error: string } {
+export function parseMilestonesField(raw: unknown, stampsRequired: number, max?: number): { value: Milestone[] } | { error: string } {
   if (typeof raw !== 'string' || raw.trim() === '') return { value: [] };
   let list: unknown;
   try { list = JSON.parse(raw); } catch { return { error: 'Revisa los premios intermedios.' }; }
   if (!Array.isArray(list)) return { error: 'Revisa los premios intermedios.' };
   const items: Milestone[] = list.map((m) => ({ at: Number((m as Milestone)?.at), title: String((m as Milestone)?.title ?? '') }));
-  const err = validateMilestones(items, stampsRequired);
+  const err = validateMilestones(items, stampsRequired, max);
   if (err) return { error: err };
   return { value: items.map((m) => ({ at: m.at, title: m.title.trim() })).sort((a, b) => a.at - b.at) };
 }

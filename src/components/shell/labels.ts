@@ -8,7 +8,7 @@ export function roleLabel(role: Role, vocab: Vocabulary): string {
   return vocab.staffRole.charAt(0).toUpperCase() + vocab.staffRole.slice(1);
 }
 
-export const PLAN_LABEL: Record<Plan, string> = { gratis: 'Gratis', negocio: 'Negocio', pro: 'Pro' };
+export { PLAN_LABEL } from '@/lib/plans';
 
 export const TIMEZONES: { value: string; label: string }[] = [
   { value: 'America/Guayaquil', label: 'Ecuador continental (Guayaquil)' },

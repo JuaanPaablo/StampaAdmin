@@ -4,7 +4,9 @@ import { getContext } from '@/lib/context';
 import { requireRole } from '@/lib/auth';
 import { customerUrl } from '@/lib/urls';
 import { btnClass, PageHeader } from '@/components/ui';
-import { POSTER_FONTS_HREF, type PosterSize } from '@/components/card/PosterSheet';
+import { POSTER_FONTS_HREF, PosterSheet, type PosterSize } from '@/components/card/PosterSheet';
+import { PlanLock } from '@/components/shell/PlanLock';
+import { features } from '@/lib/plans';
 import { PosterDesigner } from '@/components/card/PosterDesigner';
 import { PrintButton } from '@/components/card/PrintButton';
 
@@ -26,6 +28,12 @@ export default async function PosterPage({ searchParams }: { searchParams?: { ta
   });
 
   const tabClass = (active: boolean) => btnClass(active ? 'dark' : 'ghost', 'sm');
+  const canDesign = features(business.plan).posterDesign;
+  const sheet = {
+    size, businessName: business.name, logoText: program.logoText, logoUrl: program.logoUrl || undefined,
+    logoFraming: program.imageFraming?.logo, colors: program.colors, signupUrl, qrSvg,
+    rewardTitle: program.rewardTitle, stampsRequired: program.stampsRequired
+  };
 
   return (
     <>
@@ -49,11 +57,17 @@ export default async function PosterPage({ searchParams }: { searchParams?: { ta
       </div>
       {/* eslint-disable-next-line @next/next/no-page-custom-font */}
       <link rel="stylesheet" href={POSTER_FONTS_HREF} />
-      <PosterDesigner initial={program.poster} sheet={{
-        size, businessName: business.name, logoText: program.logoText, logoUrl: program.logoUrl || undefined,
-        logoFraming: program.imageFraming?.logo, colors: program.colors, signupUrl, qrSvg,
-        rewardTitle: program.rewardTitle, stampsRequired: program.stampsRequired
-      }} />
+      {canDesign ? (
+        <PosterDesigner initial={program.poster} sheet={sheet} />
+      ) : (
+        <div className="flex flex-col gap-5">
+          <div data-noprint>
+            <PlanLock plan="standard" businessName={business.name} title="Diseña tu póster"
+              text="Cambia colores, tipo de letra y título para que el póster combine con tu local." />
+          </div>
+          <PosterSheet {...sheet} />
+        </div>
+      )}
     </>
   );
 }

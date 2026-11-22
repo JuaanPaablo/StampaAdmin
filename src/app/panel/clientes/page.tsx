@@ -1,3 +1,4 @@
+import { features } from '@/lib/plans';
 import Link from 'next/link';
 import { getContext } from '@/lib/context';
 import { requireRole } from '@/lib/auth';
@@ -45,7 +46,8 @@ export default async function ClientesPage({ searchParams }: { searchParams: SP 
   const from = filtered.length ? (page - 1) * PAGE_SIZE + 1 : 0;
   const now = Date.now();
   const required = program.stampsRequired;
-  const exportHref = href({ q, segmento, orden }, '/panel/clientes/exportar');
+  const canFilterExport = features(business.plan).exportCsv;
+  const exportHref = canFilterExport ? href({ q, segmento, orden }, '/panel/clientes/exportar') : '/panel/clientes/exportar';
 
   const chips = [{ key: 'todos', label: 'Todos' }, ...SEGMENTS.map((s) => ({ key: s.key, label: s.label }))];
 
@@ -54,7 +56,7 @@ export default async function ClientesPage({ searchParams }: { searchParams: SP 
       <PageHeader
         title={cap(v.customers)}
         subtitle={`${num(counts.todos)} ${counts.todos === 1 ? v.customer : v.customers} en ${business.name}.`}
-        actions={<a href={exportHref} className={btnClass('ghost')}>Exportar CSV</a>}
+        actions={<a href={exportHref} className={btnClass('ghost')} title={canFilterExport ? undefined : 'Descarga la lista completa. Exportar con filtros es del plan Standard.'}>Exportar CSV</a>}
       />
       <NewCustomerForm customerLabel={v.customer} />
 

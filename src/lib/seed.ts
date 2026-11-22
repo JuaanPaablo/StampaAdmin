@@ -176,7 +176,7 @@ function buildBusiness(cfg: BizCfg, now: number, out: SeedData): void {
   const bizCreated = now - rng.int(120, 300) * DAY_MS;
   out.businesses.push({
     id: cfg.id, name: cfg.name, slug: foldText(cfg.name).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''), type: cfg.type, city: cfg.city,
-    country: 'EC', currency: 'USD', timezone: 'America/Guayaquil', plan: cfg.id === 'biz_esquina' ? 'negocio' : 'gratis',
+    country: 'EC', currency: 'USD', timezone: 'America/Guayaquil', plan: cfg.id === 'biz_esquina' ? 'standard' : 'basico',
     createdAt: new Date(bizCreated).toISOString()
   });
   const locs: Location[] = cfg.locations.map((l, i) => ({ id: `loc_${short}_${i + 1}`, businessId: cfg.id, name: l.name, address: l.address, active: true }));

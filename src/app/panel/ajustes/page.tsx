@@ -1,3 +1,4 @@
+import { planIncludes, planPrice } from '@/lib/plans';
 import { getContext } from '@/lib/context';
 import { requireRole } from '@/lib/auth';
 import { BUSINESS_TYPES } from '@/lib/templates';
@@ -111,7 +112,8 @@ export default async function AjustesPage() {
         <dl className="mt-4 grid gap-4 sm:grid-cols-2">
           <div className="rounded-xl bg-surface p-4">
             <dt className="text-xs font-semibold text-muted">Tu plan</dt>
-            <dd className="mt-1 font-display text-2xl font-bold text-navy">{PLAN_LABEL[business.plan]}</dd>
+            <dd className="mt-1 font-display text-2xl font-bold text-navy">{PLAN_LABEL[business.plan]} <span className="text-base font-semibold text-muted">· {planPrice(business.plan)} al mes</span></dd>
+            <dd className="mt-0.5 text-xs text-muted">IVA incluido</dd>
           </div>
           <div className="rounded-xl bg-surface p-4">
             <dt className="text-xs font-semibold text-muted">{business.autoRenew ? 'Se renueva el' : 'Vence el'}</dt>
@@ -126,6 +128,9 @@ export default async function AjustesPage() {
               : `Tu plan vence en ${expiry} ${expiry === 1 ? 'día' : 'días'}. Escríbenos para renovarlo.`}
           </p>
         )}
+        <ul className="mt-4 grid gap-1.5 text-sm text-navy sm:grid-cols-2">
+          {planIncludes(business.plan).map((t) => <li key={t} className="flex gap-2"><span aria-hidden="true" className="text-[#12683F]">✓</span>{t}</li>)}
+        </ul>
         <p className="mt-4 text-sm text-muted">¿Quieres renovar o cambiar de plan? Escríbenos y te ayudamos.</p>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <a href={stampaWhatsappUrl(`Hola, quiero renovar/cambiar mi plan de Stampa para ${business.name}`)} target="_blank" rel="noopener noreferrer" className={btnClass('primary')}>

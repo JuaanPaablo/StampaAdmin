@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { features } from '@/lib/plans';
 import { getContext } from '@/lib/context';
 import { toCsv } from '@/components/control/csv';
 import { auditLabel } from '@/components/control/labels';
@@ -9,6 +10,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: Request) {
   const { repo, business, template, staff } = await getContext();
   if (staff.role === 'cashier') return new NextResponse('Solo dueño y gerente pueden exportar.', { status: 403 });
+  if (!features(business.plan).exportCsv) return new NextResponse('Exportar el registro está disponible desde el plan Standard.', { status: 403 });
 
   const accion = (new URL(req.url).searchParams.get('accion') ?? '').slice(0, 60);
   const [entries, staffList] = await Promise.all([repo.listAudit(business.id, 5000), repo.listStaff(business.id)]);

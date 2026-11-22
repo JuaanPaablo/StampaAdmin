@@ -1,3 +1,5 @@
+import { features } from '@/lib/plans';
+import { PlanLock } from '@/components/shell/PlanLock';
 import { Card, EmptyState, PageHeader, Stat } from '@/components/ui';
 import { getContext } from '@/lib/context';
 import { requireRole } from '@/lib/auth';
@@ -49,9 +51,10 @@ export default async function ControlPage({ searchParams }: { searchParams: Reco
   const range: RangeKey = rawRange === '30d' || rawRange === '90d' ? rawRange : '7d';
   const accion = (first(searchParams.accion) ?? '').slice(0, 60);
 
+  const plan = features(business.plan);
   const [alertsAll, report, codes, audit, staffList] = await Promise.all([
-    repo.listAlerts(business.id, 200),
-    repo.getStaffReport(business.id, range),
+    plan.alerts ? repo.listAlerts(business.id, 200) : Promise.resolve([]),
+    plan.staffReport ? repo.getStaffReport(business.id, range) : Promise.resolve([]),
     repo.listStampCodes(business.id, 15),
     repo.listAudit(business.id, 1000),
     repo.listStaff(business.id)
@@ -78,19 +81,31 @@ export default async function ControlPage({ searchParams }: { searchParams: Reco
       <PageHeader title="Control" subtitle={'Qué pasa en ' + v.counter.toLowerCase() + ' de ' + business.name + ': alertas, equipo y registro de actividad.'}
         actions={<RangeTabs range={range} accion={accion || undefined} />} />
 
+      {plan.alerts && (
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3" role="region" aria-label={'Resumen de ' + rangeLabel}>
         <Stat label="Alertas críticas" value={critical} hint={'en ' + rangeLabel} />
         <Stat label="Advertencias" value={warning} hint={'en ' + rangeLabel} />
         <Stat label="Personas a revisar" value={flagged} hint={flagged === 0 ? 'Nadie fuera de lo normal' : 'Sellos por ' + v.ticket.toLowerCase() + ' muy altos'} />
       </div>
+      )}
 
       <Section id="alertas" title="Alertas">
+        {plan.alerts ? (
         <AlertList alerts={alerts.slice(0, 30)} staffNames={staffNames} range={range} ticketWord={v.ticket}
           emptyText="No hubo códigos compartidos, aprobaciones ni anulaciones sospechosas. Si algo cambia, lo verás aquí primero." />
+        ) : (
+        <PlanLock plan="standard" businessName={business.name} title="Alertas antifraude"
+          text="Te avisamos si un código circula fuera del local, si alguien repite tickets o anula sellos." />
+        )}
       </Section>
 
       <Section id="cajeros" title={'Equipo en ' + v.counter.toLowerCase()} hint={'Cuántos sellos da cada ' + v.staffRole + ' por ' + v.ticket.toLowerCase() + ', frente al resto del equipo.'}>
+        {plan.staffReport ? (
         <StaffTable rows={report} ticketPlural={plural(v.ticket)} staffWord={v.staffRole} ticketWord={v.ticket} />
+        ) : (
+        <PlanLock plan="pro" businessName={business.name} title={'Reporte por ' + v.staffRole}
+          text={'Compara cuántos sellos da cada ' + v.staffRole + ' por ' + v.ticket.toLowerCase() + ' y detecta a quien se sale de lo normal.'} />
+        )}
       </Section>
 
       <Section id="codigos" title="Códigos recientes">
@@ -103,7 +118,7 @@ export default async function ControlPage({ searchParams }: { searchParams: Reco
 
       <Section id="actividad" title="Registro de actividad">
         <AuditSection entries={filtered} actions={actions} selected={accion} range={range} staffNames={staffNames} timezone={business.timezone}
-          vocab={{ reward: v.reward, ticket: v.ticket }} page={page} pages={pages} total={matching.length} pageSize={AUDIT_PAGE_SIZE} />
+          vocab={{ reward: v.reward, ticket: v.ticket }} page={page} pages={pages} total={matching.length} pageSize={AUDIT_PAGE_SIZE} canExport={plan.exportCsv} />
       </Section>
     </div>
   );

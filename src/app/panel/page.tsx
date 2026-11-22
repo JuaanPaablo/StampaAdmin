@@ -1,3 +1,5 @@
+import { features } from '@/lib/plans';
+import { PlanLock } from '@/components/shell/PlanLock';
 import { pendingRewards } from '@/lib/rewards';
 import Link from 'next/link';
 import { getContext } from '@/lib/context';
@@ -26,15 +28,17 @@ function greeting(timezone: string): string {
 }
 
 export default async function ResumenPage({ searchParams }: { searchParams: { rango?: string } }) {
-  const range: RangeKey = searchParams.rango === '7d' || searchParams.rango === '90d' ? searchParams.rango : '30d';
   const ctx = await getContext();
   requireRole(ctx, ['owner', 'manager']);
   const { repo, business, program, template, staff } = ctx;
+  const plan = features(business.plan);
+  const asked: RangeKey = searchParams.rango === '7d' || searchParams.rango === '90d' ? searchParams.rango : '30d';
+  const range: RangeKey = asked === '90d' && plan.statsDays < 90 ? '30d' : asked;
   const v = template.vocab;
   const [dash, redeemable, alerts] = await Promise.all([
     repo.getDashboard(business.id, range),
     repo.listRedeemable(business.id),
-    repo.listAlerts(business.id, 3)
+    plan.alerts ? repo.listAlerts(business.id, 3) : Promise.resolve([])
   ]);
   const now = Date.now();
   const k = dash.kpis, p = dash.previous;
@@ -74,7 +78,7 @@ export default async function ResumenPage({ searchParams }: { searchParams: { ra
       <PageHeader
         title={`${greeting(business.timezone)}, ${staff.name.split(' ')[0]}`}
         subtitle={`Así va ${business.name} en los últimos ${RANGE_LABEL[range]}.`}
-        actions={<RangeTabs current={range} />}
+        actions={<RangeTabs current={range} maxDays={plan.statsDays} />}
       />
 
       <section aria-label="Indicadores" className="grid grid-cols-2 gap-3 lg:grid-cols-3 lg:gap-4">
@@ -186,6 +190,10 @@ export default async function ResumenPage({ searchParams }: { searchParams: { ra
         </Card>
       </section>
 
+      {!plan.alerts ? (
+        <PlanLock plan="standard" businessName={business.name} title="Alertas antifraude"
+          text="Te avisamos si un código circula fuera del local, si alguien repite tickets o da más sellos de lo normal." />
+      ) : (
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-display text-base font-semibold text-navy">Alertas recientes</h2>
@@ -205,6 +213,7 @@ export default async function ResumenPage({ searchParams }: { searchParams: { ra
           </ul>
         )}
       </Card>
+      )}
     </div>
   );
 }

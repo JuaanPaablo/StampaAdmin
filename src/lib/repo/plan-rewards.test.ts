@@ -16,7 +16,7 @@ function setup() {
   return { repo, advance: (ms: number) => { now += ms; } };
 }
 
-async function business(repo: ReturnType<typeof setup>['repo'], plan: 'gratis' | 'negocio' | 'pro', email = 'duena@p.ec') {
+async function business(repo: ReturnType<typeof setup>['repo'], plan: 'basico' | 'standard' | 'pro', email = 'duena@p.ec') {
   const { business: b, ownerId, invite } = await repo.createBusinessAccess({ ownerEmail: email, plan });
   await repo.consumeAccessToken(invite.token, PASSWORD, 'Dueña');
   await repo.saveBusinessSetup(b.id, { name: 'Pizzería ' + email, type: 'restaurante', province: 'Pichincha', city: 'Quito' }, ownerId);
@@ -35,12 +35,12 @@ describe('textos con el nombre del premio', () => {
 
 describe('sucursales según el plan', () => {
   it('límites 1 / 3 / 10', () => {
-    expect([maxLocations('gratis'), maxLocations('negocio'), maxLocations('pro')]).toEqual([1, 3, 10]);
+    expect([maxLocations('basico'), maxLocations('standard'), maxLocations('pro')]).toEqual([1, 3, 10]);
   });
 
   it('no deja crear más de las que permite el plan, pero sí editar', async () => {
     const { repo } = setup();
-    const { id } = await business(repo, 'negocio');
+    const { id } = await business(repo, 'standard');
     for (const n of ['A', 'B', 'C']) await repo.upsertLocation(id, { name: n });
     await expect(repo.upsertLocation(id, { name: 'D' })).rejects.toThrow('hasta 3 sucursales');
     const [first] = await repo.listLocations(id);
@@ -49,7 +49,7 @@ describe('sucursales según el plan', () => {
 
   it('eliminar la oculta, libera el cupo y exige dejar al menos una', async () => {
     const { repo } = setup();
-    const { id, ownerId } = await business(repo, 'negocio');
+    const { id, ownerId } = await business(repo, 'standard');
     const a = await repo.upsertLocation(id, { name: 'Granados' });
     const b = await repo.upsertLocation(id, { name: 'República' });
     const c = await repo.upsertLocation(id, { name: 'Cumbayá' });
@@ -164,7 +164,7 @@ describe('provincia y ciudad', () => {
 
   it('el asistente guarda la provincia', async () => {
     const { repo } = setup();
-    const { id } = await business(repo, 'gratis');
+    const { id } = await business(repo, 'basico');
     expect((await repo.getBusiness(id))?.province).toBe('Pichincha');
   });
 });

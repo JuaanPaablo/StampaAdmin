@@ -1,5 +1,6 @@
 'use server';
 
+import { features } from '@/lib/plans';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
@@ -108,7 +109,7 @@ export async function saveCardStep(_prev: ProgramFormState, fd: FormData): Promi
   if (requireAmount && (minSpend < 50 || minSpend > 50000)) {
     return { ok: false, message: 'Revisa los campos marcados.', errors: { minSpend: 'Indica un monto entre $0,50 y $500,00.' } };
   }
-  const ms = parseMilestonesField(fd.get('milestones'), d.stampsRequired);
+  const ms = parseMilestonesField(fd.get('milestones'), d.stampsRequired, features(ctx.business.plan).maxMilestones);
   if ('error' in ms) return { ok: false, message: 'Revisa los campos marcados.', errors: { milestones: ms.error } };
   try {
     await ctx.repo.updateProgram(ctx.business.id, {

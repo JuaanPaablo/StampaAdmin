@@ -1,3 +1,4 @@
+import { features } from '@/lib/plans';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { redirect } from 'next/navigation';
@@ -132,7 +133,7 @@ export default async function BienvenidaPage({ searchParams }: { searchParams?: 
       <Shell wide>
         <Stepper step={2} />
         <StepTitle title="Tu imagen" text="Logo, portada y colores de tu tarjeta. Puedes hacerlo después." />
-        <ProgramForm
+        <ProgramForm maxMilestones={features(business.plan).maxMilestones}
           program={program}
           businessName={business.name}
           vocab={template.vocab}
@@ -205,7 +206,7 @@ export default async function BienvenidaPage({ searchParams }: { searchParams?: 
       <Shell wide>
         <Stepper step={4} />
         <StepTitle title="Tu tarjeta" text={`Define cuántos sellos necesita tu ${template.vocab.customer} y qué gana. Mira cómo queda en la vista previa.`} />
-        <ProgramForm
+        <ProgramForm maxMilestones={features(business.plan).maxMilestones}
           program={program}
           businessName={business.name}
           vocab={template.vocab}

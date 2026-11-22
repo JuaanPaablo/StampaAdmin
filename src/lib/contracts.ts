@@ -12,7 +12,7 @@ export type BusinessType =
   | 'peluqueria' | 'panaderia' | 'tienda' | 'spa' | 'otro';
 
 export type Role = 'owner' | 'manager' | 'cashier';
-export type Plan = 'gratis' | 'negocio' | 'pro';
+export type Plan = 'basico' | 'standard' | 'pro';
 
 export interface Business {
   id: string;
@@ -335,3 +335,35 @@ export interface CustomerCard {
 export type OtpRequestResult =
   | { ok: true; code: string; expiresAt: string }
   | { ok: false; error: string };
+
+/* ---------- Marketing ---------- */
+
+export type MarketingKind = 'post' | 'data_post' | 'calendar' | 'review_reply';
+
+/** Una generación con IA: queda guardada para el historial, el límite mensual y el costo. */
+export interface MarketingGeneration {
+  id: string;
+  businessId: string;
+  staffId?: string;
+  kind: MarketingKind;
+  topic?: string;
+  output: unknown;
+  model?: string;
+  promptTokens: number;
+  cachedTokens: number;
+  completionTokens: number;
+  createdAt: string;
+}
+
+export interface NewMarketingGeneration {
+  staffId?: string;
+  kind: MarketingKind;
+  topic?: string;
+  output: unknown;
+  model?: string;
+  promptTokens?: number;
+  cachedTokens?: number;
+  completionTokens?: number;
+}
+
+export interface MarketingUsage { count: number; promptTokens: number; cachedTokens: number; completionTokens: number }

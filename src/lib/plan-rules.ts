@@ -1,12 +1,22 @@
 import type { Plan } from './contracts';
+import { features } from './plans';
 
 /** Reglas del plan que también usa el navegador (sin dependencias de Node). */
 
 /** Sucursales que permite cada plan. */
-export const PLAN_MAX_LOCATIONS: Record<Plan, number> = { gratis: 1, negocio: 3, pro: 10 };
-
 export function maxLocations(plan: Plan): number {
-  return PLAN_MAX_LOCATIONS[plan] ?? 1;
+  return features(plan).maxLocations;
+}
+
+/** Personas del equipo (además del dueño) que permite cada plan. */
+export function maxStaff(plan: Plan): number {
+  return features(plan).maxStaff;
+}
+
+/** "Tu plan Básico permite hasta 3 personas en tu equipo." */
+export function staffLimitText(plan: Plan, label: string): string {
+  const n = maxStaff(plan);
+  return Number.isFinite(n) ? `Tu plan ${label} permite hasta ${n} ${n === 1 ? 'persona' : 'personas'} en tu equipo, además de ti.` : `Tu plan ${label} no tiene límite de personas en tu equipo.`;
 }
 
 /** "Tu plan Negocio permite hasta 3 sucursales." */
@@ -40,4 +50,10 @@ export function effectiveExpiry(planExpiresAt: string | undefined, autoRenew: bo
 /** Fecha de hoy en Ecuador como "AAAA-MM-DD" (para el `min` de los campos de fecha). */
 export function todayEc(nowMs: number = Date.now()): string {
   return new Date(nowMs - 5 * 3_600_000).toISOString().slice(0, 10);
+}
+
+/** Error al superar el equipo del plan. */
+export function staffLimitError(plan: Plan): string {
+  const f = features(plan);
+  return `Tu plan ${f.label} permite hasta ${f.maxStaff} ${f.maxStaff === 1 ? 'persona' : 'personas'} en tu equipo además de ti. Desactiva a alguien o escríbenos para cambiar de plan.`;
 }

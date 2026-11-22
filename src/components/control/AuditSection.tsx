@@ -6,9 +6,9 @@ import type { Vocabulary } from '@/lib/templates';
 import { auditLabel } from './labels';
 import { localizeTicket } from '@/lib/format';
 
-export function AuditSection({ entries, actions, selected, range, staffNames, timezone, vocab, page = 1, pages = 1, total, pageSize = 20 }: {
+export function AuditSection({ entries, actions, selected, range, staffNames, timezone, vocab, page = 1, pages = 1, total, pageSize = 20, canExport = true }: {
   entries: AuditEntry[]; actions: string[]; selected: string; range: string; staffNames: Record<string, string>; timezone: string;
-  vocab: Pick<Vocabulary, 'reward' | 'ticket'>; page?: number; pages?: number; total?: number; pageSize?: number;
+  vocab: Pick<Vocabulary, 'reward' | 'ticket'>; page?: number; pages?: number; total?: number; pageSize?: number; canExport?: boolean;
 }) {
   const pageHref = (p: number) => {
     const q = new URLSearchParams({ range });
@@ -34,7 +34,7 @@ export function AuditSection({ entries, actions, selected, range, staffNames, ti
           </div>
           <button type="submit" className={btnClass('dark', 'sm')}>Filtrar</button>
         </form>
-        <a href={exportHref} download className={btnClass('ghost', 'sm')}>Exportar CSV</a>
+        {canExport && <a href={exportHref} download className={btnClass('ghost', 'sm')}>Exportar CSV</a>}
       </div>
       {entries.length === 0 ? (
         <EmptyState title="Sin movimientos" text={selected ? 'No hay registros con esa acción. Prueba con “Todas”.' : 'Cada código, anulación, canje y cambio de reglas queda registrado aquí.'} />

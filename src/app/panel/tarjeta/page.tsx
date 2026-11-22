@@ -1,3 +1,4 @@
+import { features } from '@/lib/plans';
 import Link from 'next/link';
 import { getContext } from '@/lib/context';
 import { requireRole } from '@/lib/auth';
@@ -20,7 +21,7 @@ export default async function TarjetaPage() {
         subtitle={`Diseña la tarjeta de sellos de ${business.name}. Lo que cambies se ve al instante en la vista previa.`}
         actions={<Link href="/panel/tarjeta/poster" className={btnClass('ghost')}>Póster con QR</Link>}
       />
-      <ProgramForm
+      <ProgramForm maxMilestones={features(business.plan).maxMilestones}
         program={program}
         businessName={business.name}
         vocab={template.vocab}

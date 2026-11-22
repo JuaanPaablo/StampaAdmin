@@ -3,7 +3,8 @@ import type {
   CustomerRow, DashboardData, Location, NewBusinessInput, NewStampCodeInput, Program, RangeKey,
   Redemption, Staff, StaffReportRow, StampCode, Role,
   AccessTokenInfo, AccessTokenKind, AdminAccount, AdminBusinessRow, BusinessSetupInput, BusinessStatus, CustomerCard,
-  IssuedToken, NewBusinessAccessInput, OtpRequestResult, Plan, PlatformSummary
+  IssuedToken, NewBusinessAccessInput, OtpRequestResult, Plan, PlatformSummary,
+  MarketingGeneration, MarketingUsage, NewMarketingGeneration
 } from '../contracts';
 import { createMemoryRepo } from './memory';
 import { createSupabaseRepo } from './supabase';
@@ -144,6 +145,14 @@ export interface Repo {
   requestEmailOtp(email: string): Promise<OtpRequestResult>;
   /** true si el código es correcto y vigente (lo consume). Máx. 5 intentos por código. */
   verifyEmailOtp(email: string, code: string): Promise<boolean>;
+
+  /* ---------- Marketing ---------- */
+  recordMarketing(businessId: string, g: NewMarketingGeneration): Promise<MarketingGeneration>;
+  /** Generaciones desde `sinceIso` (para el límite mensual del plan). */
+  countMarketingSince(businessId: string, sinceIso: string): Promise<number>;
+  listMarketing(businessId: string, limit?: number): Promise<MarketingGeneration[]>;
+  /** Uso por negocio desde `sinceIso` (panel de administrador). */
+  marketingUsage(sinceIso: string, businessId?: string): Promise<Record<string, MarketingUsage>>;
 }
 
 const g = globalThis as unknown as { __stampaRepo?: Repo };

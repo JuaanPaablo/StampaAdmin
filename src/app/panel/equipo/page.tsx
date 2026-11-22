@@ -1,3 +1,5 @@
+import { maxStaff, staffLimitText } from '@/lib/plan-rules';
+import { PLAN_LABEL } from '@/lib/plans';
 import Link from 'next/link';
 import { getContext } from '@/lib/context';
 import { requireRole } from '@/lib/auth';
@@ -23,6 +25,9 @@ export default async function EquipoPage({ searchParams }: { searchParams?: { ok
   const locName = new Map(locations.map((l) => [l.id, l.name]));
   const sorted = [...people].sort((a, b) => Number(b.active) - Number(a.active) || ORDER[a.role] - ORDER[b.role] || a.name.localeCompare(b.name, 'es'));
   const onlyOwner = people.filter((p) => p.role !== 'owner').length === 0;
+  const limit = maxStaff(business.plan);
+  const activeTeam = people.filter((p) => p.active && p.role !== 'owner').length;
+  const atLimit = Number.isFinite(limit) && activeTeam >= limit;
 
   return (
     <>
@@ -31,6 +36,11 @@ export default async function EquipoPage({ searchParams }: { searchParams?: { ok
         subtitle={`Quienes atienden y administran ${business.name}. Cada persona entra con su correo y su contraseña, así sabes quién dio cada sello.`}
         actions={<Link href="/panel/equipo/nuevo" className={btnClass('primary')}>Agregar persona</Link>}
       />
+      <p className={'mb-5 rounded-xl px-4 py-3 text-sm ' + (atLimit ? 'bg-[#FFF3CC] text-[#7A5A00]' : 'bg-surface text-muted')}>
+        {staffLimitText(business.plan, PLAN_LABEL[business.plan])}
+        {Number.isFinite(limit) && <> Hoy tienes <strong className="text-navy">{activeTeam} de {limit}</strong> activas.</>}
+        {atLimit && <> Para sumar a alguien, desactiva a otra persona o cambia a un plan mayor.</>}
+      </p>
       {sp.ok === 'creado' && (
         <p role="status" className="mb-5 rounded-xl bg-[#DDF3E8] px-4 py-3 text-sm font-medium text-[#12683F]">Persona agregada. Agrega su correo y envíale la invitación para que entre al panel.</p>
       )}

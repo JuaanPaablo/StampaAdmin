@@ -3,7 +3,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type {
   Alert, AuditEntry, Business, ClaimResult, CreateCodeResult, Customer, CustomerDetail, CustomerQuery, CustomerRow,
   DashboardData, Location, NewBusinessInput, NewStampCodeInput, Program, RangeKey, Redemption, Role, Staff,
-  StaffReportRow, StampClaim, StampCode
+  StaffReportRow, StampClaim, StampCode, MarketingGeneration, MarketingUsage
 } from '../contracts';
 import { DAY_MS, initials, rangeDays, slugify, tzOffsetMinutes, validateBirthday, validateContact, validateName, validatePin, validateProgramPatch } from '../domain';
 import {
@@ -11,7 +11,8 @@ import {
   type AnalyticsInput, type Rejection
 } from '../domain/analytics';
 import { getTemplate } from '../templates';
-import { effectiveExpiry, maxLocations } from '../plan-rules';
+import { effectiveExpiry, maxLocations, maxStaff, staffLimitError } from '../plan-rules';
+import { PLAN_LABEL, planOf } from '../plans';
 import { normalizeEmail, validateEmail } from '../credentials';
 import { hashPassword, validatePassword, verifyPassword } from '../password';
 import { AttemptLimiter, LOCK_MS, MAX_FAILED_LOGINS } from '../login-throttle';
@@ -85,7 +86,7 @@ export function createSupabaseRepo(): Repo {
 
   const toBusiness = (r: Row): Business => ({
     id: r.id, name: r.name, slug: r.slug, type: r.type, city: nn(r.city), country: r.country, currency: 'USD',
-    timezone: r.timezone, plan: r.plan, createdAt: iso(r.created_at)!,
+    timezone: r.timezone, plan: planOf(r.plan), createdAt: iso(r.created_at)!,
     status: r.status ?? 'active', planExpiresAt: effectiveExpiry(iso(r.plan_expires_at), !!r.auto_renew), suspendedAt: iso(r.suspended_at),
     setupCompletedAt: iso(r.setup_completed_at), province: nn(r.province), autoRenew: !!r.auto_renew
   });
@@ -119,6 +120,12 @@ export function createSupabaseRepo(): Repo {
     approvedBy: nn(r.approved_by), cancelledAt: iso(r.cancelled_at), attempts: r.attempts,
     claims: ((r.stamp_claims ?? []) as Row[]).map(toClaim).sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
   });
+  const toMarketing = (r: Row): MarketingGeneration => ({
+    id: r.id, businessId: r.business_id, staffId: r.staff_id ?? undefined, kind: r.kind, topic: r.topic ?? undefined, output: r.output,
+    model: r.model ?? undefined, promptTokens: Number(r.prompt_tokens) || 0, cachedTokens: Number(r.cached_tokens) || 0,
+    completionTokens: Number(r.completion_tokens) || 0, createdAt: iso(r.created_at)!
+  });
+
   const toRedemption = (r: Row): Redemption => ({
     id: r.id, businessId: r.business_id, customerId: r.customer_id, customerName: r.customer_name, staffId: r.staff_id, at: iso(r.at)!,
     milestone: nn(r.milestone), rewardTitle: nn(r.reward_title)
@@ -325,6 +332,15 @@ export function createSupabaseRepo(): Repo {
         if (current.role === 'owner' && current.active && (s.role !== 'owner' || !active)) {
           const others = (await listStaffRows(businessId)).filter((x) => x.role === 'owner' && x.active && x.id !== current.id);
           if (!others.length) throw new Error('El negocio debe tener al menos un dueño activo.');
+        }
+      }
+      {
+        const willBeMember = (s.active ?? current?.active ?? true) && s.role !== 'owner';
+        const alreadyMember = !!current && current.active && current.role !== 'owner';
+        if (willBeMember && !alreadyMember) {
+          const plan = (await getBiz(businessId)).plan;
+          const used = (await listStaffRows(businessId)).filter((x) => x.active && x.role !== 'owner' && x.id !== s.id).length;
+          if (used >= maxStaff(plan)) throw new Error(staffLimitError(plan));
         }
       }
       const row: Row = { business_id: businessId, name: s.name.trim(), role: s.role };
@@ -614,7 +630,7 @@ export function createSupabaseRepo(): Repo {
       if (autoRenew !== undefined) upd.auto_renew = autoRenew && !!exp;
       if (note !== undefined) upd.admin_note = note.trim() ? note.trim().slice(0, 500) : null;
       must(await db.from('businesses').update(upd).eq('id', id), 'Negocio');
-      await logAudit(id, null, 'business.plan', `Plan ${plan}${exp ? ` hasta ${exp.slice(0, 10)}` : ' sin vencimiento'}.`);
+      await logAudit(id, null, 'business.plan', `Plan ${PLAN_LABEL[plan]}${exp ? ` hasta ${exp.slice(0, 10)}` : ' sin vencimiento'}.`);
       return getBiz(id);
     },
 
@@ -861,6 +877,39 @@ export function createSupabaseRepo(): Repo {
       const { data, error } = await db.rpc('verify_email_otp', { p_email: email, p_code_hash: hashOtp(email, code), p_max_attempts: OTP_MAX_ATTEMPTS });
       if (error) throw new Error(error.message);
       return data === true;
+    },
+
+    async recordMarketing(businessId, g) {
+      const r = must(await db.from('marketing_generations').insert({
+        business_id: businessId, staff_id: g.staffId ?? null, kind: g.kind, topic: g.topic ?? null, output: g.output ?? {}, model: g.model ?? null,
+        prompt_tokens: g.promptTokens ?? 0, cached_tokens: g.cachedTokens ?? 0, completion_tokens: g.completionTokens ?? 0
+      }).select('*').single(), 'Marketing') as Row;
+      return toMarketing(r);
+    },
+
+    async countMarketingSince(businessId, sinceIso) {
+      const { count, error } = await db.from('marketing_generations').select('id', { count: 'exact', head: true })
+        .eq('business_id', businessId).gte('created_at', sinceIso);
+      if (error) throw new Error(error.message);
+      return count ?? 0;
+    },
+
+    async listMarketing(businessId, limit = 30) {
+      const rows = must(await db.from('marketing_generations').select('*').eq('business_id', businessId)
+        .order('created_at', { ascending: false }).limit(limit), 'Marketing') as Row[];
+      return rows.map(toMarketing);
+    },
+
+    async marketingUsage(sinceIso, businessId) {
+      let q = db.from('marketing_generations').select('business_id,prompt_tokens,cached_tokens,completion_tokens').gte('created_at', sinceIso).limit(10000);
+      if (businessId) q = q.eq('business_id', businessId);
+      const rows = must(await q, 'Marketing') as Row[];
+      const out: Record<string, MarketingUsage> = {};
+      for (const r of rows) {
+        const u = (out[r.business_id] ??= { count: 0, promptTokens: 0, cachedTokens: 0, completionTokens: 0 });
+        u.count++; u.promptTokens += Number(r.prompt_tokens) || 0; u.cachedTokens += Number(r.cached_tokens) || 0; u.completionTokens += Number(r.completion_tokens) || 0;
+      }
+      return out;
     }
   };
 

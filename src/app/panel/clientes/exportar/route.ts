@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { features } from '@/lib/plans';
 import { getContext } from '@/lib/context';
 import type { CustomerQuery, CustomerSegment } from '@/lib/contracts';
 import { MONTHS_FULL } from '@/components/dashboard/helpers';
@@ -25,6 +26,10 @@ export async function GET(req: NextRequest) {
   };
   const { repo, business, staff } = await getContext();
   if (staff.role === 'cashier') return new Response('Solo dueño y gerente pueden exportar.', { status: 403 });
+  // La descarga completa (Ajustes > Privacidad) está en todos los planes: los datos son del negocio. La exportación
+  // filtrada por búsqueda o segmento es del plan Standard en adelante.
+  const filtered = !!query.search || query.segment !== 'todos' || query.sort !== 'recientes';
+  if (filtered && !features(business.plan).exportCsv) return new Response('Exportar con filtros está disponible desde el plan Standard.', { status: 403 });
   const rows = await repo.listCustomers(business.id, query);
 
   const iso = (s?: string) => (s ? s.slice(0, 10) : '');

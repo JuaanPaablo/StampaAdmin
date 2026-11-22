@@ -31,7 +31,7 @@ describe('estados del negocio en el panel', () => {
 describe('asistente de bienvenida con el repo en memoria', () => {
   it('nombre → imagen → sucursal → tarjeta → listo deja el negocio activo con slug, logo y QR reales', async () => {
     const repo = createMemoryRepo();
-    const { business, ownerId } = await repo.createBusinessAccess({ ownerEmail: 'nuevo@prueba.ec', plan: 'negocio' });
+    const { business, ownerId } = await repo.createBusinessAccess({ ownerEmail: 'nuevo@prueba.ec', plan: 'standard' });
     expect(business.status).toBe('setup');
 
     // No se puede activar sin nombre real ni sucursal.
@@ -61,7 +61,7 @@ describe('asistente de bienvenida con el repo en memoria', () => {
 
   it('invitar a alguien del equipo: correo, enlace y estado de acceso', async () => {
     const repo = createMemoryRepo();
-    const { business, ownerId } = await repo.createBusinessAccess({ ownerEmail: 'duena@prueba.ec', plan: 'gratis' });
+    const { business, ownerId } = await repo.createBusinessAccess({ ownerEmail: 'duena@prueba.ec', plan: 'basico' });
     const cashier = await repo.upsertStaff(business.id, { name: 'Lucía Cajas', role: 'cashier', active: true }, '4826', ownerId);
     expect(accessStatus(cashier)).toBe('none');
     const withEmail = await repo.setStaffEmail(business.id, cashier.id, 'Lucia@Prueba.ec', ownerId);

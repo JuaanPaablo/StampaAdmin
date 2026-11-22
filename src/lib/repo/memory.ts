@@ -2,7 +2,7 @@ import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import type {
   Alert, AuditEntry, Business, ClaimResult, CreateCodeResult, Customer, CustomerDetail, CustomerQuery, CustomerRow,
   DashboardData, Location, NewBusinessInput, NewStampCodeInput, Program, RangeKey, Redemption, Role, Staff,
-  StaffReportRow, StampCode
+  StaffReportRow, StampCode, MarketingGeneration, MarketingUsage
 } from '../contracts';
 import {
   codeStatus, cupos, generateCode, needsApproval, normalizeTicket, slugify, initials,
@@ -17,7 +17,7 @@ import { normalizeEmail, validateEmail } from '../credentials';
 import { hashPassword, hashPasswordSync, validatePassword, verifyPassword } from '../password';
 import { AttemptLimiter, LOCK_MS, MAX_FAILED_LOGINS } from '../login-throttle';
 import { getTemplate } from '../templates';
-import { effectiveExpiry, maxLocations } from '../plan-rules';
+import { effectiveExpiry, maxLocations, maxStaff, staffLimitError } from '../plan-rules';
 import { cleanMilestones } from '../rewards';
 import type { Repo } from './index';
 import type { AccessTokenKind, AdminAccount, AdminBusinessRow, BusinessSetupInput, CustomerCard, IssuedToken, PlatformSummary } from '../contracts';
@@ -83,6 +83,7 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
   const redemptions: Redemption[] = [];
   const audit: AuditEntry[] = [];
   const rejections: Rejection[] = [];
+  const marketing: MarketingGeneration[] = [];
   /** Fallos de correos que no existen: bloquean igual que los de cuentas reales para no revelar cuáles existen. */
   const unknownEmails = new AttemptLimiter(MAX_FAILED_LOGINS, LOCK_MS);
 
@@ -159,7 +160,7 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
       const tpl = getTemplate(input.type);
       const business: Business = {
         id, name, slug, type: input.type, city: input.city?.trim() || undefined, country: 'EC', currency: 'USD',
-        timezone: 'America/Guayaquil', plan: 'gratis', createdAt: nowIso()
+        timezone: 'America/Guayaquil', plan: 'basico', createdAt: nowIso()
       };
       const location: Location = { id: newId('loc', id), businessId: id, name: 'Principal', active: true };
       const owner: StaffRec = {
@@ -220,6 +221,15 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
       if (nameErr) fail(nameErr);
       if (pin !== undefined) { const e = validatePin(pin); if (e) fail(e); }
       const existing = s.id ? staff.find((x) => x.id === s.id && x.businessId === businessId) : undefined;
+      {
+        const willBeMember = (s.active ?? existing?.active ?? true) && (s.role ?? existing?.role) !== 'owner';
+        const alreadyMember = !!existing && existing.active && existing.role !== 'owner';
+        if (willBeMember && !alreadyMember) {
+          const plan = biz(businessId).plan;
+          const used = bizStaff(businessId).filter((x) => x.active && x.role !== 'owner' && x.id !== s.id).length;
+          if (used >= maxStaff(plan)) fail(staffLimitError(plan));
+        }
+      }
       let rec: StaffRec;
       if (existing) {
         const role: Role = s.role ?? existing.role;
@@ -839,6 +849,34 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
       }
       o.consumedAt = now;
       return true;
+    },
+
+    async recordMarketing(businessId, g) {
+      biz(businessId);
+      const rec: MarketingGeneration = {
+        id: newId('mkt', businessId), businessId, staffId: g.staffId, kind: g.kind, topic: g.topic, output: g.output, model: g.model,
+        promptTokens: g.promptTokens ?? 0, cachedTokens: g.cachedTokens ?? 0, completionTokens: g.completionTokens ?? 0, createdAt: nowIso()
+      };
+      marketing.unshift(rec);
+      return rec;
+    },
+
+    async countMarketingSince(businessId, sinceIso) {
+      return marketing.filter((m) => m.businessId === businessId && m.createdAt >= sinceIso).length;
+    },
+
+    async listMarketing(businessId, limit = 30) {
+      return marketing.filter((m) => m.businessId === businessId).slice(0, limit);
+    },
+
+    async marketingUsage(sinceIso, businessId) {
+      const out: Record<string, MarketingUsage> = {};
+      for (const m of marketing) {
+        if (m.createdAt < sinceIso || (businessId && m.businessId !== businessId)) continue;
+        const u = (out[m.businessId] ??= { count: 0, promptTokens: 0, cachedTokens: 0, completionTokens: 0 });
+        u.count++; u.promptTokens += m.promptTokens; u.cachedTokens += m.cachedTokens; u.completionTokens += m.completionTokens;
+      }
+      return out;
     }
   };
 
