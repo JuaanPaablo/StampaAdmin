@@ -78,6 +78,8 @@ Comparte la contraseña por un canal seguro. La migración `0003_auth.sql` debe 
 | `/panel/control/exportar` | CSV del registro de actividad | dueño, gerente |
 | `/panel/tarjeta` | Editor de tarjeta y reglas con vista previa en vivo y aviso de contraste | dueño, gerente |
 | `/panel/tarjeta/poster` | Póster QR imprimible (A4 / A6) | dueño, gerente |
+| `/panel/marketing` | Posts para redes: foto real mejorada con IA, ideas con datos del negocio, textos con IA, calendario y reseñas (según plan). Ver `docs/MARKETING.md` | dueño, gerente |
+| `/panel/marketing/imagen` | PNG del post con la marca (cuadrado o historia), sin costo de IA | dueño, gerente |
 | `/panel/equipo`, `/nuevo`, `/[id]` | Personas, roles, PIN, desactivar (nunca al único dueño) | dueño |
 | `/panel/ajustes` | Datos del negocio, sucursales, plan, privacidad | dueño |
 
@@ -92,12 +94,15 @@ Los permisos se definen en `src/lib/nav.ts` y se aplican en servidor con `requir
 - `src/lib/templates.ts`: vocabulario y valores iniciales por tipo de negocio.
 - `src/lib/auth.ts`, `auth-actions.ts`, `session.ts`, `session-token.ts`, `password.ts`: acceso, sesión firmada y contraseñas.
 - `src/lib/demo.ts`: `isDemoMode()` (solo herramientas de demostración).
+- `src/lib/plans.ts`: planes Básico / Standard / Pro, precios y qué incluye cada uno (`features(plan)`).
+- `src/lib/marketing/`, `src/lib/ai/`: módulo de Marketing (ideas, prompts, fotos, cuotas) y clientes de DeepSeek y fal.ai.
 - `docs/ARCHITECTURE.md`: capas y reglas de negocio.
+- `docs/MARKETING.md`: módulo de Marketing, proveedores de IA, costos y cuotas.
 
 ## Cambiar a Supabase
 
-1. Crea el proyecto y aplica `supabase/migrations/0001` a `0005` en orden (`supabase db push`, o el editor SQL). `supabase/seed.sql` es opcional. Detalles en `supabase/README.md`.
-2. Define variables de servidor (ver `.env.example`): `STAMPA_REPO=supabase`, `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `AUTH_SECRET`, `NEXT_PUBLIC_APP_URL` (p. ej. `https://app.stampaec.app`), `RESEND_API_KEY` y `EMAIL_FROM` (o `STAMPA_EMAIL_PREVIEW=on` mientras no haya clave). En producción de Vercel la app se niega a usar el repo en memoria. La service role salta RLS: nunca al navegador.
+1. Crea el proyecto y aplica `supabase/migrations/0001` a `0008` en orden (`supabase db push`, o el editor SQL). `supabase/seed.sql` es opcional. Detalles en `supabase/README.md`.
+2. Define variables de servidor (ver `.env.example`): `STAMPA_REPO=supabase`, `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `AUTH_SECRET`, `NEXT_PUBLIC_APP_URL` (p. ej. `https://app.stampaec.app`), `RESEND_API_KEY` y `EMAIL_FROM` (o `STAMPA_EMAIL_PREVIEW=on` mientras no haya clave), y para Marketing `DEEPSEEK_API_KEY` y `FAL_KEY` (Sensitive, sin `NEXT_PUBLIC_`). En producción de Vercel la app se niega a usar el repo en memoria. La service role salta RLS: nunca al navegador.
 3. `getRepo()` ya elige la implementación según `STAMPA_REPO`.
 4. Crea la cuenta de administrador con `npm run admin:create` y deja `STAMPA_DEMO` apagado. Las cuentas de los dueños se crean desde `/admin`.
 

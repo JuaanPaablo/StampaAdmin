@@ -4,7 +4,7 @@ import type {
   Redemption, Staff, StaffReportRow, StampCode, Role,
   AccessTokenInfo, AccessTokenKind, AdminAccount, AdminBusinessRow, BusinessSetupInput, BusinessStatus, CustomerCard,
   IssuedToken, NewBusinessAccessInput, OtpRequestResult, Plan, PlatformSummary,
-  MarketingGeneration, MarketingUsage, NewMarketingGeneration
+  MarketingGeneration, MarketingKind, MarketingPhoto, MarketingUsage, NewMarketingGeneration
 } from '../contracts';
 import { createMemoryRepo } from './memory';
 import { createSupabaseRepo } from './supabase';
@@ -148,8 +148,14 @@ export interface Repo {
 
   /* ---------- Marketing ---------- */
   recordMarketing(businessId: string, g: NewMarketingGeneration): Promise<MarketingGeneration>;
-  /** Generaciones desde `sinceIso` (para el límite mensual del plan). */
-  countMarketingSince(businessId: string, sinceIso: string): Promise<number>;
+  /** Generaciones desde `sinceIso` (para el límite mensual del plan). `kinds` filtra por tipo. */
+  countMarketingSince(businessId: string, sinceIso: string, kinds?: MarketingKind[]): Promise<number>;
+  /** Guarda una foto para posts (bucket branding, carpeta <negocio>/marketing). */
+  uploadMarketingPhoto(businessId: string, file: { bytes: Uint8Array; contentType: string }): Promise<MarketingPhoto>;
+  /** Fotos recientes del negocio, la más nueva primero. */
+  listMarketingPhotos(businessId: string, limit?: number): Promise<MarketingPhoto[]>;
+  /** URL de una foto del negocio, o null si el id no es válido o no existe. */
+  marketingPhotoUrl(businessId: string, photoId: string): Promise<string | null>;
   listMarketing(businessId: string, limit?: number): Promise<MarketingGeneration[]>;
   /** Uso por negocio desde `sinceIso` (panel de administrador). */
   marketingUsage(sinceIso: string, businessId?: string): Promise<Record<string, MarketingUsage>>;

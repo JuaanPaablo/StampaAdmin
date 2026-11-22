@@ -338,7 +338,7 @@ export type OtpRequestResult =
 
 /* ---------- Marketing ---------- */
 
-export type MarketingKind = 'post' | 'data_post' | 'calendar' | 'review_reply';
+export type MarketingKind = 'post' | 'data_post' | 'calendar' | 'review_reply' | 'photo_edit';
 
 /** Una generación con IA: queda guardada para el historial, el límite mensual y el costo. */
 export interface MarketingGeneration {
@@ -367,3 +367,6 @@ export interface NewMarketingGeneration {
 }
 
 export interface MarketingUsage { count: number; promptTokens: number; cachedTokens: number; completionTokens: number }
+
+/** Foto subida (o mejorada con IA) para los posts de Marketing. */
+export interface MarketingPhoto { id: string; url: string; createdAt: string }

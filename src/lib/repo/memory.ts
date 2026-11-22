@@ -1,8 +1,9 @@
+import { newPhotoId, PHOTO_ID_RE, validateMarketingPhoto } from '../marketing/photos';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import type {
   Alert, AuditEntry, Business, ClaimResult, CreateCodeResult, Customer, CustomerDetail, CustomerQuery, CustomerRow,
   DashboardData, Location, NewBusinessInput, NewStampCodeInput, Program, RangeKey, Redemption, Role, Staff,
-  StaffReportRow, StampCode, MarketingGeneration, MarketingUsage
+  StaffReportRow, StampCode, MarketingGeneration, MarketingPhoto, MarketingUsage
 } from '../contracts';
 import {
   codeStatus, cupos, generateCode, needsApproval, normalizeTicket, slugify, initials,
@@ -84,6 +85,7 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
   const audit: AuditEntry[] = [];
   const rejections: Rejection[] = [];
   const marketing: MarketingGeneration[] = [];
+  const photos = new Map<string, MarketingPhoto[]>();
   /** Fallos de correos que no existen: bloquean igual que los de cuentas reales para no revelar cuáles existen. */
   const unknownEmails = new AttemptLimiter(MAX_FAILED_LOGINS, LOCK_MS);
 
@@ -861,8 +863,27 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
       return rec;
     },
 
-    async countMarketingSince(businessId, sinceIso) {
-      return marketing.filter((m) => m.businessId === businessId && m.createdAt >= sinceIso).length;
+    async countMarketingSince(businessId, sinceIso, kinds) {
+      return marketing.filter((m) => m.businessId === businessId && m.createdAt >= sinceIso && (!kinds || kinds.includes(m.kind))).length;
+    },
+
+    async uploadMarketingPhoto(businessId, file) {
+      biz(businessId);
+      const err = validateMarketingPhoto(file);
+      if (err) fail(err);
+      const id = newPhotoId(file.contentType === 'image/png' ? 'png' : 'jpg', clock());
+      const photo = { id, url: `data:${file.contentType};base64,${Buffer.from(file.bytes).toString('base64')}`, createdAt: nowIso() };
+      (photos.get(businessId) ?? photos.set(businessId, []).get(businessId)!).unshift(photo);
+      return photo;
+    },
+
+    async listMarketingPhotos(businessId, limit = 24) {
+      return (photos.get(businessId) ?? []).slice(0, limit);
+    },
+
+    async marketingPhotoUrl(businessId, photoId) {
+      if (!PHOTO_ID_RE.test(photoId)) return null;
+      return (photos.get(businessId) ?? []).find((p) => p.id === photoId)?.url ?? null;
     },
 
     async listMarketing(businessId, limit = 30) {

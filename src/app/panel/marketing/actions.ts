@@ -2,7 +2,9 @@
 
 import { z } from 'zod';
 import { getContext } from '@/lib/context';
-import { generate, loadInsights, type GenerateResult } from '@/lib/marketing/service';
+import { enhancePhoto, generate, loadInsights, type EnhanceResult, type GenerateResult } from '@/lib/marketing/service';
+import { PHOTO_ID_RE } from '@/lib/marketing/photos';
+import type { MarketingPhoto } from '@/lib/contracts';
 
 const CHANNELS = ['Instagram', 'Facebook', 'TikTok', 'Estado de WhatsApp'] as const;
 
@@ -28,4 +30,36 @@ export async function generateMarketingAction(input: unknown): Promise<GenerateR
     return generate(ctx, { kind: 'data_post', insightId: idea.id, fact: idea.fact, channel: req.channel });
   }
   return generate(ctx, { kind: 'calendar', facts: insights.map((i) => i.fact).slice(0, 6) });
+}
+
+/* ---------- Fotos ---------- */
+
+export type UploadPhotoResult = { ok: true; photo: MarketingPhoto } | { ok: false; error: string };
+
+/** Sube una foto real del negocio. El navegador ya la reduce a 1600 px en JPG antes de enviarla. */
+export async function uploadMarketingPhotoAction(formData: FormData): Promise<UploadPhotoResult> {
+  const ctx = await getContext();
+  if (ctx.staff.role === 'cashier') return { ok: false, error: 'Marketing es para el dueño o un gerente.' };
+  const file = formData.get('foto');
+  if (!(file instanceof File) || file.size === 0) return { ok: false, error: 'Elige una foto.' };
+  try {
+    const photo = await ctx.repo.uploadMarketingPhoto(ctx.business.id, { bytes: new Uint8Array(await file.arrayBuffer()), contentType: file.type });
+    return { ok: true, photo };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error && !/^Foto:/.test(e.message) ? e.message : 'No pudimos guardar la foto. Intenta de nuevo.' };
+  }
+}
+
+const enhanceSchema = z.object({
+  photoId: z.string().regex(PHOTO_ID_RE),
+  style: z.enum(['profesional', 'ambiente', 'estudio', 'temporada']),
+  season: z.enum(['navidad', 'fin_de_ano', 'san_valentin', 'dia_madre', 'dia_padre', 'halloween', 'verano']).optional()
+});
+
+/** Mejora una foto con IA según el estilo elegido. Cuenta para la cuota mensual de fotos del plan. */
+export async function enhancePhotoAction(input: unknown): Promise<EnhanceResult> {
+  const ctx = await getContext();
+  const parsed = enhanceSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: 'Elige una foto y un estilo.' };
+  return enhancePhoto(ctx, parsed.data.photoId, parsed.data.style, parsed.data.season);
 }

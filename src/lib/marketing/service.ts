@@ -1,4 +1,6 @@
-import type { CustomerSegment, MarketingKind } from '../contracts';
+import type { CustomerSegment, MarketingKind, MarketingPhoto } from '../contracts';
+import { editPhoto, ImageAiError, imageAiConfigured } from '../ai/fal';
+import { stylePrompt, type PhotoStyle, type Season } from './photos';
 import { buildInsights, type Insight } from './insights';
 import type { PanelContext } from '../context';
 import { features } from '../plans';
@@ -35,9 +37,18 @@ export interface Quota { used: number; limit: number; left: number }
 
 export async function quotaOf(ctx: PanelContext): Promise<Quota> {
   const limit = features(ctx.business.plan).aiTexts;
-  const used = await ctx.repo.countMarketingSince(ctx.business.id, monthStartIso(ctx.business.timezone));
+  const used = await ctx.repo.countMarketingSince(ctx.business.id, monthStartIso(ctx.business.timezone), TEXT_KINDS);
   return { used, limit, left: Math.max(0, limit - used) };
 }
+
+/** Fotos mejoradas con IA este mes (cuota aparte de los textos). */
+export async function imageQuotaOf(ctx: PanelContext): Promise<Quota> {
+  const limit = features(ctx.business.plan).aiImages;
+  const used = await ctx.repo.countMarketingSince(ctx.business.id, monthStartIso(ctx.business.timezone), ['photo_edit']);
+  return { used, limit, left: Math.max(0, limit - used) };
+}
+
+const TEXT_KINDS: MarketingKind[] = ['post', 'data_post', 'calendar', 'review_reply'];
 
 export type GenerateRequest =
   | { kind: 'post'; topic: string; channel: string }
@@ -59,7 +70,7 @@ export async function generate(ctx: PanelContext, req: GenerateRequest): Promise
 
   const quota = await quotaOf(ctx);
   if (quota.left <= 0) return { ok: false, error: `Ya usaste tus ${quota.limit} textos de este mes. Se renuevan el 1 del próximo mes.`, quota };
-  const lastMinute = await ctx.repo.countMarketingSince(ctx.business.id, new Date(Date.now() - 60_000).toISOString());
+  const lastMinute = await ctx.repo.countMarketingSince(ctx.business.id, new Date(Date.now() - 60_000).toISOString(), TEXT_KINDS);
   if (lastMinute >= 4) return { ok: false, error: 'Vas muy rápido. Espera un minuto y vuelve a intentar.', quota };
 
   const b = briefOf(ctx);
@@ -114,4 +125,62 @@ export async function loadInsights(ctx: PanelContext): Promise<Insight[]> {
   return buildInsights({
     dash, totalCustomers: customers.length, segments, program: ctx.program, customerWord: ctx.template.vocab.customers, monthName: month
   });
+}
+
+/* ---------- Fotos ---------- */
+
+export type EnhanceResult =
+  | { ok: true; photo: MarketingPhoto; quota: Quota; sample: boolean }
+  | { ok: false; error: string; quota?: Quota };
+
+/**
+ * Mejora una foto REAL del negocio con IA (Seedream vía fal.ai) y guarda el resultado como foto nueva del negocio
+ * (las URL de fal caducan). La original no se toca.
+ */
+export async function enhancePhoto(ctx: PanelContext, photoId: string, style: PhotoStyle, season?: Season): Promise<EnhanceResult> {
+  if (ctx.staff.role === 'cashier') return { ok: false, error: 'Marketing es para el dueño o un gerente.' };
+  const source = await ctx.repo.marketingPhotoUrl(ctx.business.id, photoId);
+  if (!source) return { ok: false, error: 'No encontramos esa foto. Súbela de nuevo.' };
+
+  const quota = await imageQuotaOf(ctx);
+  if (quota.left <= 0) return { ok: false, error: `Ya usaste tus ${quota.limit} fotos con IA de este mes. Se renuevan el 1 del próximo mes.`, quota };
+  const lastMinute = await ctx.repo.countMarketingSince(ctx.business.id, new Date(Date.now() - 60_000).toISOString(), ['photo_edit']);
+  if (lastMinute >= 3) return { ok: false, error: 'Vas muy rápido. Espera un minuto y vuelve a intentar.', quota };
+
+  const prompt = stylePrompt(style, ctx.business.type, season);
+  let bytes: Uint8Array;
+  let model = 'ejemplo';
+  const sample = !imageAiConfigured();
+  if (sample) {
+    if (process.env.VERCEL_ENV === 'production') return { ok: false, error: 'La mejora de fotos con IA no está configurada todavía. Avísale a Stampa.', quota };
+    // Desarrollo sin clave: copia la original para poder probar el flujo completo sin gastar saldo.
+    bytes = await readImage(source);
+  } else {
+    try {
+      const r = await editPhoto(source, prompt);
+      model = r.model;
+      bytes = await readImage(r.url);
+    } catch (e) {
+      return { ok: false, error: e instanceof ImageAiError ? e.message : 'No pudimos mejorar la foto. Intenta de nuevo (no se descontó).', quota };
+    }
+  }
+
+  const photo = await ctx.repo.uploadMarketingPhoto(ctx.business.id, { bytes, contentType: 'image/jpeg' });
+  await ctx.repo.recordMarketing(ctx.business.id, {
+    staffId: ctx.staff.id, kind: 'photo_edit', topic: season ? `${style}:${season}` : style,
+    output: { source: photoId, photo: photo.id }, model
+  });
+  const used = quota.used + 1;
+  return { ok: true, photo, sample, quota: { used, limit: quota.limit, left: Math.max(0, quota.limit - used) } };
+}
+
+/** Lee una imagen (https o data URL) y comprueba que sea JPG. */
+async function readImage(url: string): Promise<Uint8Array> {
+  if (url.startsWith('data:image/jpeg;base64,')) return new Uint8Array(Buffer.from(url.split(',')[1], 'base64'));
+  if (url.startsWith('data:')) throw new ImageAiError('Formato de imagen no soportado.');
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) throw new ImageAiError('No pudimos descargar la foto mejorada. Intenta de nuevo.');
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  if (!(bytes[0] === 0xff && bytes[1] === 0xd8)) throw new ImageAiError('La IA devolvió un formato inesperado. Intenta de nuevo.');
+  return bytes;
 }

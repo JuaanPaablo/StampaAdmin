@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { newPhotoId, PHOTO_ID_RE, validateMarketingPhoto } from '../marketing/photos';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type {
   Alert, AuditEntry, Business, ClaimResult, CreateCodeResult, Customer, CustomerDetail, CustomerQuery, CustomerRow,
@@ -887,11 +888,39 @@ export function createSupabaseRepo(): Repo {
       return toMarketing(r);
     },
 
-    async countMarketingSince(businessId, sinceIso) {
-      const { count, error } = await db.from('marketing_generations').select('id', { count: 'exact', head: true })
+    async countMarketingSince(businessId, sinceIso, kinds) {
+      let q = db.from('marketing_generations').select('id', { count: 'exact', head: true })
         .eq('business_id', businessId).gte('created_at', sinceIso);
+      if (kinds?.length) q = q.in('kind', kinds);
+      const { count, error } = await q;
       if (error) throw new Error(error.message);
       return count ?? 0;
+    },
+
+    async uploadMarketingPhoto(businessId, file) {
+      await getBiz(businessId);
+      const err = validateMarketingPhoto(file);
+      if (err) fail(err);
+      const id = newPhotoId(file.contentType === 'image/png' ? 'png' : 'jpg');
+      const bucket = db.storage.from('branding');
+      const up = await bucket.upload(`${businessId}/marketing/${id}`, file.bytes, { contentType: file.contentType, upsert: false, cacheControl: '31536000' });
+      if (up.error) throw new Error(`Foto: ${up.error.message}`);
+      return { id, url: bucket.getPublicUrl(`${businessId}/marketing/${id}`).data.publicUrl, createdAt: new Date().toISOString() };
+    },
+
+    async listMarketingPhotos(businessId, limit = 24) {
+      const bucket = db.storage.from('branding');
+      const { data, error } = await bucket.list(`${businessId}/marketing`, { limit: 100, sortBy: { column: 'name', order: 'desc' } });
+      if (error) throw new Error(`Fotos: ${error.message}`);
+      return (data ?? []).filter((f) => PHOTO_ID_RE.test(f.name)).slice(0, limit).map((f) => ({
+        id: f.name, url: bucket.getPublicUrl(`${businessId}/marketing/${f.name}`).data.publicUrl,
+        createdAt: new Date(Number(f.name.split('-')[1])).toISOString()
+      }));
+    },
+
+    async marketingPhotoUrl(businessId, photoId) {
+      if (!PHOTO_ID_RE.test(photoId) || !/^[a-z0-9_]+$/i.test(businessId)) return null;
+      return db.storage.from('branding').getPublicUrl(`${businessId}/marketing/${photoId}`).data.publicUrl;
     },
 
     async listMarketing(businessId, limit = 30) {

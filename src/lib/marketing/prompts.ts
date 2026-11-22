@@ -109,7 +109,7 @@ export function readReplies(data: unknown): string[] {
 }
 
 export const KIND_LABEL: Record<MarketingKind, string> = {
-  post: 'Post', data_post: 'Post con tus datos', calendar: 'Calendario semanal', review_reply: 'Respuesta a reseña'
+  post: 'Post', data_post: 'Post con tus datos', calendar: 'Calendario semanal', review_reply: 'Respuesta a reseña', photo_edit: 'Foto mejorada'
 };
 
 /** Respuesta de ejemplo cuando no hay clave de IA (desarrollo local y pruebas). No consume créditos. */

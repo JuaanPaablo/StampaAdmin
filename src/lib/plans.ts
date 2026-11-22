@@ -27,6 +27,8 @@ export interface PlanFeatures {
   posterDesign: boolean;
   /** Textos de marketing con IA por mes. */
   aiTexts: number;
+  /** Fotos mejoradas con IA por mes (Seedream vía fal.ai, ~US$0,035 c/u). */
+  aiImages: number;
   /** Posts basados en los datos del negocio. */
   dataPosts: boolean;
   /** Calendario semanal de publicaciones. */
@@ -41,15 +43,15 @@ export interface PlanFeatures {
 export const PLAN_FEATURES: Record<Plan, PlanFeatures> = {
   basico: {
     label: 'Básico', priceCents: 2999, maxLocations: 1, maxStaff: 3, maxMilestones: 1, statsDays: 30, alerts: false, staffReport: false, exportCsv: false,
-    posterDesign: false, aiTexts: 10, dataPosts: false, aiCalendar: false, aiReviews: false, proximity: false, pushCampaigns: 0, giftCards: false
+    posterDesign: false, aiTexts: 10, aiImages: 5, dataPosts: false, aiCalendar: false, aiReviews: false, proximity: false, pushCampaigns: 0, giftCards: false
   },
   standard: {
     label: 'Standard', priceCents: 5499, maxLocations: 3, maxStaff: 10, maxMilestones: 3, statsDays: 90, alerts: true, staffReport: false, exportCsv: true,
-    posterDesign: true, aiTexts: 40, dataPosts: true, aiCalendar: false, aiReviews: false, proximity: true, pushCampaigns: 2, giftCards: true
+    posterDesign: true, aiTexts: 40, aiImages: 20, dataPosts: true, aiCalendar: false, aiReviews: false, proximity: true, pushCampaigns: 2, giftCards: true
   },
   pro: {
     label: 'Pro', priceCents: 7999, maxLocations: 10, maxStaff: Number.POSITIVE_INFINITY, maxMilestones: 3, statsDays: 90, alerts: true, staffReport: true, exportCsv: true,
-    posterDesign: true, aiTexts: 120, dataPosts: true, aiCalendar: true, aiReviews: true, proximity: true, pushCampaigns: 8, giftCards: true
+    posterDesign: true, aiTexts: 120, aiImages: 60, dataPosts: true, aiCalendar: true, aiReviews: true, proximity: true, pushCampaigns: 8, giftCards: true
   }
 };
 
@@ -90,6 +92,7 @@ export function planIncludes(plan: Plan): string[] {
     f.exportCsv ? 'Exportar a Excel (CSV)' : '',
     f.posterDesign ? 'Póster con tu diseño' : '',
     `${f.aiTexts} textos con IA al mes`,
+    `${f.aiImages} fotos mejoradas con IA al mes`,
     f.dataPosts ? 'Posts con tus datos' : '',
     f.aiCalendar ? 'Calendario semanal y respuestas a reseñas' : ''
   ].filter(Boolean);
