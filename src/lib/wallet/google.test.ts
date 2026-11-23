@@ -6,7 +6,7 @@ import { googleSaveUrl, googleWalletConfig, signJwt } from './google';
 const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const pem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
 const saB64 = Buffer.from(JSON.stringify({ client_email: 'wallet@demo.iam.gserviceaccount.com', private_key: pem })).toString('base64');
-const env = (over: Record<string, string | undefined> = {}) => ({ GOOGLE_WALLET_ISSUER_ID: '3388000000023233833', GOOGLE_WALLET_SA_JSON_BASE64: saB64, ...over }) as NodeJS.ProcessEnv;
+const env = (over: Record<string, string | undefined> = {}) => ({ GOOGLE_WALLET_ISSUER_ID: '3388000000023233833', GOOGLE_WALLET_SA_JSON_BASE64: saB64, ...over }) as unknown as NodeJS.ProcessEnv;
 
 const card = {
   business: { id: 'b1', name: 'Café Azul', slug: 'cafe-azul' },
