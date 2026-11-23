@@ -8,6 +8,7 @@ import { cardIndex, CardsTopBar, ComingSoon, PausedNoCard, ProgramIntro, SignOut
 import { stampedText } from '@/components/customer/card-model';
 import { milestoneMap, nextReward } from '@/lib/rewards';
 import type { Program } from '@/lib/contracts';
+import { googleWalletEnabled } from '@/lib/wallet/google';
 
 /** "¡Sello 4 de 10! Ganaste: Postre gratis." o "¡Sello 5 de 10! Te faltan 2 para tu postre." */
 function sealedText(stamps: number, program: Program): string {
@@ -50,6 +51,12 @@ export default async function CustomerPage({ params, searchParams }: Props) {
           {!sealed && searchParams.nueva === '1' && <Notice tone="success" title="¡Tu tarjeta ya está lista!">En cada compra pide tu código en caja.</Notice>}
           {!sealed && searchParams.hola === '1' && <Notice tone="info" title={`¡Qué bueno verte, ${mine.customer.name.split(' ')[0]}!`} />}
           <LoyaltyCard card={mine} frozen={frozen} pop={sealed} claimSlot={<ClaimForm slug={business.slug} />} />
+          {googleWalletEnabled() && (
+            <a href={`/u/${encodeURIComponent(business.slug)}/wallet/google`} rel="nofollow"
+              className="flex w-full items-center justify-center gap-2 rounded-full bg-black px-5 py-3 text-sm font-semibold text-white">
+              Agregar a Google Wallet
+            </a>
+          )}
         </div>
         <SignOut slug={business.slug} email={session.email} />
       </CustomerShell>

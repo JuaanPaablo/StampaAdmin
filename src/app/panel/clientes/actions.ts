@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { getContext } from '@/lib/context';
+import { syncWalletPass } from '@/lib/wallet/sync';
 import { hasRole } from '@/lib/auth';
 import type { FormState } from '@/components/customers/form-state';
 import { normalizeWhatsapp } from '@/components/customers/contact';
@@ -100,6 +101,7 @@ export async function redeemRewardAction(_prev: FormState, formData: FormData): 
     const m = Number(formData.get('milestone') ?? '');
     const milestone = Number.isInteger(m) && m > 0 ? m : undefined;
     const r = await repo.redeemReward(business.id, customerId, staff.id, milestone);
+    await syncWalletPass(business.id, customerId);
     revalidatePath(`/panel/clientes/${customerId}`);
     revalidatePath('/panel/clientes');
     revalidatePath('/panel');

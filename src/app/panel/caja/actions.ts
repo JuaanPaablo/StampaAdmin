@@ -8,6 +8,7 @@ import { hasRole } from '@/lib/auth';
 import { isDemoMode } from '@/lib/demo';
 import { needsApproval } from '@/lib/domain';
 import { parseMoney } from '@/lib/format';
+import { syncWalletPass } from '@/lib/wallet/sync';
 import type { CreateCodeResult } from '@/lib/contracts';
 import type { ActionState, CodeFormState } from '@/components/register/types';
 
@@ -117,6 +118,7 @@ export async function simulateScanAction(_prev: ActionState, fd: FormData): Prom
   if (!code) return { ok: false, error: 'El código no existe.' };
   const r = await ctx.repo.claimStampCode(ctx.business.id, code.code, ids.data.customerId);
   revalidateAll(code.id);
+  if (r.ok) await syncWalletPass(ctx.business.id, ids.data.customerId);
   if (!r.ok) return { ok: false, error: 'Rechazado: ' + r.error };
   return { ok: true, message: r.customer.name + ' reclamó su sello.' + (r.rewardReady ? ' Completó su tarjeta y tiene un ' + ctx.template.vocab.reward + ' listo.' : '') };
 }
@@ -139,6 +141,7 @@ export async function simulateResendAction(_prev: ActionState, fd: FormData): Pr
 
   const r = await ctx.repo.claimStampCode(ctx.business.id, code.code, customerId);
   revalidateAll(code.id);
+  if (r.ok) await syncWalletPass(ctx.business.id, customerId);
   if (!r.ok) return { ok: true, message: 'El reenvío fue rechazado: ' + r.error };
   // El código seguía abierto y el cliente no había reclamado: se contó como un reclamo legítimo.
   return { ok: true, message: 'El código seguía abierto y ' + r.customer.name + ' no había reclamado: se contó como un reclamo normal. Vuelve a probar para ver el rechazo.' };
@@ -151,6 +154,7 @@ export async function redeemAction(_prev: ActionState, fd: FormData): Promise<Ac
   try {
     const m = Number(text(fd, 'milestone'));
     const r = await ctx.repo.redeemReward(ctx.business.id, customerId.data, ctx.staff.id, Number.isInteger(m) && m > 0 ? m : undefined);
+    await syncWalletPass(ctx.business.id, customerId.data);
     revalidateAll();
     revalidatePath('/panel/clientes');
     return { ok: true, message: 'Canje registrado para ' + r.customerName + (r.rewardTitle ? ': ' + r.rewardTitle : '') + '.' };

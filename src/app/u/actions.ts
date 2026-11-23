@@ -12,6 +12,7 @@ import {
 } from '@/lib/customer-session';
 import { businessStatus } from '@/lib/mvp-rules';
 import { getRepo } from '@/lib/repo';
+import { syncWalletPass } from '@/lib/wallet/sync';
 import { customerPath, stampPath } from '@/lib/urls';
 import { checkBirthdate, cleanCode } from '@/components/customer/card-model';
 import { claimLimiter, clientIp, otpRequestLimiter, otpVerifyLimiter } from '@/components/customer/throttle';
@@ -246,6 +247,7 @@ export async function claimAction(_prev: SimpleState, fd: FormData): Promise<Sim
     limiter.fail(ip);
     return { error: result.error };
   }
+  await syncWalletPass(business.id, customer.id);
   redirect(customerPath(business.slug) + '?sellado=1', RedirectType.replace);
 }
 

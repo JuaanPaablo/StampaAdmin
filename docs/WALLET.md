@@ -8,6 +8,10 @@ Objetivo: cuando el cliente se registra o abre su tarjeta, puede guardarla en Ap
 - Hecho: modelo del pase (`src/lib/wallet/pass-model.ts`) con progreso, próximo premio, premio listo, colores,
   QR a la tarjeta y hasta 10 sucursales para avisos de cercanía. `applePassJson` y `googleLoyaltyObject` arman el
   contenido de cada plataforma. Pruebas en `pass-model.test.ts`.
+- Hecho (Google, rama `feature/google-wallet`): `src/lib/wallet/google.ts` firma el enlace "Guardar en Google Wallet"
+  (JWT RS256 con node:crypto, sin dependencias), `GET /u/<negocio>/wallet/google` redirige al cliente con sesión a ese
+  enlace, y `syncWalletPass` actualiza el pase (PATCH) al sumar un sello o canjear. Sin las variables, el botón no aparece.
+  Pruebas en `google.test.ts`. Ojo: Google descarga el logo, así que en `localhost` el guardado falla; probar en Vercel.
 - Falta (necesita las cuentas): firmar el `.pkpass`, el servicio web de Apple para actualizar pases (APNs),
   la API de Google Wallet, los botones "Agregar a Wallet" en `/u/<negocio>` y coordenadas de cada sucursal.
 
