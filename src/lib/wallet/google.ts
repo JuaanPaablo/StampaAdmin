@@ -60,10 +60,14 @@ export function signJwt(payload: Record<string, unknown>, privateKeyPem: string)
 const safeId = (s: string) => s.replace(/[^\w.-]/g, '_');
 export const classSuffix = (businessId: string) => `stampa_${safeId(businessId)}`;
 
-/** Logo de la clase: Google lo descarga, así que debe ser una URL https pública. */
+/**
+ * Logo de la clase: Google lo descarga, así que debe ser una URL https pública. El respaldo sale siempre del dominio de
+ * producción: las versiones de prueba de Vercel piden inicio de sesión y Google no podría bajarlo.
+ */
+const FALLBACK_LOGO = 'https://stampaecu.app/apple-touch-icon.png';
 function logoUri(card: CustomerCard): string {
   const url = card.program.logoUrl;
-  return url && /^https:\/\//.test(url) ? url : `${appUrl()}/apple-touch-icon.png`;
+  return url && /^https:\/\//.test(url) ? url : FALLBACK_LOGO;
 }
 
 export function googleLoyaltyClass(card: CustomerCard, m: PassModel, issuerId: string) {
