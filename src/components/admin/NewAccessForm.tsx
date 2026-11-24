@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRef } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 import { Card, btnClass, inputClass } from '@/components/ui';
 import { createAccessAction, type AccessLinkState } from '@/lib/admin-actions';
@@ -8,6 +9,7 @@ import type { Plan } from '@/lib/contracts';
 import { cn } from '@/lib/cn';
 import { todayEc } from '@/lib/plan-rules';
 import { AccessLinkPanel } from './AccessLinkPanel';
+import { useFocusFirstError } from './useFocusFirstError';
 
 function Submit() {
   const { pending } = useFormStatus();
@@ -26,6 +28,9 @@ const label = 'text-xs font-semibold tracking-wide text-muted';
  */
 export function NewAccessForm({ plans, defaultPlan }: { plans: { value: Plan; label: string }[]; defaultPlan: Plan }) {
   const [state, action] = useFormState<AccessLinkState, FormData>(createAccessAction, { status: 'idle' });
+  const formRef = useRef<HTMLFormElement>(null);
+  const hasFieldErrors = state.status === 'error' && !!state.fieldErrors && Object.keys(state.fieldErrors).length > 0;
+  useFocusFirstError(formRef, state, hasFieldErrors);
 
   if (state.status === 'ok') {
     return (
@@ -50,12 +55,12 @@ export function NewAccessForm({ plans, defaultPlan }: { plans: { value: Plan; la
 
   return (
     <Card className="mx-auto max-w-xl">
-      <form action={action} noValidate className="flex flex-col gap-5" key={JSON.stringify(v)}>
+      <form ref={formRef} action={action} noValidate className="flex flex-col gap-5" key={JSON.stringify(v)}>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="email" className={label}>Correo del dueño</label>
           <input
             id="email" name="email" type="email" required autoComplete="off" inputMode="email" autoCapitalize="none" spellCheck={false}
-            maxLength={254} defaultValue={v.email ?? ''} placeholder="dueño@sunegocio.com" autoFocus
+            maxLength={254} defaultValue={v.email ?? ''} placeholder="dueño@sunegocio.com" autoFocus={state.status === 'idle'}
             aria-invalid={!!fe.email} aria-describedby={fe.email ? 'email-err' : 'email-hint'}
             className={cn(inputClass, 'h-12', fe.email && 'border-bad')}
           />
@@ -81,7 +86,7 @@ export function NewAccessForm({ plans, defaultPlan }: { plans: { value: Plan; la
 
         <div className="flex flex-col gap-1.5">
           <label htmlFor="note" className={label}>Nota interna (opcional)</label>
-          <textarea id="note" name="note" maxLength={500} defaultValue={v.note ?? ''} placeholder="Ej.: Pizzería, 5 sucursales. Pagó 3 meses." aria-describedby={fe.note ? 'note-err' : 'note-hint'} className={cn(inputClass, 'h-auto min-h-24 py-2.5')} />
+          <textarea id="note" name="note" maxLength={500} defaultValue={v.note ?? ''} placeholder="Ej.: Pizzería, 5 sucursales. Pagó 3 meses." aria-invalid={!!fe.note} aria-describedby={fe.note ? 'note-err' : 'note-hint'} className={cn(inputClass, 'h-auto min-h-24 py-2.5')} />
           {err('note') ?? <p id="note-hint" className="text-xs text-muted">Solo la ve Stampa.</p>}
         </div>
 

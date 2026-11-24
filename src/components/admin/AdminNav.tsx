@@ -49,7 +49,7 @@ export function AdminNav({ email }: { email: string }) {
         <div className="ml-auto flex min-w-0 items-center gap-3">
           <span className="hidden truncate text-xs text-white/65 md:inline" title={email}>{email}</span>
           <form action={adminSignOut}>
-            <button type="submit" className="h-9 rounded-full bg-white/10 px-4 text-[13px] font-semibold text-white hover:bg-white/20">Salir</button>
+            <button type="submit" className="h-11 rounded-full bg-white/10 px-4 text-[13px] font-semibold text-white hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sun">Salir</button>
           </form>
         </div>
       </div>

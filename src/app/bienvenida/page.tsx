@@ -37,7 +37,7 @@ function Shell({ children, wide = false }: { children: ReactNode; wide?: boolean
         <div className="mx-auto flex h-16 w-full max-w-5xl items-center justify-between gap-3 px-4 sm:px-6">
           <Wordmark />
           <form action={signOutAction}>
-            <button type="submit" className="h-10 rounded-full px-4 text-[13px] font-semibold text-white/85 ring-1 ring-inset ring-white/25 hover:bg-white/10">Cerrar sesión</button>
+            <button type="submit" className="h-11 rounded-full px-4 text-[13px] font-semibold text-white/85 ring-1 ring-inset ring-white/25 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sun">Cerrar sesión</button>
           </form>
         </div>
       </header>
@@ -46,20 +46,34 @@ function Shell({ children, wide = false }: { children: ReactNode; wide?: boolean
   );
 }
 
-function Stepper({ step }: { step: number }) {
+/**
+ * "Paso N de 5" con barra y, en pantallas medianas, la lista de pasos. Los pasos ya alcanzados son enlaces: se puede
+ * volver a cualquiera sin perder lo guardado (cada paso guarda al seguir).
+ */
+function Stepper({ step, maxStep }: { step: number; maxStep: number }) {
   return (
     <nav aria-label="Pasos de la configuración" className="mb-6">
       <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted">Paso {step} de {TOTAL_STEPS}<span className="sm:hidden"> · {STEPS[step - 1]}</span></p>
       <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-line" aria-hidden="true">
-        <div className="h-full rounded-full bg-sun transition-all" style={{ width: `${(step / TOTAL_STEPS) * 100}%` }} />
+        <div className="h-full rounded-full bg-sun transition-all motion-reduce:transition-none" style={{ width: `${(step / TOTAL_STEPS) * 100}%` }} />
       </div>
-      <ol className="mt-3 hidden gap-2 text-xs sm:flex">
-        {STEPS.map((s, i) => (
-          <li key={s} aria-current={i + 1 === step ? 'step' : undefined}
-            className={'flex-1 ' + (i + 1 === step ? 'font-semibold text-navy' : i + 1 < step ? 'text-navy/70' : 'text-muted')}>
-            {i + 1}. {s}
-          </li>
-        ))}
+      <ol className="mt-1 hidden gap-2 text-xs sm:flex">
+        {STEPS.map((s, i) => {
+          const n = i + 1;
+          const current = n === step;
+          const reachable = n <= maxStep && !current;
+          const done = n < maxStep;
+          const text = <>{done && !current ? <span aria-hidden="true">✓ </span> : `${n}. `}{s}{done && !current && <span className="sr-only"> (hecho)</span>}</>;
+          return (
+            <li key={s} aria-current={current ? 'step' : undefined} className="flex-1">
+              {reachable ? (
+                <Link href={`/bienvenida?paso=${n}`} className="-mx-1 inline-flex min-h-11 items-center rounded px-1 text-navy underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-navy">{text}</Link>
+              ) : (
+                <span className={'inline-flex min-h-11 items-center ' + (current ? 'font-semibold text-navy' : 'text-muted')}>{text}</span>
+              )}
+            </li>
+          );
+        })}
       </ol>
     </nav>
   );
@@ -115,7 +129,7 @@ export default async function BienvenidaPage({ searchParams }: { searchParams?: 
   if (step === 1) {
     return (
       <Shell>
-        <Stepper step={1} />
+        <Stepper step={1} maxStep={maxStep} />
         <StepTitle title={`¡Hola, ${firstName}!`}  />
         <BusinessStep
           name={hasRealName ? business.name : ''}
@@ -131,7 +145,7 @@ export default async function BienvenidaPage({ searchParams }: { searchParams?: 
   if (step === 2) {
     return (
       <Shell wide>
-        <Stepper step={2} />
+        <Stepper step={2} maxStep={maxStep} />
         <StepTitle title="Tu imagen" text="Opcional: puedes saltarlo." />
         <ProgramForm maxMilestones={features(business.plan).maxMilestones}
           program={program}
@@ -154,7 +168,7 @@ export default async function BienvenidaPage({ searchParams }: { searchParams?: 
   if (step === 3) {
     return (
       <Shell>
-        <Stepper step={3} />
+        <Stepper step={3} maxStep={maxStep} />
         <StepTitle title="Tus sucursales" text={`${locations.length} de ${limit} · ${locationLimitText(business.plan, PLAN_LABEL[business.plan])}`} />
         <div className="space-y-4">
           {locations.map((l, i) => (
@@ -192,9 +206,9 @@ export default async function BienvenidaPage({ searchParams }: { searchParams?: 
             </p>
           )}
           <form action={finishLocationsStep} className="flex flex-wrap items-center gap-3 pt-2">
-            <button type="submit" disabled={locations.length === 0} className={btnClass('primary')}>Seguir</button>
+            <button type="submit" disabled={locations.length === 0} aria-describedby={locations.length === 0 ? 'seguir-hint' : undefined} className={btnClass('primary')}>Seguir</button>
             {backLink(3)}
-            {locations.length === 0 && <span className="text-xs text-muted">Agrega una sucursal para seguir.</span>}
+            {locations.length === 0 && <span id="seguir-hint" className="text-xs text-muted">Agrega una sucursal para seguir.</span>}
           </form>
         </div>
       </Shell>
@@ -204,7 +218,7 @@ export default async function BienvenidaPage({ searchParams }: { searchParams?: 
   if (step === 4) {
     return (
       <Shell wide>
-        <Stepper step={4} />
+        <Stepper step={4} maxStep={maxStep} />
         <StepTitle title="Tu tarjeta" />
         <ProgramForm maxMilestones={features(business.plan).maxMilestones}
           program={program}
@@ -221,33 +235,41 @@ export default async function BienvenidaPage({ searchParams }: { searchParams?: 
   }
 
   // Paso 5: resumen.
-  const rows: { label: string; value: string }[] = [
-    { label: 'Negocio', value: business.name },
-    { label: 'Tipo', value: template.label },
-    { label: 'Ciudad', value: [business.city, business.province].filter(Boolean).join(', ') || 'Sin ciudad' },
-    { label: 'Sucursales', value: locations.map((l) => l.name).join(', ') || 'Ninguna' },
-    ...cleanMilestones(program.milestones, program.stampsRequired).map((m) => ({ label: `Premio del sello ${m.at}`, value: m.title })),
-    { label: 'Premio final', value: `${program.rewardTitle} al juntar ${program.stampsRequired} sellos` },
-    { label: 'Sello', value: program.requireAmount ? `Uno por cada ${money(program.minSpendCentsPerStamp)} de consumo` : `Uno por ${template.vocab.visit}` },
-    { label: 'Cumpleaños', value: program.birthdayReward || 'Sin regalo' },
-    { label: 'Tu dirección pública', value: customerUrl(business.slug) }
+  // `step`: a qué paso lleva "Cambiar" (la dirección pública sale del nombre del paso 1).
+  const rows: { label: string; value: string; step: number }[] = [
+    { label: 'Negocio', value: business.name, step: 1 },
+    { label: 'Tipo', value: template.label, step: 1 },
+    { label: 'Ciudad', value: [business.city, business.province].filter(Boolean).join(', ') || 'Sin ciudad', step: 1 },
+    { label: 'Sucursales', value: locations.map((l) => l.name).join(', ') || 'Ninguna', step: 3 },
+    ...cleanMilestones(program.milestones, program.stampsRequired).map((m) => ({ label: `Premio del sello ${m.at}`, value: m.title, step: 4 })),
+    { label: 'Premio final', value: `${program.rewardTitle} al juntar ${program.stampsRequired} sellos`, step: 4 },
+    { label: 'Sello', value: program.requireAmount ? `Uno por cada ${money(program.minSpendCentsPerStamp)} de consumo` : `Uno por ${template.vocab.visit}`, step: 4 },
+    { label: 'Cumpleaños', value: program.birthdayReward || 'Sin regalo', step: 4 },
+    { label: 'Tu dirección pública', value: customerUrl(business.slug), step: 1 }
   ];
 
   return (
     <Shell wide>
-      <Stepper step={5} />
+      <Stepper step={5} maxStep={maxStep} />
       <StepTitle title="¡Todo listo!" text="Al abrir tu panel, tu tarjeta se activa." />
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
         <Card className="space-y-5">
           <dl className="divide-y divide-line/80">
-            {rows.map((r) => (
-              <div key={r.label} className="grid gap-1 py-2.5 sm:grid-cols-[170px_minmax(0,1fr)] sm:gap-3">
+            {rows.map((r, i) => (
+              <div key={r.label} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 py-2 sm:grid-cols-[170px_minmax(0,1fr)_auto]">
                 <dt className="text-xs font-semibold text-muted">{r.label}</dt>
-                <dd className="break-words text-sm font-medium text-navy">{r.value}</dd>
+                <dd className="col-start-1 break-words text-sm font-medium text-navy sm:col-start-2 sm:row-start-1">{r.value}</dd>
+                {(i === 0 || rows[i - 1].step !== r.step) && (
+                  <dd className="col-start-2 row-span-2 row-start-1 sm:col-start-3 sm:row-span-1">
+                    <Link href={`/bienvenida?paso=${r.step}`} className="inline-flex min-h-11 items-center rounded px-2 text-[13px] font-semibold text-navy underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-navy">
+                      Cambiar<span className="sr-only"> {r.label.toLowerCase()}</span>
+                    </Link>
+                  </dd>
+                )}
               </div>
             ))}
           </dl>
-          <p className="text-xs text-muted">Todo se puede cambiar después, menos la dirección pública (la de tu póster QR).</p>
+          <p className="text-xs text-muted">Después podrás cambiar todo, menos la dirección pública (va en tu póster QR). Si quieres otra, cambia el nombre ahora.</p>
           <CompleteStep back={backLink(5)} />
         </Card>
         <CardPreview data={{

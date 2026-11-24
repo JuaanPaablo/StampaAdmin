@@ -144,3 +144,6 @@ export type EmailStatus = 'sent' | 'preview' | 'failed';
 export function emailStatusOf(result: { sent: boolean; preview?: boolean }): EmailStatus {
   return result.sent ? 'sent' : result.preview ? 'preview' : 'failed';
 }
+
+/* Ayuda en vivo de las contraseñas: vive aparte porque la usa un componente de cliente (sin node:crypto). */
+export { passwordHint, type PasswordHint } from './password-hint';

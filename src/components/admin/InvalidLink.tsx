@@ -6,7 +6,7 @@ import { stampaWhatsappUrl } from '@/lib/urls';
 export function InvalidLinkBody({ mode }: { mode: 'invite' | 'reset' }) {
   return (
     <div className="flex flex-col gap-5 text-sm leading-relaxed text-navy">
-      <p className="text-muted">Ya se usó o venció ({mode === 'reset' ? 'dura 60 minutos' : 'dura 72 horas'}).</p>
+      <p className="text-muted">Ya se usó o venció (dura {mode === 'reset' ? '60 minutos' : '72 horas'}). Pide uno nuevo:</p>
       {mode === 'reset' ? (
         <>
           <Link href="/ingresar/olvide" className={btnClass('primary') + ' h-12 w-full'}>Pedir otro enlace</Link>
@@ -27,7 +27,7 @@ export function InvalidLinkBody({ mode }: { mode: 'invite' | 'reset' }) {
             <p className="font-semibold">¿Eres del equipo?</p>
             <p className="mt-1 text-muted">Pide un enlace nuevo a tu dueño o gerente.</p>
           </div>
-          <Link href="/ingresar" className="text-center font-semibold text-navy underline underline-offset-2">¿Ya tienes contraseña? Inicia sesión</Link>
+          <Link href="/ingresar" className="flex min-h-11 items-center justify-center rounded font-semibold text-navy underline underline-offset-2">¿Ya tienes contraseña? Inicia sesión</Link>
         </>
       )}
     </div>

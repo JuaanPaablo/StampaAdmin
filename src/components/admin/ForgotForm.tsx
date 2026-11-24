@@ -20,7 +20,11 @@ export function ForgotForm() {
         <p role="status" className="rounded-xl bg-[#DDF3E8] px-3.5 py-3 text-sm leading-snug text-[#12683F]">
           Si el correo está registrado, te enviamos un enlace para cambiar tu contraseña. Vence en 60 minutos.
         </p>
-        <p className="text-sm text-muted">¿No llega? Mira en spam o pídelo de nuevo en unos minutos.</p>
+        <p className="text-sm text-muted">
+          ¿No llega? Revisa spam o{' '}
+          {/* Recarga completa: vuelve al formulario vacío */}
+          <a href="/ingresar/olvide" className="-my-2 inline-block py-2 font-semibold text-navy underline underline-offset-2">pídelo con otro correo</a>.
+        </p>
         {state.previewUrl && (
           <div className="rounded-xl bg-[#FFF3CC] px-3.5 py-3 text-sm text-[#7A5A00]">
             <p className="font-semibold">Modo de prueba: el correo no se envió.</p>
@@ -45,7 +49,7 @@ export function ForgotForm() {
         {state.error && <p id="email-err" role="alert" className="text-[13px] text-bad">{state.error}</p>}
       </div>
       <Submit />
-      <Link href="/ingresar" className="text-center text-sm font-semibold text-navy underline underline-offset-2">Volver a iniciar sesión</Link>
+      <Link href="/ingresar" className="flex min-h-11 items-center justify-center rounded text-sm font-semibold text-navy underline underline-offset-2">Volver a iniciar sesión</Link>
     </form>
   );
 }

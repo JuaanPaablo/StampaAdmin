@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AdminBusinessRow, Business } from '@/lib/contracts';
-import { accessShareText, displayName, emailStatusOf, expiryInfo, filterRows, needsAttention, parseDateInput, parseStatusFilter, toDateInput } from './helpers';
+import { accessShareText, displayName, emailStatusOf, expiryInfo, filterRows, needsAttention, parseDateInput, passwordHint, parseStatusFilter, toDateInput } from './helpers';
 
 // 21 nov 2026, 10:00 en Ecuador (15:00 UTC)
 const NOW = Date.UTC(2026, 10, 21, 15, 0, 0);
@@ -83,5 +83,20 @@ describe('compartir el enlace', () => {
     expect(emailStatusOf({ sent: true })).toBe('sent');
     expect(emailStatusOf({ sent: false, preview: true })).toBe('preview');
     expect(emailStatusOf({ sent: false, preview: false })).toBe('failed');
+  });
+});
+
+describe('ayuda en vivo de la contraseña', () => {
+  it('muestra el mínimo, cuánto falta y cuándo ya alcanza', () => {
+    expect(passwordHint('', 10)).toEqual({ ok: false, text: 'Mínimo 10 caracteres', extra: undefined });
+    expect(passwordHint('abcdef', 10)).toEqual({ ok: false, text: 'Mínimo 10 caracteres', extra: ' · faltan 4' });
+    expect(passwordHint('abcdefghij', 10)).toEqual({ ok: true, text: '10 caracteres o más' });
+  });
+
+  it('dice si la confirmación coincide (nada mientras está vacía)', () => {
+    expect(passwordHint('', undefined, 'secreta-123')).toBeNull();
+    expect(passwordHint('secreta', undefined, 'secreta-123')).toEqual({ ok: false, text: 'Aún no coinciden' });
+    expect(passwordHint('secreta-123', undefined, 'secreta-123')).toEqual({ ok: true, text: 'Coinciden' });
+    expect(passwordHint('algo')).toBeNull();
   });
 });

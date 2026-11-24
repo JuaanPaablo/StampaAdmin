@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Card, EmptyState, PageHeader, Table, Td, Th, btnClass, inputClass } from '@/components/ui';
 import { ExpiryText, StatusBadge } from '@/components/admin/StatusBadge';
-import { STATUS_FILTERS, displayName, filterRows, parseSearch, parseStatusFilter } from '@/components/admin/helpers';
+import { STATUS_FILTERS, displayName, filterRows, parseSearch, parseStatusFilter, type StatusFilter } from '@/components/admin/helpers';
 import { requireAdmin } from '@/lib/admin-session';
 import { ago, num } from '@/lib/format';
 import { PLAN_LABEL } from '@/lib/mvp-rules';
@@ -16,37 +16,63 @@ export default async function AdminBusinessesPage({ searchParams }: { searchPara
   const now = Date.now();
   const rows = filterRows(all, q, estado, now);
   const filtered = q !== '' || estado !== 'todos';
+  const counts = Object.fromEntries(STATUS_FILTERS.map((f) => [f.value, filterRows(all, q, f.value, now).length])) as Record<StatusFilter, number>;
 
   return (
     <>
       <PageHeader
         title="Negocios"
-        subtitle={filtered ? `${num(rows.length)} de ${num(all.length)} negocios.` : `${num(all.length)} negocios.`}
+        subtitle={`${num(all.length)} ${all.length === 1 ? 'negocio' : 'negocios'}`}
         actions={<Link href="/admin/negocios/nuevo" className={btnClass('primary')}>Dar acceso a un negocio</Link>}
       />
 
-      <form method="get" role="search" className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end">
-        <div className="flex flex-1 flex-col gap-1.5">
-          <label htmlFor="q" className="text-xs font-semibold tracking-wide text-muted">Buscar</label>
-          <input id="q" name="q" type="search" defaultValue={q} maxLength={100} placeholder="Ej.: panadería o dueño@correo.com" className={inputClass} />
-        </div>
-        <div className="flex flex-col gap-1.5 sm:w-52">
-          <label htmlFor="estado" className="text-xs font-semibold tracking-wide text-muted">Estado</label>
-          <select id="estado" name="estado" defaultValue={estado} className={inputClass + ' pr-8'}>
-            {STATUS_FILTERS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
-          </select>
-        </div>
-        <div className="flex gap-2">
-          <button type="submit" className={btnClass('dark') + ' flex-1 sm:flex-none'}>Buscar</button>
-          {filtered && <Link href="/admin/negocios" className={btnClass('ghost') + ' flex-1 sm:flex-none'}>Limpiar</Link>}
-        </div>
+      <form method="get" role="search" className="mb-3 flex gap-2">
+        {estado !== 'todos' && <input type="hidden" name="estado" value={estado} />}
+        <label htmlFor="q" className="sr-only">Buscar por negocio, dueño o correo</label>
+        <input id="q" name="q" type="search" defaultValue={q} maxLength={100} placeholder="Buscar negocio o correo" className={inputClass + ' min-w-0 flex-1'} />
+        <button type="submit" className={btnClass('dark') + ' shrink-0'}>Buscar</button>
       </form>
+
+      {/* Filtros rápidos por estado, con cuántos hay en cada uno (respetan la búsqueda) */}
+      <nav aria-label="Filtrar por estado" className="-mx-4 mb-5 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+        <ul className="flex w-max gap-2 sm:w-auto sm:flex-wrap">
+          {STATUS_FILTERS.map((f) => {
+            const on = f.value === estado;
+            const count = counts[f.value];
+            const params = new URLSearchParams();
+            if (q) params.set('q', q);
+            if (f.value !== 'todos') params.set('estado', f.value);
+            const href = '/admin/negocios' + (params.toString() ? `?${params}` : '');
+            return (
+              <li key={f.value}>
+                <Link
+                  href={href} aria-current={on ? 'page' : undefined}
+                  className={'inline-flex h-11 items-center gap-2 whitespace-nowrap rounded-full px-4 text-sm font-semibold ring-1 ring-inset transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-navy ' +
+                    (on ? 'bg-navy text-white ring-navy' : 'bg-white text-navy ring-[#C9D6E3] hover:bg-surface')}
+                >
+                  {f.label}
+                  <span className={'rounded-full px-1.5 py-0.5 text-[11px] tabular-nums leading-none ' + (on ? 'bg-white/15 text-white' : 'bg-surface text-muted')}>{num(count)}</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+
+      {filtered && rows.length > 0 && (
+        <p className="mb-4 text-sm text-muted">
+          {num(rows.length)} de {num(all.length)}{q && <> · «{q}»</>}{' '}
+          <Link href="/admin/negocios" className="-my-3 inline-block py-3 font-semibold text-navy underline underline-offset-2">Quitar filtros</Link>
+        </p>
+      )}
 
       {rows.length === 0 ? (
         <EmptyState
           title={filtered ? 'No hay negocios con ese filtro' : 'Aún no hay negocios'}
           text={filtered ? 'Prueba con otra búsqueda o con otro estado.' : 'Da acceso al primer dueño para empezar.'}
-          action={!filtered ? <Link href="/admin/negocios/nuevo" className={btnClass('primary', 'sm') + ' mt-2'}>Dar acceso a un negocio</Link> : undefined}
+          action={filtered
+            ? <Link href="/admin/negocios" className={btnClass('ghost') + ' mt-2'}>Quitar filtros</Link>
+            : <Link href="/admin/negocios/nuevo" className={btnClass('primary') + ' mt-2'}>Dar acceso a un negocio</Link>}
         />
       ) : (
         <>

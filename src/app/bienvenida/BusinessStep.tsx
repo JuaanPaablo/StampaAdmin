@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useFormState } from 'react-dom';
 import { Card, Input } from '@/components/ui';
 import { FormField, describedBy } from '@/components/card/FormField';
 import { SubmitButton } from '@/components/card/SubmitButton';
 import { PlaceFields } from '@/components/shell/PlaceFields';
 import type { BusinessType } from '@/lib/contracts';
+import { useFocusFirstError } from '@/components/admin/useFocusFirstError';
 import { saveBusinessStep, type StepState } from './actions';
 
 export interface TypeOption { type: BusinessType; label: string }
@@ -16,9 +17,11 @@ export function BusinessStep({ name, type, city, province, types }: { name: stri
   const [state, action] = useFormState<StepState, FormData>(saveBusinessStep, { ok: false });
   const [picked, setPicked] = useState<BusinessType>(type);
   const err = state.errors ?? {};
+  const ref = useRef<HTMLFormElement>(null);
+  useFocusFirstError(ref, state, Object.keys(err).length > 0);
 
   return (
-    <form action={action} noValidate className="space-y-5">
+    <form ref={ref} action={action} noValidate className="space-y-5">
       <Card as="section" className="space-y-5">
         <FormField id="name" label="Nombre del negocio" error={err.name}>
           <Input id="name" name="name" defaultValue={name} maxLength={80} required autoComplete="organization" placeholder="Ej. Café La Esquina"
@@ -34,7 +37,7 @@ export function BusinessStep({ name, type, city, province, types }: { name: stri
                 <label key={t.type}
                   className={'relative flex min-h-[52px] cursor-pointer items-center rounded-xl px-3 py-2 ring-1 ring-inset transition focus-within:ring-2 focus-within:ring-navy ' +
                     (on ? 'bg-navy text-white ring-navy' : 'bg-white text-navy ring-[#C9D6E3] hover:bg-surface')}>
-                  <input type="radio" name="type" value={t.type} checked={on} onChange={() => setPicked(t.type)} className="sr-only" />
+                  <input type="radio" name="type" value={t.type} checked={on} onChange={() => setPicked(t.type)} aria-invalid={!!err.type} className="sr-only" />
                   <span className="font-display text-sm font-semibold leading-tight">{t.label}</span>
                   {on && <span aria-hidden="true" className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full bg-sun" />}
                 </label>

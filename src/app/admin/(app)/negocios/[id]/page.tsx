@@ -40,7 +40,7 @@ export default async function AdminBusinessPage({ params }: { params: { id: stri
       <Link href="/admin/negocios" className="mb-3 inline-flex items-center gap-1 rounded text-sm font-medium text-muted hover:text-navy">← Negocios</Link>
       <PageHeader
         title={name}
-        subtitle={st === 'setup' ? 'El dueño aún está configurando.' : undefined}
+        subtitle={st === 'setup' ? (owner?.invitePending ? 'El dueño aún no crea su contraseña.' : 'El dueño está en el asistente de configuración.') : undefined}
         actions={st === 'active' ? (
           <a href={customerUrl(b.slug)} target="_blank" rel="noopener noreferrer" className={btnClass('ghost')}>Ver página del cliente</a>
         ) : undefined}

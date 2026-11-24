@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, type FormEvent } from 'react';
+import { useRef, useState, useTransition, type FormEvent } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 import { btnClass, inputClass } from '@/components/ui';
 import { resendAccessAction, setStatusAction, updatePlanAction, type AccessLinkState, type AdminActionResult } from '@/lib/admin-actions';
@@ -9,6 +9,7 @@ import { cn } from '@/lib/cn';
 import { todayEc } from '@/lib/plan-rules';
 import { AutoRenewToggle } from './NewAccessForm';
 import { AccessLinkPanel } from './AccessLinkPanel';
+import { useFocusFirstError } from './useFocusFirstError';
 
 const label = 'text-xs font-semibold tracking-wide text-muted';
 
@@ -17,7 +18,13 @@ export function StatusControl({ businessId, status, name }: { businessId: string
   const [confirming, setConfirming] = useState(false);
   const [pending, start] = useTransition();
   const [res, setRes] = useState<AdminActionResult | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const suspend = status !== 'suspended';
+
+  function cancel() {
+    setConfirming(false);
+    requestAnimationFrame(() => triggerRef.current?.focus());
+  }
 
   function run() {
     const fd = new FormData();
@@ -32,13 +39,17 @@ export function StatusControl({ businessId, status, name }: { businessId: string
 
   return (
     <div className="flex flex-col gap-3">
-      {suspend && <p className="text-sm text-muted">El equipo no podrá usar el panel y los clientes verán su tarjeta congelada.</p>}
+      <p className="text-sm text-muted">
+        {suspend
+          ? 'El equipo no podrá usar el panel y los clientes verán su tarjeta congelada (sin sellos nuevos).'
+          : 'El equipo vuelve a entrar y los clientes pueden sumar sellos otra vez.'}
+      </p>
       {!confirming ? (
-        <button type="button" onClick={() => { setRes(null); setConfirming(true); }} className={btnClass(suspend ? 'danger' : 'dark') + ' h-12 self-start'}>
+        <button ref={triggerRef} type="button" onClick={() => { setRes(null); setConfirming(true); }} className={btnClass(suspend ? 'danger' : 'dark') + ' h-12 self-start'}>
           {suspend ? 'Suspender negocio' : 'Reactivar negocio'}
         </button>
       ) : (
-        <div role="alertdialog" aria-labelledby={`conf-${businessId}`} className={cn('flex flex-col gap-3 rounded-xl p-4', suspend ? 'bg-[#FBE9E7]' : 'bg-surface')}>
+        <div role="alertdialog" aria-labelledby={`conf-${businessId}`} onKeyDown={(e) => { if (e.key === 'Escape' && !pending) cancel(); }} className={cn('flex flex-col gap-3 rounded-xl p-4', suspend ? 'bg-[#FBE9E7]' : 'bg-surface')}>
           <p id={`conf-${businessId}`} className="text-sm font-semibold text-navy">
             {suspend ? `¿Suspender ${name}?` : `¿Reactivar ${name}?`}
           </p>
@@ -46,7 +57,7 @@ export function StatusControl({ businessId, status, name }: { businessId: string
             <button type="button" onClick={run} disabled={pending} autoFocus className={btnClass(suspend ? 'danger' : 'dark') + ' h-12'}>
               {pending ? 'Guardando…' : suspend ? 'Sí, suspender' : 'Sí, reactivar'}
             </button>
-            <button type="button" onClick={() => setConfirming(false)} disabled={pending} className={btnClass('ghost') + ' h-12'}>Cancelar</button>
+            <button type="button" onClick={cancel} disabled={pending} className={btnClass('ghost') + ' h-12'}>Cancelar</button>
           </div>
         </div>
       )}
@@ -61,7 +72,18 @@ export function PlanForm({ businessId, plan, expires, note, plans, autoRenew }: 
 }) {
   const [pending, start] = useTransition();
   const [res, setRes] = useState<AdminActionResult | null>(null);
+  const [hasDate, setHasDate] = useState(!!expires);
+  const dateRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const fe = res?.fieldErrors ?? {};
+  useFocusFirstError(formRef, res, Object.keys(fe).length > 0);
+
+  function clearDate() {
+    if (dateRef.current) dateRef.current.value = '';
+    setHasDate(false);
+    setRes(null);
+    dateRef.current?.focus();
+  }
 
   function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -70,27 +92,34 @@ export function PlanForm({ businessId, plan, expires, note, plans, autoRenew }: 
   }
 
   return (
-    <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
+    <form ref={formRef} onSubmit={onSubmit} onChange={() => res?.ok && setRes(null)} noValidate className="flex flex-col gap-4">
       <input type="hidden" name="businessId" value={businessId} />
       <input type="hidden" name="currentExpires" value={expires} />
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <label htmlFor="plan" className={label}>Plan</label>
-          <select id="plan" name="plan" defaultValue={plan} className={cn(inputClass, 'h-12 pr-8')}>
+          <select id="plan" name="plan" defaultValue={plan} aria-invalid={!!fe.plan} className={cn(inputClass, 'h-12 pr-8')}>
             {plans.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
           </select>
           {fe.plan && <p role="alert" className="text-xs text-bad">{fe.plan}</p>}
         </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="expires" className={label}>Vence el</label>
-          <input id="expires" name="expires" type="date" min={expires && expires < todayEc() ? expires : todayEc()} defaultValue={expires} className={cn(inputClass, 'h-12', fe.expires && 'border-bad')} aria-describedby="expires-hint" />
-          {fe.expires ? <p role="alert" className="text-xs text-bad">{fe.expires}</p> : <p id="expires-hint" className="text-xs text-muted">Vacío = sin vencimiento. Vencer no suspende el negocio.</p>}
+          <div className="flex gap-2">
+            <input
+              ref={dateRef} id="expires" name="expires" type="date" min={expires && expires < todayEc() ? expires : todayEc()} defaultValue={expires}
+              onChange={(e) => setHasDate(!!e.currentTarget.value)}
+              className={cn(inputClass, 'h-12 min-w-0 flex-1', fe.expires && 'border-bad')} aria-invalid={!!fe.expires} aria-describedby={fe.expires ? 'expires-err' : 'expires-hint'}
+            />
+            {hasDate && <button type="button" onClick={clearDate} className={btnClass('ghost') + ' h-12 shrink-0 px-4'}>Quitar</button>}
+          </div>
+          {fe.expires ? <p id="expires-err" role="alert" className="text-xs text-bad">{fe.expires}</p> : <p id="expires-hint" className="text-xs text-muted">{hasDate ? 'Vencer no suspende el negocio.' : 'Sin vencimiento.'}</p>}
         </div>
       </div>
       <AutoRenewToggle defaultChecked={autoRenew} />
       <div className="flex flex-col gap-1.5">
         <label htmlFor="note" className={label}>Nota interna</label>
-        <textarea id="note" name="note" maxLength={500} defaultValue={note} className={cn(inputClass, 'h-auto min-h-24 py-2.5')} />
+        <textarea id="note" name="note" maxLength={500} defaultValue={note} aria-invalid={!!fe.note} placeholder="Solo la ve Stampa." className={cn(inputClass, 'h-auto min-h-24 py-2.5')} />
         {fe.note && <p role="alert" className="text-xs text-bad">{fe.note}</p>}
       </div>
       <div className="flex flex-wrap items-center gap-3">
