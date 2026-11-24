@@ -5,5 +5,6 @@
 :root { color-scheme: light; }
 html, body { background: #F3F6FA; color: #001D3D; }
 body { font-family: Inter, 'Segoe UI', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
-:focus-visible { outline: 2px solid #FFC301; outline-offset: 2px; border-radius: 6px; }
+/* Foco visible con contraste en cualquier fondo: contorno Azul Noche (AA sobre blanco) y halo Amarillo de marca. */
+:focus-visible { outline: 2px solid #001D3D; outline-offset: 2px; box-shadow: 0 0 0 4px #FFC301; border-radius: 6px; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; } }

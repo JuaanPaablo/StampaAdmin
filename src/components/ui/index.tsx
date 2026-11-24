@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
+import { cloneElement, forwardRef, isValidElement, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactElement, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 import { cn } from '@/lib/cn';
 
 /** Kit de UI compartido. Componentes de servidor, sin estado. Si necesitas algo nuevo, créalo en TU carpeta de módulo. */
@@ -7,7 +7,8 @@ type BtnVariant = 'primary' | 'dark' | 'ghost' | 'danger';
 export const btnClass = (variant: BtnVariant = 'primary', size: 'md' | 'sm' = 'md') =>
   cn(
     'inline-flex items-center justify-center gap-2 rounded-full font-semibold transition active:scale-[.98] disabled:opacity-50 disabled:pointer-events-none',
-    size === 'md' ? 'h-11 px-5 text-sm' : 'h-9 px-4 text-[13px]',
+    // 'sm' mide 44 px en pantallas táctiles (mínimo para el dedo) y 36 px desde sm.
+    size === 'md' ? 'h-11 px-5 text-sm' : 'h-11 px-4 text-[13px] sm:h-9',
     variant === 'primary' && 'bg-sun text-navy hover:bg-sun-2',
     variant === 'dark' && 'bg-navy text-white hover:bg-navy-2',
     variant === 'ghost' && 'bg-white text-navy ring-1 ring-inset ring-[#C9D6E3] hover:bg-surface',
@@ -49,7 +50,7 @@ export function Stat({ label, value, hint, delta }: { label: string; value: Reac
       <span className="text-xs font-medium text-muted">{label}</span>
       <span className="font-display text-3xl font-bold tracking-tight text-navy tabular-nums">{value}</span>
       <span className="flex items-center gap-2 text-xs text-muted">
-        {delta && <span className={cn('font-semibold', delta.good ? 'text-good' : 'text-bad')}>{delta.value}</span>}
+        {delta && <span className={cn('font-semibold', delta.good ? 'text-[#12683F]' : 'text-bad')}>{delta.value}</span>}
         {hint}
       </span>
     </Card>
@@ -68,21 +69,41 @@ export function EmptyState({ title, text, action }: { title: string; text?: stri
 
 export const inputClass = 'h-11 w-full rounded-xl border-[1.5px] border-[#C9D6E3] bg-white px-3.5 text-[15px] text-navy placeholder:text-[#8da2b8] focus:border-navy focus:outline-none focus:ring-4 focus:ring-sun/50';
 
+/**
+ * Campo con etiqueta. Si hay `htmlFor`, la ayuda o el error quedan ligados al control (aria-describedby) y el control
+ * se marca aria-invalid cuando hay error. El error se anuncia con aria-live (sin role=alert, que se duplicaría con el
+ * aviso general del formulario).
+ */
 export function Field({ label, hint, error, children, htmlFor }: { label: string; hint?: string; error?: string; children: ReactNode; htmlFor?: string }) {
+  const msgId = htmlFor && (error || hint) ? `${htmlFor}-msg` : undefined;
+  const child = msgId && isValidElement(children)
+    ? cloneElement(children as ReactElement<Record<string, unknown>>, {
+        'aria-describedby': (children.props as Record<string, unknown>)['aria-describedby'] ?? msgId,
+        ...(error ? { 'aria-invalid': true } : {})
+      })
+    : children;
   return (
     <div className="flex flex-col gap-1.5">
       <label htmlFor={htmlFor} className="text-xs font-semibold tracking-wide text-muted">{label}</label>
-      {children}
-      {error ? <p className="text-xs text-bad" role="alert">{error}</p> : hint ? <p className="text-xs text-muted">{hint}</p> : null}
+      {child}
+      {error ? <p id={msgId} className="text-xs text-bad" aria-live="polite">{error}</p> : hint ? <p id={msgId} className="text-xs text-muted">{hint}</p> : null}
     </div>
   );
 }
-export const Input = (p: InputHTMLAttributes<HTMLInputElement>) => <input {...p} className={cn(inputClass, p.className)} />;
-export const Select = (p: SelectHTMLAttributes<HTMLSelectElement>) => <select {...p} className={cn(inputClass, 'pr-8', p.className)} />;
-export const Textarea = (p: TextareaHTMLAttributes<HTMLTextAreaElement>) => <textarea {...p} className={cn(inputClass, 'h-auto min-h-24 py-2.5', p.className)} />;
+export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>((p, ref) => <input ref={ref} {...p} className={cn(inputClass, p.className)} />);
+Input.displayName = 'Input';
+export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>((p, ref) => <select ref={ref} {...p} className={cn(inputClass, 'pr-8', p.className)} />);
+Select.displayName = 'Select';
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>((p, ref) => <textarea ref={ref} {...p} className={cn(inputClass, 'h-auto min-h-24 py-2.5', p.className)} />);
+Textarea.displayName = 'Textarea';
 
-export function Table({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn('relative overflow-x-auto rounded-2xl bg-white shadow-card ring-1 ring-line/70', className)}><table className="w-full min-w-[560px] border-collapse text-left text-sm">{children}</table></div>;
+/** Tabla con desplazamiento lateral. La caja recibe foco para poder desplazarla con el teclado. */
+export function Table({ children, className, label = 'Tabla' }: { children: ReactNode; className?: string; label?: string }) {
+  return (
+    <div tabIndex={0} role="region" aria-label={label} className={cn('relative overflow-x-auto rounded-2xl bg-white shadow-card ring-1 ring-line/70', className)}>
+      <table className="w-full min-w-[560px] border-collapse text-left text-sm">{children}</table>
+    </div>
+  );
 }
 export const Th = ({ children, className }: { children?: ReactNode; className?: string }) => <th className={cn('whitespace-nowrap border-b border-line px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted', className)}>{children}</th>;
 export const Td = ({ children, className }: { children?: ReactNode; className?: string }) => <td className={cn('border-b border-line/70 px-4 py-3 align-middle text-navy tabular-nums', className)}>{children}</td>;
