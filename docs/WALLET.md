@@ -37,7 +37,7 @@ Objetivo: cuando el cliente se registra o abre su tarjeta, puede guardarla en Ap
 5. **Logo de la clase:** Google recomienda PNG cuadrado de 660×660. Hoy usa el logo del negocio o, si no hay,
    `https://stampaecu.app/apple-touch-icon.png` (180 px).
 6. **Pedir acceso de publicación:** completar el perfil de negocio en la consola y enviar la solicitud. Cuando lo
-   aprueben, copiar las dos variables a **Production** y volver a desplegar.
+   aprueben, poner `GOOGLE_WALLET_PUBLIC=on` en **Production** y volver a desplegar (muestra el botón a todos).
 7. **Revisión de seguridad** (`/security-review`) antes de activar en Production.
 8. **Cercanía:** latitud y longitud por sucursal (migración + selector de mapa en Ajustes) y pasarlas al pase.
 9. **Apple Wallet** (después de Google): cuenta Apple Developer, `.pkpass` firmado y servicio web con APNs.

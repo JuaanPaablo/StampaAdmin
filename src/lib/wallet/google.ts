@@ -44,6 +44,16 @@ export function googleWalletConfig(env: NodeJS.ProcessEnv = process.env): Google
 
 export const googleWalletEnabled = () => googleWalletConfig() !== null;
 
+/**
+ * El botón "Agregar a Google Wallet" se ve siempre en Preview, pero en Production solo con GOOGLE_WALLET_PUBLIC=on
+ * (cuando Google apruebe el acceso de publicación; antes, a los clientes reales les daría "solo para pruebas").
+ * La actualización de pases ya guardados funciona en ambos con solo tener la clave.
+ */
+export function googleWalletButtonVisible(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (!googleWalletConfig(env)) return false;
+  return env.VERCEL_ENV !== 'production' || env.GOOGLE_WALLET_PUBLIC?.trim() === 'on';
+}
+
 /* ---------- JWT (RS256) ---------- */
 
 const b64url = (v: string | Buffer) => Buffer.from(v).toString('base64url');

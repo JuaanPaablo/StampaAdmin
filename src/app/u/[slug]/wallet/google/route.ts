@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { customerUrl } from '@/lib/urls';
-import { googleSaveUrl, googleWalletConfig, syncGoogleWallet } from '@/lib/wallet/google';
+import { googleSaveUrl, googleWalletButtonVisible, googleWalletConfig, syncGoogleWallet } from '@/lib/wallet/google';
 import { loadCustomerPage } from '../../data';
 
 export const dynamic = 'force-dynamic';
@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(_req: Request, { params }: { params: { slug: string } }) {
   const data = await loadCustomerPage(params.slug);
   const config = googleWalletConfig();
-  if (!data || !data.session || !data.mine || !config) {
+  if (!data || !data.session || !data.mine || !config || !googleWalletButtonVisible()) {
     return NextResponse.redirect(data ? customerUrl(data.business.slug) : customerUrl(params.slug), 303);
   }
   // Si ya lo había guardado antes, el enlace no actualiza el objeto existente: se actualiza primero.

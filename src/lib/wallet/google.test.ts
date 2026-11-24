@@ -1,7 +1,7 @@
 import { generateKeyPairSync, createVerify } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { CustomerCard } from '../contracts';
-import { googleSaveUrl, googleWalletConfig, signJwt } from './google';
+import { googleSaveUrl, googleWalletButtonVisible, googleWalletConfig, signJwt } from './google';
 
 const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const pem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
@@ -23,6 +23,13 @@ describe('Google Wallet', () => {
     expect(googleWalletConfig(env({ GOOGLE_WALLET_ISSUER_ID: 'abc' }))).toBeNull();
     expect(googleWalletConfig(env({ GOOGLE_WALLET_SA_JSON_BASE64: 'no-es-json' }))).toBeNull();
     expect(googleWalletConfig(env())?.issuerId).toBe('3388000000023233833');
+  });
+
+  it('en Production el botón queda oculto hasta GOOGLE_WALLET_PUBLIC=on', () => {
+    expect(googleWalletButtonVisible(env({ VERCEL_ENV: 'preview' }))).toBe(true);
+    expect(googleWalletButtonVisible(env({ VERCEL_ENV: 'production' }))).toBe(false);
+    expect(googleWalletButtonVisible(env({ VERCEL_ENV: 'production', GOOGLE_WALLET_PUBLIC: 'on' }))).toBe(true);
+    expect(googleWalletButtonVisible(env({ VERCEL_ENV: 'preview', GOOGLE_WALLET_SA_JSON_BASE64: '' }))).toBe(false);
   });
 
   it('firma el JWT con RS256 verificable con la clave pública', () => {
