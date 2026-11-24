@@ -1,13 +1,13 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useFormState } from 'react-dom';
 import { saveProgram } from '@/app/panel/tarjeta/actions';
-import { Card, Input, Textarea, Select } from '@/components/ui';
+import { Button, Card, Input, Textarea, Select } from '@/components/ui';
 import type { Milestone, Program } from '@/lib/contracts';
 import { MAX_MILESTONES, validateMilestones } from '@/lib/rewards';
 import type { Vocabulary } from '@/lib/templates';
-import { money, parseMoney } from '@/lib/format';
+import { parseMoney } from '@/lib/format';
 import { CardPreview } from './CardPreview';
 import { ContrastHint } from './ContrastHint';
 import { FormField, Switch, describedBy } from './FormField';
@@ -15,7 +15,8 @@ import { SubmitButton } from './SubmitButton';
 import { PALETTES, contrastRatio, normalizeHex } from './contrast';
 import type { ProgramFormState } from './schema';
 import { COOLDOWN_OPTIONS, TTL_OPTIONS } from './schema';
-import { cooldownLabel, describeChanges, ttlLabel, valuesFromProgram, type FormValues } from './values';
+import { cooldownLabel, describeChanges, firstErrorField, ttlLabel, validateValues, valuesFromProgram, type FormValues } from './values';
+import { useUnsavedGuard } from './useUnsavedGuard';
 
 export interface ProgramFormProps {
   program: Program;
@@ -55,39 +56,55 @@ function ColorField({ id, name, label, value, onChange, error, describedExtra }:
   id: string; name: string; label: string; value: string; onChange: (v: string) => void; error?: string; describedExtra?: string;
 }) {
   const valid = normalizeHex(value);
+  const shownError = error ?? (valid ? undefined : 'Usa un color con formato #RRGGBB.');
   return (
-    <FormField id={id} label={label} error={error ?? (valid ? undefined : 'Usa un color con formato #RRGGBB.')}>
+    <FormField id={id} label={label} error={shownError}>
       <div className="flex items-center gap-2">
         <input
-          type="color" aria-label={`Elegir ${label.toLowerCase()}`} value={valid ?? '#000000'} onChange={(e) => onChange(e.target.value.toUpperCase())}
+          type="color" aria-label={`Elegir color: ${label.toLowerCase()}`} value={valid ?? '#000000'} onChange={(e) => onChange(e.target.value.toUpperCase())}
           className="h-11 w-12 shrink-0 cursor-pointer rounded-xl border-[1.5px] border-[#C9D6E3] bg-white p-1"
         />
-        <Input id={id} name={name} value={value} maxLength={7} spellCheck={false} autoComplete="off" className="font-mono uppercase"
-          onChange={(e) => onChange(e.target.value)} aria-invalid={!valid} aria-describedby={describedBy(id, undefined, error ?? (valid ? undefined : 'x'), describedExtra)} />
+        {/* El texto acepta "fff" o "#ffffff"; al servidor siempre va #RRGGBB. */}
+        <Input id={id} value={value} maxLength={7} spellCheck={false} autoComplete="off" className="font-mono uppercase"
+          onChange={(e) => onChange(e.target.value)} onBlur={() => { if (valid && valid !== value) onChange(valid); }}
+          aria-invalid={!!shownError} aria-describedby={describedBy(id, undefined, shownError, describedExtra)} />
+        <input type="hidden" name={name} value={valid ?? value} />
       </div>
     </FormField>
   );
 }
 
-/** Premio solo al final, o también premios en el camino (de menos a más). */
-function MilestonesField({ value, onChange, total, rewardTitle, error, max = MAX_MILESTONES }: {
+/**
+ * Premio solo al final, o también premios en el camino (de menos a más). El modo sale de la lista: sin premios
+ * intermedios = "Solo al completar". Al volver a "Solo al completar" la lista se guarda aparte por si el dueño regresa.
+ */
+function MilestonesField({ value, onChange, total, rewardTitle, error, max = MAX_MILESTONES, showAll }: {
   value: Milestone[]; onChange: (v: Milestone[]) => void; total: number; rewardTitle: string; error?: string; max?: number;
+  /** Ya intentó guardar: muestra también los premios sin nombre. */
+  showAll?: boolean;
 }) {
-  const [mode, setMode] = useState<'final' | 'camino'>(value.length ? 'camino' : 'final');
-  const live = mode === 'camino' ? value : [];
-  const localErr = mode === 'camino' && value.length ? validateMilestones(value, total, max) : null;
-  const shownErr = error ?? localErr ?? undefined;
+  const stash = useRef<Milestone[]>([]);
+  const mode: 'final' | 'camino' = value.length ? 'camino' : 'final';
+  const outOfRange = (m: Milestone) => m.at < 1 || m.at >= total;
+  const liveErr = value.length ? validateMilestones(value, total, max) : null;
+  // Un premio que quedó después del último sello se avisa enseguida; un nombre vacío, solo al intentar guardar.
+  const shownErr = error ?? (liveErr && (showAll || value.some(outOfRange)) ? liveErr : undefined);
   const free = (skip?: number) => Array.from({ length: total - 1 }, (_, i) => i + 1).filter((n) => n === skip || !value.some((m) => m.at === n));
-  const add = () => {
+  const guess = () => {
     const used = new Set(value.map((m) => m.at));
-    const guess = [Math.round(total / 2), Math.round(total / 3), Math.round((2 * total) / 3), 1].find((n) => n >= 1 && n < total && !used.has(n)) ?? free()[0];
-    if (guess) onChange([...value, { at: guess, title: '' }]);
+    return [Math.round(total / 2), Math.round(total / 3), Math.round((2 * total) / 3), 1].find((n) => n >= 1 && n < total && !used.has(n)) ?? free()[0];
   };
-  const pick = (m: 'final' | 'camino') => { setMode(m); if (m === 'camino' && value.length === 0) add(); };
+  const add = () => { const at = guess(); if (at) onChange([...value, { at, title: '' }]); };
+  const pick = (m: 'final' | 'camino') => {
+    if (m === mode) return;
+    if (m === 'final') { stash.current = value; onChange([]); return; }
+    if (stash.current.length) onChange(stash.current);
+    else { const at = guess(); if (at) onChange([{ at, title: '' }]); }
+  };
   return (
-    <fieldset className="space-y-3" aria-describedby={shownErr ? 'milestones-err' : undefined}>
+    <fieldset id="milestones-group" className="space-y-3" aria-describedby={shownErr ? 'milestones-err' : undefined}>
       <legend className="text-xs font-semibold tracking-wide text-muted">¿Cuándo das premios?</legend>
-      <input type="hidden" name="milestones" value={JSON.stringify(live.map((m) => ({ at: m.at, title: m.title.trim() })))} />
+      <input type="hidden" name="milestones" value={JSON.stringify(value.map((m) => ({ at: m.at, title: m.title.trim() })))} />
       <div className="grid gap-2 sm:grid-cols-2">
         {([['final', 'Solo al completar', `Un premio en el sello ${total}.`], ['camino', 'También en el camino', 'Premios que van de menos a más.']] as const).map(([id, title, text]) => (
           <label key={id} className={'cursor-pointer rounded-xl p-3 ring-1 ring-inset transition focus-within:ring-2 focus-within:ring-navy ' + (mode === id ? 'bg-navy text-white ring-navy' : 'bg-white text-navy ring-[#C9D6E3] hover:bg-surface')}>
@@ -98,24 +115,31 @@ function MilestonesField({ value, onChange, total, rewardTitle, error, max = MAX
         ))}
       </div>
       {mode === 'camino' && (
-        <div className="space-y-2 rounded-xl bg-surface p-3">
-          {value.map((m, i) => (
-            <div key={i} className="grid grid-cols-[128px_minmax(0,1fr)_auto] items-center gap-2">
-              <Select aria-label={`Sello del premio ${i + 1}`} value={m.at} onChange={(e) => onChange(value.map((x, j) => (j === i ? { ...x, at: Number(e.target.value) } : x)))}>
-                {free(m.at).map((n) => <option key={n} value={n}>Sello {n}</option>)}
-              </Select>
-              <Input aria-label={`Premio del sello ${m.at}`} value={m.title} maxLength={50} placeholder="Ej. Postre gratis"
-                onChange={(e) => onChange(value.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))} />
-              <button type="button" onClick={() => { const next = value.filter((_, j) => j !== i); onChange(next); if (!next.length) setMode('final'); }}
-                className="h-11 rounded-xl px-3 text-xs font-semibold text-navy ring-1 ring-inset ring-[#C9D6E3] hover:bg-white" aria-label={`Quitar el premio del sello ${m.at}`}>Quitar</button>
-            </div>
-          ))}
-          <div className="grid grid-cols-[128px_minmax(0,1fr)] items-center gap-2 text-sm">
-            <span className="px-1 font-semibold text-navy">Sello {total}</span>
-            <span className="truncate text-navy">{rewardTitle || 'Tu premio final'} <span className="text-muted">(final)</span></span>
+        <div className="space-y-3 rounded-xl bg-surface p-3">
+          {value.map((m, i) => {
+            const bad = outOfRange(m);
+            const options = bad ? [m.at, ...free()] : free(m.at);
+            return (
+              <div key={i} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:grid-cols-[132px_minmax(0,1fr)_auto]">
+                <Select aria-label={`Sello del premio ${i + 1}`} value={m.at} aria-invalid={bad || undefined} className={bad ? 'ring-2 ring-bad' : undefined}
+                  onChange={(e) => onChange(value.map((x, j) => (j === i ? { ...x, at: Number(e.target.value) } : x)))}>
+                  {options.map((n) => <option key={n} value={n}>{n >= total ? `Sello ${n} (ya no existe)` : `Sello ${n}`}</option>)}
+                </Select>
+                <Input aria-label={`Premio del sello ${m.at}`} value={m.title} maxLength={50} placeholder="Ej. Postre gratis"
+                  aria-invalid={(showAll && m.title.trim().length < 2) || undefined}
+                  className="col-span-2 sm:col-span-1 sm:col-start-2 sm:row-start-1"
+                  onChange={(e) => onChange(value.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))} />
+                <button type="button" onClick={() => onChange(value.filter((_, j) => j !== i))}
+                  className="col-start-2 row-start-1 h-11 rounded-xl bg-white px-3 text-xs font-semibold text-navy ring-1 ring-inset ring-[#C9D6E3] hover:bg-surface sm:col-start-3" aria-label={`Quitar el premio del sello ${m.at}`}>Quitar</button>
+              </div>
+            );
+          })}
+          <div className="flex items-center gap-2 border-t border-line pt-3 text-sm">
+            <span className="shrink-0 font-semibold text-navy">Sello {total}</span>
+            <span className="min-w-0 truncate text-navy">{rewardTitle || 'Tu premio final'} <span className="text-muted">(final)</span></span>
           </div>
           {value.length < max && value.length < total - 1 && (
-            <button type="button" onClick={add} className="text-sm font-semibold text-navy underline underline-offset-4">+ Agregar otro premio</button>
+            <button type="button" onClick={add} className="inline-flex min-h-[44px] items-center text-sm font-semibold text-navy underline underline-offset-4">+ Agregar otro premio</button>
           )}
           {value.length >= max && max < MAX_MILESTONES && (
             <p className="text-xs text-muted">Tu plan: {max} {max === 1 ? 'premio' : 'premios'} antes del final. Standard o Pro: hasta {MAX_MILESTONES}.</p>
@@ -127,11 +151,20 @@ function MilestonesField({ value, onChange, total, rewardTitle, error, max = MAX
   );
 }
 
+/** Lleva el foco (y la vista) al campo con error. */
+function focusField(key: string): void {
+  const el = key === 'milestones'
+    ? document.querySelector<HTMLElement>('#milestones-group select, #milestones-group input:not([type=hidden])')
+    : document.getElementById(key);
+  if (!el) return;
+  el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  el.focus({ preventScroll: true });
+}
+
 export function ProgramForm({ program, maxMilestones, businessName, vocab, rewardIdeas, templateColors, action = saveProgram, wizardStep, imagesSlot, extraActions, submitLabel }: ProgramFormProps) {
   const [state, formAction] = useFormState<ProgramFormState, FormData>(action, { ok: false });
   const [v, setV] = useState<FormValues>(() => valuesFromProgram(program));
   const set = <K extends keyof FormValues>(k: K, val: FormValues[K]) => setV((p) => ({ ...p, [k]: val }));
-  const err = state.errors ?? {};
   const wizard = !!wizardStep;
   const show = {
     identidad: !wizard,
@@ -145,6 +178,62 @@ export function ProgramForm({ program, maxMilestones, businessName, vocab, rewar
   const ticket = vocab.ticket.toLowerCase();
   const changes = useMemo(() => describeChanges(program, v, vocab), [program, v, vocab]);
   const ruleChanged = changes.some((c) => c.rule);
+  const dirty = changes.length > 0;
+  useUnsavedGuard(!wizard && dirty);
+
+  /* Errores: los del navegador se muestran después del primer intento de guardar; los del servidor, mientras el
+     campo siga igual a como se envió (si el dueño ya lo corrigió, el error viejo desaparece). */
+  const [attempted, setAttempted] = useState(false);
+  const [submitted, setSubmitted] = useState<FormValues | null>(null);
+  const clientErrs = useMemo(
+    () => validateValues(v, { ...show, monto: show.reglas || (wizard && show.premio) }, maxMilestones),
+    [v, wizard, wizardStep, maxMilestones] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const serverErrs = useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const [k, msg] of Object.entries(state.errors ?? {})) {
+      const key = k as keyof FormValues;
+      if (submitted && key in submitted && JSON.stringify(submitted[key]) !== JSON.stringify(v[key])) continue;
+      out[k] = msg;
+    }
+    return out;
+  }, [state, submitted, v]);
+  const err: Record<string, string> = { ...serverErrs, ...(attempted ? clientErrs : {}) };
+  const clientCount = Object.keys(clientErrs).length;
+
+  let status: { ok: boolean; text: string } | null = null;
+  if (attempted && clientCount > 0) {
+    status = { ok: false, text: clientCount === 1 ? 'Corrige el campo marcado. No se guardó nada.' : `Corrige los ${clientCount} campos marcados. No se guardó nada.` };
+  } else if (state.message && state.ok && !dirty) {
+    status = { ok: true, text: state.message };
+  } else if (state.message && !state.ok && (!state.errors || Object.keys(serverErrs).length > 0)) {
+    status = { ok: false, text: state.message };
+  }
+
+  // Tras un error del servidor, lleva al primer campo marcado (puede estar lejos en el teléfono).
+  useEffect(() => {
+    if (!state.ok && state.errors) { const k = firstErrorField(state.errors); if (k) focusField(k); }
+  }, [state]);
+
+  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | HTMLInputElement | null;
+    if (submitter?.formNoValidate) return; // p. ej. "Saltar por ahora" en el asistente
+    const k = firstErrorField(clientErrs);
+    if (k) {
+      e.preventDefault();
+      setAttempted(true);
+      focusField(k);
+      return;
+    }
+    setSubmitted(v);
+  }
+
+  function discard() {
+    if (!window.confirm('¿Descartar los cambios sin guardar?')) return;
+    setV(valuesFromProgram(program));
+    setAttempted(false);
+    setSubmitted(null);
+  }
 
   const bg = normalizeHex(v.bg) ?? program.colors.bg;
   const accent = normalizeHex(v.accent) ?? program.colors.accent;
@@ -183,9 +272,9 @@ export function ProgramForm({ program, maxMilestones, businessName, vocab, rewar
 
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
-      <aside aria-label="Vista previa de la tarjeta" className="lg:sticky lg:top-6 lg:col-start-2 lg:row-start-1">
+      <aside id="vista-previa" aria-label="Vista previa de la tarjeta" className="scroll-mt-4 lg:sticky lg:top-6 lg:col-start-2 lg:row-start-1">
         <CardPreview data={{
-          businessName, programName: v.name, stampsRequired: v.stampsRequired, rewardTitle: v.rewardTitle, bg: v.bg, accent: v.accent, ink: v.ink,
+          businessName, programName: v.name, stampsRequired: v.stampsRequired, rewardTitle: v.rewardTitle, bg, accent, ink,
           logoText: v.logoText, logoUrl: program.logoUrl || undefined, coverUrl: program.coverUrl || undefined,
           milestones: v.milestones, logoFraming: program.imageFraming?.logo, coverFraming: program.imageFraming?.cover
         }} />
@@ -193,7 +282,7 @@ export function ProgramForm({ program, maxMilestones, businessName, vocab, rewar
 
       <div className="min-w-0 space-y-5 lg:col-start-1 lg:row-start-1">
         {imagesSlot}
-        <form action={formAction} className="min-w-0 space-y-5" noValidate>
+        <form action={formAction} onSubmit={onSubmit} className="min-w-0 space-y-5" noValidate>
           {show.identidad && (
             <Section id="sec-identidad" title="Identidad de la tarjeta">
               <FormField id="name" label="Nombre de la tarjeta" error={err.name}>
@@ -224,14 +313,14 @@ export function ProgramForm({ program, maxMilestones, businessName, vocab, rewar
                   <div id="rewardTitle-ideas" role="group" aria-label="Ideas de premio" className="flex flex-wrap gap-2 pt-1">
                     {rewardIdeas.map((idea) => (
                       <button key={idea} type="button" aria-pressed={v.rewardTitle === idea} onClick={() => set('rewardTitle', idea)}
-                        className={'rounded-full px-3 py-1.5 text-xs font-semibold ring-1 ring-inset transition ' + (v.rewardTitle === idea ? 'bg-navy text-white ring-navy' : 'bg-white text-navy ring-[#C9D6E3] hover:bg-surface')}>
+                        className={'inline-flex min-h-[44px] items-center rounded-full px-4 text-xs font-semibold ring-1 ring-inset transition ' + (v.rewardTitle === idea ? 'bg-navy text-white ring-navy' : 'bg-white text-navy ring-[#C9D6E3] hover:bg-surface')}>
                         {idea}
                       </button>
                     ))}
                   </div>
                 )}
               </FormField>
-              <MilestonesField value={v.milestones} onChange={(x) => set('milestones', x)} total={v.stampsRequired} rewardTitle={v.rewardTitle} error={err.milestones} max={maxMilestones} />
+              <MilestonesField value={v.milestones} onChange={(x) => set('milestones', x)} total={v.stampsRequired} rewardTitle={v.rewardTitle} error={err.milestones} max={maxMilestones} showAll={attempted} />
               {show.premioExtra && (
                 <FormField id="rewardDescription" label="Descripción del premio" optional error={err.rewardDescription}>
                   <Input id="rewardDescription" name="rewardDescription" value={v.rewardDescription} maxLength={120} onChange={(e) => set('rewardDescription', e.target.value)}
@@ -263,7 +352,7 @@ export function ProgramForm({ program, maxMilestones, businessName, vocab, rewar
                   return (
                     <button key={p.id} type="button" aria-pressed={active}
                       onClick={() => setV((s) => ({ ...s, bg: p.bg, accent: p.accent, ink: p.ink }))}
-                      className={'flex items-center gap-2 rounded-xl p-2 text-left text-xs font-semibold text-navy ring-1 ring-inset transition ' + (active ? 'bg-surface ring-2 ring-navy' : 'bg-white ring-[#C9D6E3] hover:bg-surface')}>
+                      className={'flex min-h-[44px] items-center gap-2 rounded-xl p-2 text-left text-xs font-semibold text-navy ring-1 ring-inset transition ' + (active ? 'bg-surface ring-2 ring-navy' : 'bg-white ring-[#C9D6E3] hover:bg-surface')}>
                       <span className="flex shrink-0 overflow-hidden rounded-full ring-1 ring-black/10" aria-hidden="true">
                         {[p.bg, p.accent, p.ink].map((c, i) => <span key={i} className="h-7 w-5" style={{ background: c }} />)}
                       </span>
@@ -274,12 +363,12 @@ export function ProgramForm({ program, maxMilestones, businessName, vocab, rewar
               </div>
               <div className="grid gap-4 sm:grid-cols-3">
                 <ColorField id="bg" name="bg" label="Fondo" value={v.bg} onChange={(x) => set('bg', x)} error={err.bg} describedExtra="contrast-ink contrast-accent" />
-                <ColorField id="accent" name="accent" label="Acento" value={v.accent} onChange={(x) => set('accent', x)} error={err.accent} describedExtra="contrast-accent" />
+                <ColorField id="accent" name="accent" label="Sellos" value={v.accent} onChange={(x) => set('accent', x)} error={err.accent} describedExtra="contrast-accent" />
                 <ColorField id="ink" name="ink" label="Texto" value={v.ink} onChange={(x) => set('ink', x)} error={err.ink} describedExtra="contrast-ink" />
               </div>
               <div className="space-y-2 rounded-xl bg-surface p-3">
                 <ContrastHint id="contrast-ink" label="Texto sobre el fondo" ratio={inkRatio} min={4.5} />
-                <ContrastHint id="contrast-accent" label="Acento sobre el fondo" ratio={accentRatio} min={3} />
+                <ContrastHint id="contrast-accent" label="Sellos sobre el fondo" ratio={accentRatio} min={3} />
               </div>
             </Section>
           )}
@@ -322,7 +411,7 @@ export function ProgramForm({ program, maxMilestones, businessName, vocab, rewar
           {wizard ? (
             <div className="space-y-3">
               <div aria-live="polite" role="status" className="min-h-[1.25rem]">
-                {state.message && !state.ok && <p className="text-sm font-medium text-bad">{state.message}</p>}
+                {status && !status.ok && <p className="text-sm font-medium text-bad">{status.text}</p>}
               </div>
               <div className="flex flex-wrap items-center gap-3">
                 <SubmitButton>{submitLabel ?? 'Guardar y seguir'}</SubmitButton>
@@ -330,14 +419,10 @@ export function ProgramForm({ program, maxMilestones, businessName, vocab, rewar
               </div>
             </div>
           ) : (
-            <Card as="section" className="space-y-4">
-              <div>
-                <h2 id="sec-cambios" className="font-display text-lg font-semibold text-navy">Qué cambia</h2>
-              </div>
-              {changes.length === 0 ? (
-                <p className="text-sm text-muted">Aún no hay cambios por guardar.</p>
-              ) : (
-                <>
+            <>
+              {dirty && (
+                <Card as="section" className="space-y-3">
+                  <h2 id="sec-cambios" className="font-display text-lg font-semibold text-navy">Qué cambia</h2>
                   <ul className="space-y-2">
                     {changes.map((c) => (
                       <li key={c.key} className="rounded-xl bg-surface px-3 py-2 text-sm">
@@ -346,18 +431,31 @@ export function ProgramForm({ program, maxMilestones, businessName, vocab, rewar
                       </li>
                     ))}
                   </ul>
-                  {ruleChanged && <p className="text-xs text-muted">Las reglas nuevas se aplican a los códigos que se generen desde ahora. Los códigos ya creados no cambian.</p>}
-                </>
+                  {ruleChanged && <p className="text-xs text-muted">Las reglas nuevas valen para los códigos que se creen desde ahora.</p>}
+                </Card>
               )}
-              <div aria-live="polite" role="status" className="min-h-[1.25rem]">
-                {state.message && (
-                  <p className={'text-sm font-medium ' + (state.ok ? 'text-[#12683F]' : 'text-bad')}>{state.message}</p>
-                )}
+              {/* Barra fija abajo: el botón de guardar siempre a mano, también en el teléfono. */}
+              <div className="sticky bottom-0 z-20 rounded-2xl bg-white/95 p-3 shadow-[0_-6px_18px_rgba(0,29,61,.10)] ring-1 ring-line backdrop-blur sm:p-4"
+                style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                  <div className="min-w-0 text-sm">
+                    {dirty
+                      ? <p className="font-semibold text-navy">
+                          {changes.length === 1 ? '1 cambio sin guardar' : `${changes.length} cambios sin guardar`}
+                          <a href="#vista-previa" className="ml-2 font-semibold underline underline-offset-4 lg:hidden">Ver tarjeta</a>
+                        </p>
+                      : !status && <p className="text-muted">Todo guardado.</p>}
+                    <div aria-live="polite" role="status">
+                      {status && <p className={'font-medium ' + (status.ok ? 'text-[#12683F]' : 'text-bad')}>{status.text}</p>}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {dirty && <Button type="button" variant="ghost" onClick={discard}>Descartar</Button>}
+                    <SubmitButton disabled={!dirty}>Guardar cambios</SubmitButton>
+                  </div>
+                </div>
               </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <SubmitButton disabled={changes.length === 0}>Guardar cambios</SubmitButton>
-              </div>
-            </Card>
+            </>
           )}
         </form>
       </div>

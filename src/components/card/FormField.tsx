@@ -30,7 +30,7 @@ export function Switch({ id, name, checked, onChange, label, help, disabled }: {
       <button
         type="button" id={id} role="switch" aria-checked={checked} aria-labelledby={`${id}-label`} aria-describedby={help ? `${id}-help` : undefined}
         disabled={disabled} onClick={() => onChange(!checked)}
-        className={'disabled:opacity-50 relative mt-0.5 inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ' + (checked ? 'bg-navy' : 'bg-[#9FB1C4]')}
+        className={'disabled:opacity-50 relative mt-0.5 inline-flex h-7 w-12 before:absolute before:-inset-2.5 before:content-[""] shrink-0 items-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ' + (checked ? 'bg-navy' : 'bg-[#9FB1C4]')}
       >
         <span aria-hidden="true" className={'inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ' + (checked ? 'translate-x-6' : 'translate-x-1')} />
       </button>

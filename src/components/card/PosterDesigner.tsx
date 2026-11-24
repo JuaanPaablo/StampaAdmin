@@ -2,9 +2,11 @@
 
 import { useState, useTransition } from 'react';
 import { savePosterAction } from '@/app/panel/tarjeta/actions';
-import { btnClass, Card } from '@/components/ui';
+import { btnClass, Card, Input } from '@/components/ui';
 import type { PosterStyle } from '@/lib/contracts';
 import { contrastRatio, normalizeHex } from './contrast';
+import { ContrastHint } from './ContrastHint';
+import { useUnsavedGuard } from './useUnsavedGuard';
 import { DEFAULT_POSTER_TITLE, POSTER_FONTS, POSTER_THEMES, PosterSheet, posterPalette, type PosterProps } from './PosterSheet';
 
 const label = 'text-xs font-semibold tracking-wide text-muted';
@@ -20,13 +22,18 @@ export function PosterDesigner({ initial, sheet }: { initial?: PosterStyle; shee
   const custom = d.theme === 'personal';
   const lowContrast = contrastRatio(pal.ink, pal.bg) < 4.5;
   const dirty = JSON.stringify(d) !== saved;
+  useUnsavedGuard(dirty);
 
   function save() {
     const payload = { ...d, ...(custom ? { bg: pal.bg, accent: pal.accent, ink: pal.ink } : {}) };
     start(async () => {
-      const r = await savePosterAction(payload);
-      if (r.ok) { setSaved(JSON.stringify(d)); setMsg({ ok: true, text: 'Diseño guardado.' }); }
-      else setMsg({ ok: false, text: r.error ?? 'No pudimos guardar.' });
+      try {
+        const r = await savePosterAction(payload);
+        if (r.ok) { setSaved(JSON.stringify(d)); setMsg({ ok: true, text: 'Diseño guardado. Ya puedes imprimir.' }); }
+        else setMsg({ ok: false, text: r.error ?? 'No pudimos guardar. Intenta de nuevo.' });
+      } catch {
+        setMsg({ ok: false, text: 'No pudimos guardar. Revisa tu conexión e intenta de nuevo.' });
+      }
     });
   }
 
@@ -41,7 +48,7 @@ export function PosterDesigner({ initial, sheet }: { initial?: PosterStyle; shee
               const on = (d.theme ?? 'stampa') === t.id;
               return (
                 <button key={t.id} type="button" aria-pressed={on} onClick={() => set({ theme: t.id, ...(t.id === 'personal' && !d.bg ? { bg: pal.bg, accent: pal.accent, ink: pal.ink } : {}) })}
-                  className={'flex items-center gap-2 rounded-xl p-2 text-left text-xs font-semibold text-navy ring-1 ring-inset transition ' + (on ? 'bg-surface ring-2 ring-navy' : 'bg-white ring-[#C9D6E3] hover:bg-surface')}>
+                  className={'flex min-h-[44px] items-center gap-2 rounded-xl p-2 text-left text-xs font-semibold text-navy ring-1 ring-inset transition ' + (on ? 'bg-surface ring-2 ring-navy' : 'bg-white ring-[#C9D6E3] hover:bg-surface')}>
                   <span className="flex shrink-0 overflow-hidden rounded-full ring-1 ring-black/10" aria-hidden="true">
                     {[p.bg, p.accent, p.ink].map((c, i) => <span key={i} className="h-6 w-4" style={{ background: c }} />)}
                   </span>
@@ -56,14 +63,18 @@ export function PosterDesigner({ initial, sheet }: { initial?: PosterStyle; shee
           <div className="grid grid-cols-3 gap-3">
             {(['bg', 'accent', 'ink'] as const).map((k) => (
               <label key={k} className="flex flex-col gap-1.5">
-                <span className={label}>{k === 'bg' ? 'Fondo' : k === 'accent' ? 'Acento' : 'Texto'}</span>
+                <span className={label}>{k === 'bg' ? 'Fondo' : k === 'accent' ? 'Detalles' : 'Texto'}</span>
                 <input type="color" value={normalizeHex(d[k] ?? '') ?? pal[k]} onChange={(e) => set({ [k]: e.target.value.toUpperCase() })}
                   className="h-11 w-full cursor-pointer rounded-xl border-[1.5px] border-[#C9D6E3] bg-white p-1" />
               </label>
             ))}
           </div>
         )}
-        {lowContrast && <p className="rounded-xl bg-[#FFF4CC] px-3 py-2 text-xs text-navy">El texto casi no se lee sobre ese fondo. Prueba otro color.</p>}
+        {(custom || lowContrast) && (
+          <div className="rounded-xl bg-surface p-3">
+            <ContrastHint label="Texto sobre el fondo" ratio={contrastRatio(pal.ink, pal.bg)} min={4.5} />
+          </div>
+        )}
 
         <fieldset>
           <legend className={label}>Tipo de letra</legend>
@@ -83,20 +94,21 @@ export function PosterDesigner({ initial, sheet }: { initial?: PosterStyle; shee
 
         <label className="flex flex-col gap-1.5">
           <span className={label}>Título</span>
-          <input value={d.title ?? ''} maxLength={40} placeholder={DEFAULT_POSTER_TITLE} onChange={(e) => set({ title: e.target.value })}
-            className="h-12 w-full rounded-xl border-[1.5px] border-[#C9D6E3] bg-white px-3.5 text-[15px] text-navy placeholder:text-[#6B819A] focus:border-navy focus:outline-none focus:ring-4 focus:ring-sun/50" />
-          <span className="text-xs text-muted">Vacío: “{DEFAULT_POSTER_TITLE}”.</span>
+          <Input value={d.title ?? ''} maxLength={40} placeholder={DEFAULT_POSTER_TITLE} onChange={(e) => set({ title: e.target.value })}
+            aria-describedby="poster-title-help" className="placeholder:text-[#6B819A]" />
+          <span id="poster-title-help" className="text-xs text-muted">Vacío: “{DEFAULT_POSTER_TITLE}”. {(d.title ?? '').length}/40</span>
         </label>
 
-        <label className="flex cursor-pointer items-center gap-3 text-sm text-navy">
+        <label className="flex min-h-[44px] cursor-pointer items-center gap-3 text-sm text-navy">
           <input type="checkbox" checked={d.showReward !== false} onChange={(e) => set({ showReward: e.target.checked })} className="h-5 w-5 accent-[#001D3D]" />
           Mostrar el premio
         </label>
 
         <div className="flex flex-wrap items-center gap-3 border-t border-line pt-4">
-          <button type="button" onClick={save} disabled={pending || !dirty} className={btnClass('primary')}>{pending ? 'Guardando…' : 'Guardar diseño'}</button>
-          {dirty && <button type="button" onClick={() => { setD(JSON.parse(saved)); setMsg(null); }} className={btnClass('ghost')}>Deshacer</button>}
-          <p role="status" aria-live="polite" className={'text-sm ' + (msg?.ok ? 'text-good' : 'text-bad')}>{msg?.text ?? ''}</p>
+          <button type="button" onClick={save} disabled={pending || !dirty} aria-busy={pending} className={btnClass('primary')}>{pending ? 'Guardando…' : 'Guardar diseño'}</button>
+          {dirty && <button type="button" onClick={() => { setD(JSON.parse(saved)); setMsg(null); }} disabled={pending} className={btnClass('ghost')}>Deshacer</button>}
+          {dirty && !msg && <p className="w-full text-xs font-semibold text-navy">Cambios sin guardar. Lo que imprimas sale tal como lo ves.</p>}
+          <p role="status" aria-live="polite" className={'w-full text-sm font-medium ' + (msg?.ok ? 'text-[#12683F]' : 'text-bad')}>{msg?.text ?? ''}</p>
         </div>
       </Card>
 

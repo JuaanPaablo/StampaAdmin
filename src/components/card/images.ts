@@ -7,11 +7,16 @@ export const IMAGE_ACCEPT = 'image/png,image/jpeg,image/webp';
 const TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 const MAX = 2 * 1024 * 1024;
 
-/** Validación previa en el navegador (el servidor vuelve a validar). */
+/** Megas con una cifra decimal y coma (3,4 MB). */
+export function mbText(bytes: number): string {
+  return (Math.ceil((bytes / (1024 * 1024)) * 10) / 10).toFixed(1).replace('.', ',') + ' MB';
+}
+
+/** Validación previa en el navegador (el servidor vuelve a validar). Dice qué pasó y qué hacer. */
 export function checkImageFile(f: { type: string; size: number }): string | null {
-  if (!TYPES.includes(f.type)) return 'La imagen debe ser PNG, JPG o WEBP.';
-  if (f.size === 0) return 'Elige una imagen.';
-  if (f.size > MAX) return 'La imagen pesa más de 2 MB. Usa una más liviana.';
+  if (!TYPES.includes(f.type)) return 'Ese archivo no sirve. Usa una imagen PNG, JPG o WEBP.';
+  if (f.size === 0) return 'La imagen está vacía. Elige otra.';
+  if (f.size > MAX) return `La imagen pesa ${mbText(f.size)} y el máximo es 2 MB. Usa una más liviana (una captura de pantalla suele servir).`;
   return null;
 }
 

@@ -26,7 +26,7 @@ export default async function PosterPage({ searchParams }: { searchParams?: { ta
     type: 'svg', errorCorrectionLevel: 'M', margin: 1, color: { dark: '#001D3D', light: '#FFFFFF' }
   });
 
-  const tabClass = (active: boolean) => btnClass(active ? 'dark' : 'ghost', 'sm');
+  const tabClass = (active: boolean) => btnClass(active ? 'dark' : 'ghost');
   const canDesign = features(business.plan).posterDesign;
   const sheet = {
     size, businessName: business.name, logoText: program.logoText, logoUrl: program.logoUrl || undefined,
@@ -39,17 +39,21 @@ export default async function PosterPage({ searchParams }: { searchParams?: { ta
       <div data-noprint>
         <PageHeader
           title="Póster con QR"
-          actions={<><Link href="/panel/tarjeta" className={btnClass('ghost')}>Volver</Link><PrintButton /></>}
+          actions={<><Link href="/panel/tarjeta" className={btnClass('ghost')}>Volver a la tarjeta</Link><PrintButton label="Imprimir o guardar PDF" /></>}
         />
-        <nav aria-label="Tamaño del póster" className="mb-5 flex flex-wrap items-center gap-2">
+        <nav aria-label="Tamaño del póster" className="mb-4 flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold text-muted">Tamaño</span>
-          <Link href="/panel/tarjeta/poster" aria-current={size === 'a4' ? 'page' : undefined} className={tabClass(size === 'a4')}>A4 (póster)</Link>
-          <Link href="/panel/tarjeta/poster?tamano=a6" aria-current={size === 'a6' ? 'page' : undefined} className={tabClass(size === 'a6')}>A6 (tarjeta de mesa)</Link>
+          <Link href="/panel/tarjeta/poster" aria-current={size === 'a4' ? 'page' : undefined} className={tabClass(size === 'a4')}>A4 · póster</Link>
+          <Link href="/panel/tarjeta/poster?tamano=a6" aria-current={size === 'a6' ? 'page' : undefined} className={tabClass(size === 'a6')}>A6 · para la mesa</Link>
         </nav>
-        <ul className="mb-5 flex max-w-2xl flex-col gap-1 text-xs text-muted">
-          <li>QR: <a href={signupUrl} target="_blank" rel="noopener noreferrer" className="break-all font-semibold text-navy underline underline-offset-4">{signupUrl}</a> · pruébalo antes de imprimir.</li>
-          <li>Impresión: {size.toUpperCase()}, vertical, escala 100 % y gráficos de fondo activados.</li>
-        </ul>
+        <ol className="mb-5 flex max-w-2xl list-decimal flex-col gap-1 pl-5 text-sm text-navy marker:font-semibold marker:text-muted">
+          <li>
+            Prueba el QR con la cámara de tu celular o{' '}
+            <a href={signupUrl} target="_blank" rel="noopener noreferrer" className="font-semibold underline underline-offset-4">ábrelo aquí</a>.
+          </li>
+          <li>Toca <strong>Imprimir o guardar PDF</strong>.</li>
+          <li>Elige papel {size.toUpperCase()}, vertical y escala 100 %. ¿Sin impresora? Guarda el PDF y llévalo a una imprenta.</li>
+        </ol>
       </div>
       {/* eslint-disable-next-line @next/next/no-page-custom-font */}
       <link rel="stylesheet" href={POSTER_FONTS_HREF} />

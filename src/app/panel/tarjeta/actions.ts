@@ -7,7 +7,7 @@ import { hasRole } from '@/lib/auth';
 import { parseMoney } from '@/lib/format';
 import { IMAGE_TYPES, MAX_IMAGE_BYTES } from '@/lib/mvp-rules';
 import { parseMilestonesField, programSchema, type ProgramFormState } from '@/components/card/schema';
-import type { ImageActionResult, ImageKind } from '@/components/card/images';
+import { checkImageFile, type ImageActionResult, type ImageKind } from '@/components/card/images';
 import { cleanFraming } from '@/lib/rewards';
 import { z } from 'zod';
 import type { PosterStyle } from '@/lib/contracts';
@@ -66,7 +66,7 @@ export async function saveProgram(_prev: ProgramFormState, formData: FormData): 
     return { ok: false, message: 'No pudimos guardar los cambios. Intenta de nuevo en un momento.' };
   }
   revalidateCard();
-  return { ok: true, message: 'Cambios guardados. Tus clientes ya ven la tarjeta así.', at: Date.now() };
+  return { ok: true, message: 'Guardado. Tus clientes ya ven la tarjeta así.', at: Date.now() };
 }
 
 const KINDS: ImageKind[] = ['logo', 'cover'];
@@ -83,9 +83,10 @@ export async function uploadImageAction(fd: FormData): Promise<ImageActionResult
   const file = fd.get('file');
   if (typeof kind !== 'string' || !(KINDS as string[]).includes(kind)) return { ok: false, error: 'No sabemos qué imagen quieres cambiar.' };
   if (!file || typeof file === 'string') return { ok: false, error: 'Elige una imagen.' };
-  if (!(IMAGE_TYPES as readonly string[]).includes(file.type)) return { ok: false, error: 'La imagen debe ser PNG, JPG o WEBP.' };
-  if (file.size === 0) return { ok: false, error: 'Elige una imagen.' };
-  if (file.size > MAX_IMAGE_BYTES) return { ok: false, error: 'La imagen pesa más de 2 MB. Usa una más liviana.' };
+  // Mismos mensajes que la validación del navegador (checkImageFile); los límites son los de mvp-rules.
+  if (!(IMAGE_TYPES as readonly string[]).includes(file.type) || file.size === 0 || file.size > MAX_IMAGE_BYTES) {
+    return { ok: false, error: checkImageFile(file) ?? 'La imagen pesa más de 2 MB. Usa una más liviana.' };
+  }
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const url = await ctx.repo.uploadBusinessImage(ctx.business.id, kind as ImageKind, { bytes, contentType: file.type });
@@ -96,7 +97,7 @@ export async function uploadImageAction(fd: FormData): Promise<ImageActionResult
     return { ok: true, url };
   } catch (e) {
     // Los errores de validación del repo vienen en español y son seguros de mostrar.
-    const msg = e instanceof Error && /imagen|PNG|MB/i.test(e.message) ? e.message : 'No pudimos subir la imagen. Intenta de nuevo.';
+    const msg = e instanceof Error && /imagen|PNG|MB/i.test(e.message) ? e.message : 'No pudimos subir la imagen. Revisa tu conexión e intenta de nuevo.';
     return { ok: false, error: msg };
   }
 }

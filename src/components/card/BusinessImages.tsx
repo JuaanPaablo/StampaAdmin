@@ -14,9 +14,9 @@ export function BusinessImages({ logoUrl, coverUrl, logoText, framing, title = '
       </div>
       <div className="grid gap-6 sm:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <ImageUpload kind="logo" label="Logo" currentUrl={logoUrl} fallback={logoText} framing={framing?.logo}
-          help="Cuadrado, 500 × 500 px · máx. 2 MB" />
+          help="Cuadrado, 500 × 500 px · PNG, JPG o WEBP · máx. 2 MB" />
         <ImageUpload kind="cover" label="Foto de portada" currentUrl={coverUrl} framing={framing?.cover}
-          help="Horizontal 3:1, 1500 × 500 px · máx. 2 MB" />
+          help="Horizontal, 1500 × 500 px · PNG, JPG o WEBP · máx. 2 MB" />
       </div>
     </Card>
   );

@@ -108,7 +108,7 @@ export function CardPreview({ data }: { data: PreviewData }) {
           <button
             key={m.id} id={`${uid}-tab-${m.id}`} role="tab" type="button" aria-selected={mode === m.id} aria-controls={`${uid}-panel`}
             tabIndex={mode === m.id ? 0 : -1} onClick={() => setMode(m.id)} onKeyDown={(e) => onKey(e, i)}
-            className={'h-9 rounded-full px-2 text-xs font-semibold transition ' + (mode === m.id ? 'bg-navy text-white' : 'text-navy hover:bg-white')}
+            className={'h-11 rounded-full px-2 text-xs font-semibold transition ' + (mode === m.id ? 'bg-navy text-white' : 'text-navy hover:bg-white')}
           >{m.label}</button>
         ))}
       </div>
@@ -205,7 +205,7 @@ export function CardPreview({ data }: { data: PreviewData }) {
           <output htmlFor={`${uid}-sim`} className="text-sm font-bold tabular-nums text-navy">{filled} de {total}</output>
         </div>
         <input id={`${uid}-sim`} type="range" min={0} max={total} step={1} value={filled}
-          onChange={(e) => setSimulated(Number(e.target.value))} className="mt-2 w-full accent-[#001D3D]" />
+          onChange={(e) => setSimulated(Number(e.target.value))} className="mt-1 h-11 w-full accent-[#001D3D]" />
       </div>
     </div>
   );

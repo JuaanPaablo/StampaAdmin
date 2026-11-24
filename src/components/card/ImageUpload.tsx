@@ -26,10 +26,15 @@ export function ImageUpload({ kind, label, help, currentUrl, fallback, framing }
   const [message, setMessage] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [adjusting, setAdjusting] = useState(false);
+  /** Qué se está guardando, para decirlo en pantalla. */
+  const [busy, setBusy] = useState<'upload' | 'remove' | 'framing' | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const saved = cleanFraming(framing);
   const [f, setF] = useState<ImageFraming>(saved);
   const savedUrl = safeImageUrl(currentUrl);
   const shown = local ?? savedUrl;
+  const isLogo = kind === 'logo';
+  const what = isLogo ? 'el logo' : 'la portada';
 
   useEffect(() => () => { if (local) URL.revokeObjectURL(local); }, [local]);
   // Cuando llega un encuadre nuevo del servidor (otra imagen, otro guardado), se toma como punto de partida.
@@ -39,7 +44,7 @@ export function ImageUpload({ kind, label, help, currentUrl, fallback, framing }
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-    setMessage(null); setAdjusting(false);
+    setMessage(null); setAdjusting(false); setConfirmRemove(false);
     const err = checkImageFile(file);
     if (err) { setError(err); return; }
     setError(null);
@@ -49,23 +54,27 @@ export function ImageUpload({ kind, label, help, currentUrl, fallback, framing }
     const fd = new FormData();
     fd.set('kind', kind);
     fd.set('file', file);
+    setBusy('upload');
     start(async () => {
       try {
         const res = await uploadImageAction(fd);
-        if (!res.ok) { setError(res.error ?? 'No pudimos subir la imagen.'); setLocal(null); return; }
-        setMessage('Imagen guardada. Puedes ajustar su posición.');
+        if (!res.ok) { setError(res.error ?? 'No pudimos subir la imagen. Intenta de nuevo.'); setLocal(null); return; }
+        setMessage(isLogo ? 'Logo guardado. Toca “Ajustar” si quieres moverlo.' : 'Portada guardada. Toca “Ajustar” si quieres moverla.');
         router.refresh();
       } catch {
-        setError('No pudimos subir la imagen. Prueba con una más liviana o intenta de nuevo.');
+        setError('No pudimos subir la imagen. Revisa tu conexión o prueba con una más liviana.');
         setLocal(null);
+      } finally {
+        setBusy(null);
       }
     });
   }
 
   function onRemove() {
-    setMessage(null); setError(null); setAdjusting(false);
+    setMessage(null); setError(null); setAdjusting(false); setConfirmRemove(false);
     const fd = new FormData();
     fd.set('kind', kind);
+    setBusy('remove');
     start(async () => {
       try {
         const res = await removeImageAction(fd);
@@ -75,6 +84,8 @@ export function ImageUpload({ kind, label, help, currentUrl, fallback, framing }
         router.refresh();
       } catch {
         setError('No pudimos quitar la imagen. Intenta de nuevo.');
+      } finally {
+        setBusy(null);
       }
     });
   }
@@ -83,6 +94,7 @@ export function ImageUpload({ kind, label, help, currentUrl, fallback, framing }
     const fd = new FormData();
     fd.set('kind', kind); fd.set('x', String(f.x)); fd.set('y', String(f.y)); fd.set('zoom', String(f.zoom));
     setError(null); setMessage(null);
+    setBusy('framing');
     start(async () => {
       try {
         const res = await saveFramingAction(fd);
@@ -92,6 +104,8 @@ export function ImageUpload({ kind, label, help, currentUrl, fallback, framing }
         router.refresh();
       } catch {
         setError('No pudimos guardar el encuadre. Intenta de nuevo.');
+      } finally {
+        setBusy(null);
       }
     });
   }
@@ -119,7 +133,6 @@ export function ImageUpload({ kind, label, help, currentUrl, fallback, framing }
     if (moves[e.key]) { e.preventDefault(); setF(cleanFraming({ ...f, ...moves[e.key] })); }
   }
 
-  const isLogo = kind === 'logo';
   return (
     <div className="flex flex-col gap-2">
       <span id={`${id}-label`} className="text-xs font-semibold tracking-wide text-muted">{label} <span className="font-normal">(opcional)</span></span>
@@ -141,20 +154,32 @@ export function ImageUpload({ kind, label, help, currentUrl, fallback, framing }
             ? <img src={shown} alt={isLogo ? 'Vista previa del logo' : 'Vista previa de la portada'} draggable={false}
                 className={'pointer-events-none h-full w-full object-cover ' + (pending ? 'opacity-60' : '')} style={framingStyle(f)} />
             : <span className="px-2 text-center text-xs font-semibold text-muted">{isLogo ? (fallback || 'Logo') : 'Sin portada'}</span>}
-          {pending && <span className="absolute inset-0 grid place-items-center bg-white/40 text-xs font-semibold text-navy">Guardando…</span>}
+          {pending && (
+            <span className="absolute inset-0 grid place-items-center bg-white/60 text-xs font-semibold text-navy">
+              {busy === 'upload' ? 'Subiendo…' : busy === 'remove' ? 'Quitando…' : 'Guardando…'}
+            </span>
+          )}
         </div>
-        {!adjusting ? (
+        {confirmRemove ? (
+          <div className="flex flex-col gap-2" role="group" aria-label={`Confirmar: quitar ${what}`}>
+            <p className="text-sm font-semibold text-navy">¿Quitar {what}?{isLogo ? ' Se verán tus iniciales.' : ''}</p>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className={btnClass('danger')} onClick={onRemove} disabled={pending} autoFocus>Sí, quitar</button>
+              <button type="button" className={btnClass('ghost')} onClick={() => setConfirmRemove(false)} disabled={pending}>No</button>
+            </div>
+          </div>
+        ) : !adjusting ? (
           <div className="flex flex-wrap items-center gap-2">
             <input ref={inputRef} id={id} type="file" accept={IMAGE_ACCEPT} className="sr-only" onChange={onPick}
               aria-labelledby={`${id}-label`} aria-describedby={`${id}-help${error ? ` ${id}-err` : ''}`} disabled={pending} />
-            <button type="button" className={btnClass('dark', 'sm')} onClick={() => inputRef.current?.click()} disabled={pending}>
+            <button type="button" className={btnClass('dark')} onClick={() => inputRef.current?.click()} disabled={pending} aria-describedby={`${id}-help`}>
               {savedUrl ? 'Cambiar' : 'Subir imagen'}
             </button>
             {savedUrl && !local && (
-              <button type="button" className={btnClass('ghost', 'sm')} onClick={() => { setMessage(null); setAdjusting(true); }} disabled={pending}>Ajustar</button>
+              <button type="button" className={btnClass('ghost')} onClick={() => { setMessage(null); setAdjusting(true); }} disabled={pending}>Ajustar</button>
             )}
             {savedUrl && (
-              <button type="button" className={btnClass('ghost', 'sm')} onClick={onRemove} disabled={pending}>Quitar</button>
+              <button type="button" className={btnClass('ghost')} onClick={() => { setMessage(null); setError(null); setConfirmRemove(true); }} disabled={pending}>Quitar</button>
             )}
           </div>
         ) : (
@@ -162,18 +187,18 @@ export function ImageUpload({ kind, label, help, currentUrl, fallback, framing }
             <label className="flex items-center gap-3 text-xs font-semibold text-muted">
               Zoom
               <input type="range" min={1} max={3} step={0.05} value={f.zoom} onChange={(e) => setF(cleanFraming({ ...f, zoom: Number(e.target.value) }))}
-                className="w-full accent-[#001D3D]" aria-label="Zoom de la imagen" />
+                className="h-11 w-full accent-[#001D3D]" aria-label="Zoom de la imagen" />
             </label>
-            <p className="text-xs text-muted">Arrastra la imagen para moverla.</p>
+            <p className="text-xs text-muted">Arrastra la imagen (o usa las flechas) para moverla.</p>
             <div className="flex flex-wrap gap-2">
-              <button type="button" className={btnClass('dark', 'sm')} onClick={saveFraming} disabled={pending}>Guardar encuadre</button>
-              <button type="button" className={btnClass('ghost', 'sm')} onClick={() => setF(cleanFraming(undefined))} disabled={pending}>Centrar</button>
-              <button type="button" className={btnClass('ghost', 'sm')} onClick={() => { setAdjusting(false); setF(saved); }} disabled={pending}>Cancelar</button>
+              <button type="button" className={btnClass('dark')} onClick={saveFraming} disabled={pending}>Guardar encuadre</button>
+              <button type="button" className={btnClass('ghost')} onClick={() => setF(cleanFraming(undefined))} disabled={pending}>Centrar</button>
+              <button type="button" className={btnClass('ghost')} onClick={() => { setAdjusting(false); setF(saved); }} disabled={pending}>Cancelar</button>
             </div>
           </div>
         )}
       </div>
-      <p id={`${id}-help`} className="text-xs leading-relaxed text-muted">{help ?? 'Máximo 2 MB.'}</p>
+      <p id={`${id}-help`} className="text-xs leading-relaxed text-muted">{help ?? 'PNG, JPG o WEBP · máx. 2 MB'}</p>
       <p role="status" aria-live="polite" className="min-h-[1rem] text-xs">
         {error ? <span id={`${id}-err`} className="font-medium text-bad">{error}</span> : message ? <span className="font-medium text-[#12683F]">{message}</span> : null}
       </p>

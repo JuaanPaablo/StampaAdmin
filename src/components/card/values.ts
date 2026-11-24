@@ -1,6 +1,7 @@
 import type { Milestone, Program } from '@/lib/contracts';
 import type { Vocabulary } from '@/lib/templates';
 import { money, parseMoney } from '@/lib/format';
+import { MAX_MILESTONES, validateMilestones } from '@/lib/rewards';
 
 /** Valores editables del formulario (todo texto o número simple) y su traducción a/desde Program. */
 export interface FormValues {
@@ -91,4 +92,57 @@ export function describeChanges(base: Program, v: FormValues, vocab: Vocabulary)
       effect: v.cooldownMinutes === 0 ? 'Una misma persona podrá sumar sellos sin esperar entre uno y otro.' : 'Una persona no podrá sumar otro sello hasta que pase ese tiempo.' });
   }
   return out;
+}
+
+/** Partes del formulario que están a la vista (el asistente muestra solo algunas). */
+export interface VisibleSections {
+  identidad?: boolean; premio?: boolean; premioExtra?: boolean; colores?: boolean; monto?: boolean;
+}
+
+/** Orden de los campos en pantalla: sirve para llevar el foco al primer error. */
+export const FIELD_ORDER = [
+  'name', 'logoText', 'stampsRequired', 'rewardTitle', 'milestones', 'rewardDescription', 'rewardExpiresDays', 'birthdayReward',
+  'bg', 'accent', 'ink', 'requireAmount', 'minSpend', 'codeTtlSeconds', 'maxSeatsWithoutApproval', 'cooldownMinutes', 'terms'
+] as const;
+
+const HEX6 = /^#?[0-9a-fA-F]{6}$|^#?[0-9a-fA-F]{3}$/;
+
+/**
+ * Validación en el navegador antes de enviar (mismas reglas que el servidor, que vuelve a validar).
+ * Solo revisa las secciones visibles. Devuelve { campo: mensaje }.
+ */
+export function validateValues(v: FormValues, show: VisibleSections, maxMilestones: number = MAX_MILESTONES): Record<string, string> {
+  const e: Record<string, string> = {};
+  if (show.identidad) {
+    const name = v.name.trim();
+    if (name.length < 2) e.name = 'Escribe al menos 2 letras.';
+    else if (name.length > 40) e.name = 'Máximo 40 caracteres.';
+    if (v.logoText.trim().length < 1) e.logoText = 'Escribe de 1 a 3 letras.';
+  }
+  if (show.premio) {
+    if (v.rewardTitle.trim().length < 2) e.rewardTitle = 'Escribe el premio.';
+    if (v.milestones.length) {
+      const ms = validateMilestones(v.milestones, v.stampsRequired, maxMilestones);
+      if (ms) e.milestones = ms;
+    }
+  }
+  if (show.premioExtra) {
+    const d = v.rewardExpiresDays.trim();
+    if (d !== '' && !(/^\d+$/.test(d) && Number(d) >= 1 && Number(d) <= 730)) e.rewardExpiresDays = 'Indica de 1 a 730 días o déjalo vacío.';
+  }
+  if (show.colores) {
+    for (const k of ['bg', 'accent', 'ink'] as const) {
+      if (!HEX6.test(v[k].trim())) e[k] = 'Usa un color con formato #RRGGBB.';
+    }
+  }
+  if (show.monto && v.requireAmount) {
+    const spend = parseMoney(v.minSpend);
+    if (!(spend >= 50 && spend <= 50000)) e.minSpend = 'Indica un monto entre $0,50 y $500,00.';
+  }
+  return e;
+}
+
+/** Primer campo con error, en el orden de la pantalla. */
+export function firstErrorField(errors: Record<string, string>): string | undefined {
+  return FIELD_ORDER.find((k) => errors[k]) ?? Object.keys(errors)[0];
 }

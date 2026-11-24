@@ -1,6 +1,7 @@
 export default function Loading() {
   return (
-    <div role="status" aria-label="Cargando la tarjeta" className="animate-pulse">
+    <div role="status" aria-label="Cargando la tarjeta" className="animate-pulse motion-reduce:animate-none">
+      <span className="sr-only">Cargando la tarjeta…</span>
       <div className="mb-6 h-8 w-40 rounded-lg bg-line" />
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div className="space-y-5">
