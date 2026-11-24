@@ -19,8 +19,10 @@ Objetivo: cuando el cliente se registra o abre su tarjeta, puede guardarla en Ap
   - Pruebas en `google.test.ts`.
 - **Cuentas de Google:** consola de Wallet creada (Issuer ID `3388000000023233833`), proyecto de Cloud con Google
   Wallet API, cuenta de servicio con clave JSON e invitada a la consola.
-- **Vercel:** `GOOGLE_WALLET_ISSUER_ID` y `GOOGLE_WALLET_SA_JSON_BASE64` cargadas **solo en Preview**. En Production
-  no están: allí el botón no aparece y la sincronización no hace nada.
+- **Vercel (2026-11-24):** `GOOGLE_WALLET_ISSUER_ID`, `GOOGLE_WALLET_SA_JSON_BASE64` y `GOOGLE_WALLET_PUBLIC=on` en
+  **Production**. Todo el producto está en pruebas y se prueba solo en stampaecu.app (nada de enlaces *.vercel.app),
+  así que el botón se ve en producción; mientras Google no apruebe la publicación, solo pueden guardar el pase los
+  Gmail autorizados en la consola (al resto le sale "solo para pruebas").
 - **Probado en Android (Preview):** Google acepta el enlace firmado y reconoce el pase. Respondió "este pase solo se
   usa para realizar pruebas", que es la restricción del modo demo, no un fallo del código.
 
