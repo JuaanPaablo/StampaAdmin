@@ -21,12 +21,14 @@ export function RewardsSection({ redeemable, redemptions, stampsRequired, reward
           ) : (
             <ul className="divide-y divide-line">
               {redeemable.flatMap((c) => pendingRewards(c, { stampsRequired, rewardTitle, milestones }).map((p) => (
-                <li key={c.id + ':' + (p.milestone ?? 'final')} className="flex items-center justify-between gap-3 py-3">
+                <li key={c.id + ':' + (p.milestone ?? 'final')} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-3">
                   <div className="min-w-0">
                     <p className="truncate text-[15px] font-semibold text-navy">{c.name}</p>
                     <p className="text-xs text-muted">{p.title} · {p.milestone ? `sello ${p.milestone}` : `${c.stamps} de ${stampsRequired} sellos`}</p>
                   </div>
-                  <ActionButton action={redeemAction} fields={p.milestone ? { customerId: c.id, milestone: String(p.milestone) } : { customerId: c.id }} label="Canjear" pendingText="Canjeando…" />
+                  {/* Canjear no se puede deshacer: pide un segundo toque. El aviso sale en <FlashRegion /> porque la fila desaparece. */}
+                  <ActionButton action={redeemAction} fields={p.milestone ? { customerId: c.id, milestone: String(p.milestone) } : { customerId: c.id }}
+                    label="Canjear" confirmLabel="Sí, entregar" confirmQuestion={'¿Entregar ' + p.title + ' a ' + c.name + '?'} pendingText="Canjeando…" broadcast />
                 </li>
               )))}
             </ul>

@@ -13,7 +13,7 @@ import type { CreateCodeResult } from '@/lib/contracts';
 import type { ActionState, CodeFormState } from '@/components/register/types';
 
 const FIELD_ERRORS = {
-  ticket: 'Escribe el número del comprobante.',
+  ticket: 'Falta el número.',
   seats: 'Indica cuántos cupos necesitas (mínimo 1).',
   pin: 'El PIN debe tener 4 dígitos.'
 };
@@ -70,7 +70,7 @@ export async function createCodeAction(_prev: CodeFormState, fd: FormData): Prom
       approvalPin: needsApproval(ctx.program, seats) ? pin : undefined
     });
   } catch {
-    return { error: 'No se pudo generar el código. Intenta de nuevo.' };
+    return { error: 'No se pudo generar el código. Revisa la conexión y vuelve a tocar Generar.' };
   }
   if (!result.ok) return { error: result.error, field: result.field };
   revalidateAll(result.code.id);
@@ -82,11 +82,11 @@ const idSchema = z.string().min(1).max(80);
 export async function cancelCodeAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const ctx = await getContext();
   const codeId = idSchema.safeParse(text(fd, 'codeId'));
-  if (!codeId.success) return { ok: false, error: 'Falta el código.' };
+  if (!codeId.success) return { ok: false, error: 'No encontramos el código. Recarga la página.' };
   try {
     await ctx.repo.cancelStampCode(ctx.business.id, codeId.data, ctx.staff.id);
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'No se pudo cancelar el código.' };
+    return { ok: false, error: e instanceof Error ? e.message : 'No se pudo cancelar el código. Revisa la conexión e intenta de nuevo.' };
   }
   revalidateAll(codeId.data);
   return { ok: true, message: 'Código cancelado.' };
@@ -96,11 +96,11 @@ export async function voidClaimAction(_prev: ActionState, fd: FormData): Promise
   const ctx = await getContext();
   if (!hasRole(ctx, ['owner', 'manager'])) return { ok: false, error: 'Solo un dueño o gerente puede anular un sello.' };
   const ids = z.object({ codeId: idSchema, claimId: idSchema }).safeParse({ codeId: text(fd, 'codeId'), claimId: text(fd, 'claimId') });
-  if (!ids.success) return { ok: false, error: 'Falta el sello a anular.' };
+  if (!ids.success) return { ok: false, error: 'No encontramos ese sello. Recarga la página.' };
   try {
     await ctx.repo.voidClaim(ctx.business.id, ids.data.codeId, ids.data.claimId, ctx.staff.id);
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'No se pudo anular el sello.' };
+    return { ok: false, error: e instanceof Error ? e.message : 'No se pudo anular el sello. Revisa la conexión e intenta de nuevo.' };
   }
   revalidateAll(ids.data.codeId);
   return { ok: true, message: 'Sello anulado. El cupo no se devuelve.' };
@@ -150,15 +150,15 @@ export async function simulateResendAction(_prev: ActionState, fd: FormData): Pr
 export async function redeemAction(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const ctx = await getContext();
   const customerId = idSchema.safeParse(text(fd, 'customerId'));
-  if (!customerId.success) return { ok: false, error: 'Falta el ' + ctx.template.vocab.customer + '.' };
+  if (!customerId.success) return { ok: false, error: 'No encontramos al ' + ctx.template.vocab.customer + '. Recarga la página.' };
   try {
     const m = Number(text(fd, 'milestone'));
     const r = await ctx.repo.redeemReward(ctx.business.id, customerId.data, ctx.staff.id, Number.isInteger(m) && m > 0 ? m : undefined);
     await syncWalletPass(ctx.business.id, customerId.data);
     revalidateAll();
     revalidatePath('/panel/clientes');
-    return { ok: true, message: 'Canje registrado para ' + r.customerName + (r.rewardTitle ? ': ' + r.rewardTitle : '') + '.' };
+    return { ok: true, message: 'Canje listo: ' + (r.rewardTitle ? r.rewardTitle + ' para ' : '') + r.customerName + '.' };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'No se pudo registrar el canje.' };
+    return { ok: false, error: e instanceof Error ? e.message : 'No se pudo registrar el canje. Revisa la conexión e intenta de nuevo.' };
   }
 }

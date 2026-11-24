@@ -9,8 +9,11 @@ import { money } from '@/lib/format';
 import { cancelCodeAction } from '../actions';
 import { ActionButton } from '@/components/register/ActionButton';
 import { ClaimList } from '@/components/register/ClaimList';
+import { ClaimNotice } from '@/components/register/ClaimNotice';
 import { Countdown } from '@/components/register/Countdown';
 import { DemoPanel } from '@/components/register/DemoPanel';
+import { FlashRegion } from '@/components/register/FlashRegion';
+import { LiveIndicator } from '@/components/register/LiveIndicator';
 import { LiveRefresh } from '@/components/register/LiveRefresh';
 import { RecentCodes } from '@/components/register/RecentCodes';
 import { RewardsSection } from '@/components/register/RewardsSection';
@@ -52,26 +55,34 @@ export default async function CodePage({ params }: { params: { id: string } }) {
     ? await QRCode.toString(stampUrl(business.slug, code.code), { type: 'svg', margin: 1, errorCorrectionLevel: 'M', color: { dark: '#001D3D', light: '#FFFFFF' } })
     : '';
 
-  let reason = '';
-  if (status === 'agotado') reason = 'Se llenaron todos los cupos.';
-  else if (status === 'vencido') reason = 'Pasó la vigencia (' + clock(code.expiresAt, tz) + ').';
-  else if (status === 'cancelado') reason = 'Se canceló' + (code.cancelledAt ? ' a las ' + clock(code.cancelledAt, tz) : '') + '.';
+  const latest = [...code.claims].sort((a, b) => b.at.localeCompare(a.at))[0];
+  const claimedText = used + ' de ' + code.seats + ' reclamados';
+
+  // Aviso cuando el código ya no recibe reclamos. "Completo" es un buen final: va en verde.
+  const ended = {
+    agotado: { title: 'Listo: cupos completos', text: 'Todos recibieron su sello.', box: 'bg-[#DDF3E8] text-[#0E5232] ring-1 ring-[#B5E2CB]', sub: 'text-[#12683F]' },
+    vencido: { title: 'Código vencido', text: 'Venció a las ' + clock(code.expiresAt, tz) + ' · ' + claimedText + '.', box: 'bg-navy text-white', sub: 'text-white/80' },
+    cancelado: { title: 'Código cancelado', text: (code.cancelledAt ? 'Se canceló a las ' + clock(code.cancelledAt, tz) : 'Se canceló') + ' · ' + claimedText + '.', box: 'bg-navy text-white', sub: 'text-white/80' }
+  } as const;
+  const end = status === 'activo' ? null : ended[status];
 
   return (
     <div className="flex w-full max-w-4xl flex-col gap-6 sm:gap-8">
       <LiveRefresh active={active} expiresAt={code.expiresAt} />
+      <ClaimNotice key={code.id} count={used} latestName={latest?.customerName} customers={v.customers} full={status === 'agotado'} />
+      <FlashRegion />
       <PageHeader
         title={v.ticket + ' ' + code.ticket}
         subtitle={(program.requireAmount && code.amountCents > 0 ? money(code.amountCents) + ' · ' : '') + code.seats + (code.seats === 1 ? ' cupo' : ' cupos') + ' · creado a las ' + clock(code.createdAt, tz) + (staffNames[code.createdBy] ? ' por ' + staffNames[code.createdBy] : '')}
-        actions={<Link href="/panel/caja" className={btnClass('ghost', 'sm')}>Volver a {v.counter.toLowerCase()}</Link>} />
+        actions={active ? <Link href="/panel/caja" className={btnClass('ghost', 'sm') + ' min-h-11'}>Nuevo código</Link> : undefined} />
 
-      {!active && (
-        <div role="status" className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-navy px-5 py-5 text-white shadow-card">
+      {end && (
+        <div role="status" className={'flex flex-wrap items-center justify-between gap-4 rounded-2xl px-5 py-5 shadow-card ' + end.box}>
           <div className="min-w-0">
-            <p className="font-display text-xl font-bold">Código quemado</p>
-            <p className="mt-1 text-sm text-white/80">{reason}</p>
+            <p className="font-display text-xl font-bold">{end.title}</p>
+            <p className={'mt-1 text-sm ' + end.sub}>{end.text}</p>
           </div>
-          <Link href="/panel/caja" className={btnClass('primary')}>Nuevo código</Link>
+          <Link href="/panel/caja" className={btnClass('primary') + ' w-full sm:w-auto'}>Nuevo código</Link>
         </div>
       )}
 
@@ -101,28 +112,27 @@ export default async function CodePage({ params }: { params: { id: string } }) {
           <Card>
             <div className="flex items-center justify-between gap-3">
               <h2 className="font-display text-base font-semibold text-navy">Cupos</h2>
-              <p className="text-sm font-semibold text-navy tabular-nums" aria-live="polite">{used} de {code.seats} reclamados</p>
+              <p className="text-sm font-semibold text-navy tabular-nums">{claimedText}</p>
             </div>
             <div className="mt-3"><SeatPips seats={code.seats} claims={code.claims} /></div>
             {valid !== used && <p className="mt-2 text-xs text-muted">{used - valid} anulado{used - valid === 1 ? '' : 's'}: el cupo no se devuelve.</p>}
             {code.approvedBy && <p className="mt-3 text-xs text-muted">Aprobado por <span className="font-semibold text-navy">{staffNames[code.approvedBy] ?? 'un gerente'}</span> con PIN.</p>}
+            {code.attempts > 0 && (
+              <p className="mt-3"><Badge tone="warn">{code.attempts} {code.attempts === 1 ? 'intento rechazado' : 'intentos rechazados'}</Badge></p>
+            )}
           </Card>
 
           <Card>
-            <h2 className="mb-2 font-display text-base font-semibold text-navy">Quién reclamó</h2>
-            <ClaimList codeId={code.id} claims={code.claims} timezone={tz} customerWord={v.customer} canVoid={staff.role !== 'cashier'} />
-          </Card>
-
-          <Card className="flex flex-wrap items-center justify-between gap-4">
-            <h2 className="font-display text-base font-semibold text-navy">Intentos rechazados</h2>
-            <div aria-live="polite">
-              {code.attempts > 0 ? <Badge tone="warn">{code.attempts} {code.attempts === 1 ? 'intento' : 'intentos'}</Badge> : <span className="text-2xl font-bold tabular-nums text-navy">0</span>}
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h2 className="font-display text-base font-semibold text-navy">Quién reclamó</h2>
+              {active && <LiveIndicator />}
             </div>
+            <ClaimList codeId={code.id} claims={code.claims} timezone={tz} customerWord={v.customer} canVoid={staff.role !== 'cashier'} waiting={active} />
           </Card>
 
           {canCancel && (
-            <ActionButton action={cancelCodeAction} fields={{ codeId: code.id }} label="Cancelar código" confirmLabel="Sí, cancelar código" variant="danger"
-              confirmQuestion={'Nadie más podrá reclamar. Quien ya reclamó conserva su sello.'} pendingText="Cancelando…" />
+            <ActionButton key={code.id} action={cancelCodeAction} fields={{ codeId: code.id }} label="Cancelar código" confirmLabel="Sí, cancelar" variant="danger"
+              confirmQuestion="Nadie más podrá reclamar. Quien ya reclamó conserva su sello." pendingText="Cancelando…" showSuccess={false} />
           )}
         </div>
       </div>

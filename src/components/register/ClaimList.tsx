@@ -4,15 +4,17 @@ import { voidClaimAction } from '@/app/panel/caja/actions';
 import { ActionButton } from './ActionButton';
 import { clock } from './time';
 
-/** Reclamos del código, del más reciente al más antiguo. La región es aria-live para anunciar nuevos reclamos. */
-export function ClaimList({ codeId, claims, timezone, customerWord, canVoid }: {
+/** Reclamos del código, del más reciente al más antiguo. Los reclamos nuevos los anuncia <ClaimNotice />. */
+export function ClaimList({ codeId, claims, timezone, customerWord, canVoid, waiting = true }: {
   codeId: string; claims: StampClaim[]; timezone: string; customerWord: string; canVoid: boolean;
+  /** false cuando el código ya no recibe reclamos. */
+  waiting?: boolean;
 }) {
   const sorted = [...claims].sort((a, b) => b.at.localeCompare(a.at));
   return (
-    <div aria-live="polite" aria-relevant="additions text">
+    <div>
       {sorted.length === 0 ? (
-        <p className="rounded-xl bg-surface px-4 py-4 text-center text-sm text-muted">Esperando al {customerWord}…</p>
+        <p className="rounded-xl bg-surface px-4 py-4 text-center text-sm text-muted">{waiting ? 'Esperando al ' + customerWord + '…' : 'Nadie reclamó este código.'}</p>
       ) : (
         <ul className="divide-y divide-line">
           {sorted.map((c) => (
@@ -25,8 +27,8 @@ export function ClaimList({ codeId, claims, timezone, customerWord, canVoid }: {
                 </p>
               </div>
               {!c.voidedAt && canVoid && (
-                <ActionButton action={voidClaimAction} fields={{ codeId, claimId: c.id }} label="Anular" confirmLabel="Sí, anular sello" variant="danger" size="sm"
-                  confirmQuestion="Se quita el sello. El cupo no se devuelve." pendingText="Anulando…" />
+                <ActionButton action={voidClaimAction} fields={{ codeId, claimId: c.id }} label="Anular" confirmLabel="Sí, anular" variant="danger" size="sm"
+                  confirmQuestion={'¿Quitarle el sello a ' + c.customerName + '? El cupo no se devuelve.'} pendingText="Anulando…" />
               )}
             </li>
           ))}
