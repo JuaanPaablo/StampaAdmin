@@ -2,7 +2,7 @@ import { num } from '@/lib/format';
 
 export interface BarItem { label: string; value: number; tooltip?: string }
 
-const W = 480, H = 190, ML = 8, MR = 8, MT = 22, MB = 28;
+const W = 480, H = 196, ML = 8, MR = 8, MT = 24, MB = 30;
 
 /** Barras verticales en SVG. La barra más alta va en amarillo con borde navy y lleva su valor encima. */
 export function BarChart({ id, title, desc, items, highlight, labelEvery = 1 }: {
@@ -29,10 +29,10 @@ export function BarChart({ id, title, desc, items, highlight, labelEvery = 1 }: 
               <title>{it.tooltip ?? `${it.label}: ${num(it.value)}`}</title>
             </rect>
             {isPeak && it.value > 0 && (
-              <text x={cx} y={MT + ih - h - 6} textAnchor="middle" fontSize={13} fontWeight={700} fill="#001D3D">{num(it.value)}</text>
+              <text x={cx} y={MT + ih - h - 6} textAnchor="middle" fontSize={15} fontWeight={700} fill="#001D3D">{num(it.value)}</text>
             )}
             {(i % labelEvery === 0 || isPeak) && (
-              <text x={cx} y={H - 9} textAnchor="middle" fontSize={12} fontWeight={isPeak ? 700 : 400} fill={isPeak ? '#001D3D' : '#4A6380'}>{it.label}</text>
+              <text x={cx} y={H - 9} textAnchor="middle" fontSize={14} fontWeight={isPeak ? 700 : 400} fill={isPeak ? '#001D3D' : '#4A6380'}>{it.label}</text>
             )}
           </g>
         );

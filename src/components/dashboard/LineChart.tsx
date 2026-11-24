@@ -11,7 +11,7 @@ function niceScale(max: number): { top: number; step: number } {
   return { top: step * 4, step };
 }
 
-const W = 480, H = 230, ML = 38, MR = 18, MT = 14, MB = 32;
+const W = 480, H = 236, ML = 44, MR = 20, MT = 14, MB = 34;
 
 /**
  * Gráfico de línea con área, en SVG puro y renderizado en servidor.
@@ -50,11 +50,11 @@ export function LineChart({ id, title, unit, data, caption }: {
         {yTicks.map((t) => (
           <g key={t}>
             <line x1={ML} x2={W - MR} y1={y(t)} y2={y(t)} stroke={t === 0 ? '#9FB1C5' : '#E1E8F0'} strokeWidth={1} />
-            <text x={ML - 6} y={y(t) + 4} textAnchor="end" fontSize={12} fill="#4A6380">{num(t, step < 1 ? 1 : 0)}</text>
+            <text x={ML - 6} y={y(t) + 4} textAnchor="end" fontSize={14} fill="#4A6380">{num(t, step < 1 ? 1 : 0)}</text>
           </g>
         ))}
         {xIdx.map((i, k) => (
-          <text key={i} x={x(i)} y={H - 10} fontSize={12} fill="#4A6380"
+          <text key={i} x={x(i)} y={H - 10} fontSize={14} fill="#4A6380"
             textAnchor={k === 0 && n > 1 ? 'start' : k === xIdx.length - 1 && n > 1 ? 'end' : 'middle'}>{data[i].label}</text>
         ))}
         {n > 0 && <path d={area} fill="#001D3D" opacity={0.08} />}

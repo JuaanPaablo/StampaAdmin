@@ -12,25 +12,26 @@ import { RangeTabs } from '@/components/control/RangeTabs';
 import { RulesCard } from '@/components/control/RulesCard';
 import { StaffTable } from '@/components/control/StaffTable';
 import { plural } from '@/components/register/time';
+import { RANGE_DAYS, RANGE_LABEL, rangeDates } from '@/components/dashboard/helpers';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Control · Stampa' };
 
-const RANGE_DAYS: Record<RangeKey, number> = { '7d': 7, '30d': 30, '90d': 90 };
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
 function Section({ id, title, hint, children }: { id: string; title: string; hint?: string; children: React.ReactNode }) {
   return (
     <section id={id} aria-labelledby={id + '-h'} className="scroll-mt-6">
       <h2 id={id + '-h'} className="font-display text-lg font-semibold text-navy">{title}</h2>
-      {hint && <p className="mb-3 mt-0.5 text-sm text-muted">{hint}</p>}
-      {!hint && <div className="mb-3" />}
+      {hint ? <p className="mb-3 mt-0.5 text-sm text-muted">{hint}</p> : <div className="mb-3" />}
       {children}
     </section>
   );
 }
 
 const AUDIT_PAGE_SIZE = 20;
+const ALERTS_SHOWN = 30;
+const CODES_SHOWN = 15;
 
 export default async function ControlPage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
   const ctx = await getContext();
@@ -55,7 +56,7 @@ export default async function ControlPage({ searchParams }: { searchParams: Reco
   const [alertsAll, report, codes, audit, staffList] = await Promise.all([
     plan.alerts ? repo.listAlerts(business.id, 200) : Promise.resolve([]),
     plan.staffReport ? repo.getStaffReport(business.id, range) : Promise.resolve([]),
-    repo.listStampCodes(business.id, 15),
+    repo.listStampCodes(business.id, CODES_SHOWN),
     repo.listAudit(business.id, 1000),
     repo.listStaff(business.id)
   ]);
@@ -74,49 +75,73 @@ export default async function ControlPage({ searchParams }: { searchParams: Reco
   const pages = Math.max(1, Math.ceil(matching.length / AUDIT_PAGE_SIZE));
   const page = Math.min(pages, Math.max(1, Number.parseInt(first(searchParams.pagina) ?? '1', 10) || 1));
   const filtered = matching.slice((page - 1) * AUDIT_PAGE_SIZE, page * AUDIT_PAGE_SIZE);
-  const rangeLabel = range === '7d' ? 'los últimos 7 días' : range === '30d' ? 'los últimos 30 días' : 'los últimos 90 días';
+  const days = RANGE_LABEL[range];
+  const rangeLabel = 'los últimos ' + days;
+  const staffWord = v.staffRole;
+
+  /* Atajos para saltar entre secciones: la página es larga en el celular. */
+  const jumps = [
+    { id: 'alertas', label: 'Alertas' + (plan.alerts && alerts.length ? ` (${alerts.length})` : '') },
+    { id: 'cajeros', label: 'Equipo' },
+    { id: 'codigos', label: 'Códigos' },
+    { id: 'reglas', label: 'Reglas' },
+    { id: 'actividad', label: 'Historial' }
+  ];
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-10">
-      <PageHeader title="Control"
-        actions={<RangeTabs range={range} accion={accion || undefined} />} />
+      <div className="flex flex-col gap-3">
+        <PageHeader title="Control"
+          subtitle={`Últimos ${days} (${rangeDates(range, business.timezone)})`}
+          actions={<RangeTabs range={range} accion={accion || undefined} />} />
+        <nav aria-label="Secciones de control" className="-mt-6 -mx-1 flex gap-1 overflow-x-auto px-1 pb-1">
+          {jumps.map((j) => (
+            <a key={j.id} href={'#' + j.id}
+              className="inline-flex min-h-[44px] shrink-0 items-center rounded-full px-3 text-sm font-semibold text-navy underline-offset-4 hover:bg-surface hover:underline">
+              {j.label}
+            </a>
+          ))}
+        </nav>
+      </div>
 
       {plan.alerts && (
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3" role="region" aria-label={'Resumen de ' + rangeLabel}>
-        <Stat label="Alertas críticas" value={critical} hint={'en ' + rangeLabel} />
-        <Stat label="Advertencias" value={warning} hint={'en ' + rangeLabel} />
-        <Stat label="Personas a revisar" value={flagged} hint={flagged === 0 ? 'Nadie fuera de lo normal' : 'Sellos por ' + v.ticket.toLowerCase() + ' muy altos'} />
+        <Stat label="Urgentes" value={critical} hint={critical === 0 ? 'Nada urgente' : 'Atiéndelas hoy'} />
+        <Stat label="Para revisar" value={warning} hint={warning === 0 ? 'Nada pendiente' : 'Revísalas esta semana'} />
+        <Stat label="Personas a revisar" value={plan.staffReport ? flagged : '—'}
+          hint={!plan.staffReport ? 'Disponible en plan Pro' : flagged === 0 ? 'Todos dentro de lo normal' : 'Dan más sellos por ' + v.ticket.toLowerCase() + ' que el resto'} />
       </div>
       )}
 
-      <Section id="alertas" title="Alertas">
+      <Section id="alertas" title="Alertas" hint={plan.alerts && alerts.length ? 'Cada alerta dice qué pasó y qué hacer. Las urgentes van primero.' : undefined}>
         {plan.alerts ? (
-        <AlertList alerts={alerts.slice(0, 30)} staffNames={staffNames} range={range} ticketWord={v.ticket}
-          emptyText="Todo en orden." />
+        <AlertList alerts={alerts} limit={ALERTS_SHOWN} staffNames={staffNames} range={range} ticketWord={v.ticket}
+          canSeeStaff={plan.staffReport} emptyText={`Nada raro en ${rangeLabel}.`} />
         ) : (
         <PlanLock plan="standard" businessName={business.name} title="Alertas antifraude"
           text="Códigos compartidos, tickets repetidos y anulaciones sospechosas." />
         )}
       </Section>
 
-      <Section id="cajeros" title={'Equipo en ' + v.counter.toLowerCase()}>
+      <Section id="cajeros" title={'Equipo en ' + v.counter.toLowerCase()}
+        hint={plan.staffReport ? `Sellos por ${v.ticket.toLowerCase()} de cada persona en ${rangeLabel}.` : undefined}>
         {plan.staffReport ? (
-        <StaffTable rows={report} ticketPlural={plural(v.ticket)} staffWord={v.staffRole} ticketWord={v.ticket} />
+        <StaffTable rows={report} ticketPlural={plural(v.ticket)} staffWord={staffWord} ticketWord={v.ticket} />
         ) : (
-        <PlanLock plan="pro" businessName={business.name} title={'Reporte por ' + v.staffRole}
+        <PlanLock plan="pro" businessName={business.name} title={'Reporte por ' + staffWord}
           text={'Sellos por ' + v.ticket.toLowerCase() + ' de cada persona frente al equipo.'} />
         )}
       </Section>
 
-      <Section id="codigos" title="Códigos recientes">
-        <CodesTable codes={codes} statuses={statuses} staffNames={staffNames} showAmount={program.requireAmount} ticketWord={v.ticket} staffWord={v.staffRole} />
+      <Section id="codigos" title="Últimos códigos" hint={`Los ${CODES_SHOWN} más recientes, de cualquier fecha.`}>
+        <CodesTable codes={codes} statuses={statuses} staffNames={staffNames} showAmount={program.requireAmount} ticketWord={v.ticket} staffWord={staffWord} />
       </Section>
 
       <Section id="reglas" title="Reglas activas">
         <RulesCard program={program} customerWord={v.customer} />
       </Section>
 
-      <Section id="actividad" title="Registro de actividad">
+      <Section id="actividad" title="Historial de cambios" hint="Quién hizo qué y cuándo, de cualquier fecha.">
         <AuditSection entries={filtered} actions={actions} selected={accion} range={range} staffNames={staffNames} timezone={business.timezone}
           vocab={{ reward: v.reward, ticket: v.ticket }} page={page} pages={pages} total={matching.length} pageSize={AUDIT_PAGE_SIZE} canExport={plan.exportCsv} />
       </Section>

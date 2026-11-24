@@ -4,12 +4,13 @@ import type { Program } from '@/lib/contracts';
 import { money } from '@/lib/format';
 import { humanMinutes, humanSeconds } from '@/components/register/time';
 
+/** Reglas antifraude vigentes, en palabras de negocio, con acceso directo para cambiarlas. */
 export function RulesCard({ program, customerWord }: { program: Program; customerWord: string }) {
   const rules: { k: string; v: string }[] = [
-    { k: 'Mínimo por sello', v: program.requireAmount ? money(program.minSpendCentsPerStamp) : 'No depende del monto' },
-    { k: 'Cupos sin aprobación', v: 'Hasta ' + program.maxSeatsWithoutApproval + ' (más pide PIN)' },
-    { k: 'Vigencia del código', v: humanSeconds(program.codeTtlSeconds) },
-    { k: 'Espera entre sellos de un ' + customerWord, v: program.cooldownMinutes > 0 ? humanMinutes(program.cooldownMinutes) : 'Sin límite' }
+    { k: 'Compra mínima por sello', v: program.requireAmount ? money(program.minSpendCentsPerStamp) : 'No depende del monto' },
+    { k: 'Sellos por código sin PIN', v: 'Hasta ' + program.maxSeatsWithoutApproval + '; más pide PIN de dueño o gerente' },
+    { k: 'El código vence en', v: humanSeconds(program.codeTtlSeconds) },
+    { k: 'Espera entre sellos de un ' + customerWord, v: program.cooldownMinutes > 0 ? humanMinutes(program.cooldownMinutes) : 'Sin espera' }
   ];
   return (
     <Card>
@@ -21,7 +22,7 @@ export function RulesCard({ program, customerWord }: { program: Program; custome
           </div>
         ))}
       </dl>
-      <div className="mt-5"><Link href="/panel/tarjeta" className={btnClass('ghost', 'sm')}>Cambiar reglas en Tarjeta</Link></div>
+      <div className="mt-5"><Link href="/panel/tarjeta" className={btnClass('ghost', 'md')}>Cambiar reglas</Link></div>
     </Card>
   );
 }
