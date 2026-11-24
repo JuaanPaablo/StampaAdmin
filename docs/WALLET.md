@@ -3,17 +3,50 @@
 Objetivo: cuando el cliente se registra o abre su tarjeta, puede guardarla en Apple Wallet (iPhone) o Google Wallet
 (Android). El pase muestra sus sellos y se actualiza solo cada vez que suma uno.
 
-## Estado
+## Estado (actualizado 2026-11-24)
 
-- Hecho: modelo del pase (`src/lib/wallet/pass-model.ts`) con progreso, próximo premio, premio listo, colores,
-  QR a la tarjeta y hasta 10 sucursales para avisos de cercanía. `applePassJson` y `googleLoyaltyObject` arman el
-  contenido de cada plataforma. Pruebas en `pass-model.test.ts`.
-- Hecho (Google, rama `feature/google-wallet`): `src/lib/wallet/google.ts` firma el enlace "Guardar en Google Wallet"
-  (JWT RS256 con node:crypto, sin dependencias), `GET /u/<negocio>/wallet/google` redirige al cliente con sesión a ese
-  enlace, y `syncWalletPass` actualiza el pase (PATCH) al sumar un sello o canjear. Sin las variables, el botón no aparece.
-  Pruebas en `google.test.ts`. Ojo: Google descarga el logo, así que en `localhost` el guardado falla; probar en Vercel.
-- Falta (necesita las cuentas): firmar el `.pkpass`, el servicio web de Apple para actualizar pases (APNs),
-  la API de Google Wallet, los botones "Agregar a Wallet" en `/u/<negocio>` y coordenadas de cada sucursal.
+### Hecho
+- Modelo del pase (`src/lib/wallet/pass-model.ts`): progreso, próximo premio, premio listo, colores, QR a la tarjeta y
+  hasta 10 sucursales para avisos de cercanía. `applePassJson` y `googleLoyaltyObject` arman cada plataforma.
+- **Google Wallet (código listo):**
+  - `src/lib/wallet/google.ts`: firma el enlace "Guardar en Google Wallet" (JWT RS256 con `node:crypto`, sin
+    dependencias). Clase por negocio `<issuer>.stampa_<businessId>`, objeto por cliente `<issuer>.<customerId>`.
+  - `GET /u/<negocio>/wallet/google`: solo para el cliente con sesión y tarjeta en ese negocio; actualiza su pase y lo
+    redirige a Google.
+  - `src/lib/wallet/sync.ts` (`syncWalletPass`): PATCH del pase al sumar un sello (página del cliente y Caja) y al
+    canjear (Caja y ficha del cliente). Si falla Google, el sello se suma igual.
+  - Botón negro "Agregar a Google Wallet" debajo de la tarjeta en `/u/<negocio>`, solo si hay variables.
+  - Pruebas en `google.test.ts`.
+- **Cuentas de Google:** consola de Wallet creada (Issuer ID `3388000000023233833`), proyecto de Cloud con Google
+  Wallet API, cuenta de servicio con clave JSON e invitada a la consola.
+- **Vercel:** `GOOGLE_WALLET_ISSUER_ID` y `GOOGLE_WALLET_SA_JSON_BASE64` cargadas **solo en Preview**. En Production
+  no están: allí el botón no aparece y la sincronización no hace nada.
+- **Probado en Android (Preview):** Google acepta el enlace firmado y reconoce el pase. Respondió "este pase solo se
+  usa para realizar pruebas", que es la restricción del modo demo, no un fallo del código.
+
+### Falta (en orden)
+1. **Autorizar el Gmail del Android de prueba** (es lo que bloquea ahora): en la consola de Wallet → Google Wallet API
+   → cuentas de prueba, o Usuarios → invitar como Desarrollador. Revisar en la pantalla de Google qué Gmail usa el
+   teléfono.
+2. **Probar todo en Android:** guardar el pase, sumar un sello desde Caja y ver que el pase se actualiza solo; canjear
+   y ver que vuelve a empezar.
+3. **Guardar en la ficha que el cliente agregó la tarjeta** (`customers.wallet = 'google'`): hoy el campo existe pero
+   nada lo escribe. Necesita un método en el repo (memory y supabase).
+4. **Botón oficial de Google** ("Add to Google Wallet" en español, imagen de sus guías de marca) en lugar del botón
+   negro de texto: Google lo exige para aprobar la publicación.
+5. **Logo de la clase:** Google recomienda PNG cuadrado de 660×660. Hoy usa el logo del negocio o, si no hay,
+   `https://stampaecu.app/apple-touch-icon.png` (180 px).
+6. **Pedir acceso de publicación:** completar el perfil de negocio en la consola y enviar la solicitud. Cuando lo
+   aprueben, copiar las dos variables a **Production** y volver a desplegar.
+7. **Revisión de seguridad** (`/security-review`) antes de activar en Production.
+8. **Cercanía:** latitud y longitud por sucursal (migración + selector de mapa en Ajustes) y pasarlas al pase.
+9. **Apple Wallet** (después de Google): cuenta Apple Developer, `.pkpass` firmado y servicio web con APNs.
+
+### Notas
+- En `localhost` el guardado falla (Google descarga el logo y necesita una URL pública): probar en Preview de Vercel.
+- Preview usa la misma base de Supabase que producción: lo que se haga en pruebas queda guardado.
+- Nunca pegar la clave JSON en un chat ni subirla al repo. Para cargarla: `base64 -w0 archivo.json | clip` (Git Bash)
+  y pegar en Vercel como Sensitive.
 
 ## Lo que necesitas crear
 
