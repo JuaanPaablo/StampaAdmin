@@ -14,13 +14,13 @@ const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 const newCustomerSchema = z.object({
   name: z.string().trim().min(2, 'Escribe el nombre completo.').max(80, 'El nombre es demasiado largo.'),
   contactKind: z.enum(['whatsapp', 'email'], { errorMap: () => ({ message: 'Elige el tipo de contacto.' }) }),
-  contact: z.string().trim().min(1, 'Escribe el contacto.').max(120),
+  contact: z.string().trim().min(1, 'Escribe el número de WhatsApp o el correo.').max(120, 'El contacto es demasiado largo.'),
   day: z.string().optional(),
   month: z.string().optional(),
   consent: z.string().optional()
 });
 
-const NO_PERMISSION: FormState = { ok: false, error: 'Tu rol no puede hacer esto. Pide ayuda a un dueño o gerente.' };
+const NO_PERMISSION: FormState = { ok: false, error: 'Tu rol no puede hacer esto. Pídeselo a un dueño o gerente.' };
 
 function fail(fieldErrors: Record<string, string>): FormState {
   return { ok: false, error: 'Revisa los campos marcados.', fieldErrors };
@@ -69,7 +69,10 @@ export async function createCustomerAction(_prev: FormState, formData: FormData)
     const c = await repo.registerCustomer(business.id, { name: v.name, contact, contactKind: v.contactKind, birthday });
     id = c.id;
   } catch (e) {
-    return { ok: false, error: e instanceof Error && e.message ? e.message : 'No pudimos guardar el registro. Inténtalo de nuevo.' };
+    const msg = e instanceof Error && e.message ? e.message : '';
+    // Contacto repetido: se marca en el campo para que se corrija ahí (o se busque a la persona en la lista).
+    if (/ya existe/i.test(msg)) return fail({ contact: 'Ya hay alguien registrado con este contacto. Búscalo en la lista.' });
+    return { ok: false, error: msg || 'No pudimos guardar el registro. Revisa tu conexión e inténtalo de nuevo.' };
   }
   revalidatePath('/panel/clientes');
   revalidatePath('/panel');
@@ -87,7 +90,7 @@ export async function updateNotesAction(_prev: FormState, formData: FormData): P
     const { repo, business } = await getContext();
     await repo.updateCustomer(business.id, parsed.data.customerId, { notes: parsed.data.notes.trim() });
   } catch (e) {
-    return { ok: false, error: e instanceof Error && e.message ? e.message : 'No pudimos guardar las notas.' };
+    return { ok: false, error: e instanceof Error && e.message ? e.message : 'No pudimos guardar las notas. Inténtalo de nuevo.' };
   }
   revalidatePath(`/panel/clientes/${parsed.data.customerId}`);
   return { ok: true, message: 'Notas guardadas.' };
@@ -95,7 +98,7 @@ export async function updateNotesAction(_prev: FormState, formData: FormData): P
 
 export async function redeemRewardAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const customerId = String(formData.get('customerId') ?? '');
-  if (!customerId) return { ok: false, error: 'Falta el cliente.' };
+  if (!customerId) return { ok: false, error: 'No encontramos a esta persona. Recarga la página.' };
   try {
     const { repo, business, staff, template } = await getContext();
     const m = Number(formData.get('milestone') ?? '');
@@ -109,6 +112,6 @@ export async function redeemRewardAction(_prev: FormState, formData: FormData): 
       ? `Canje registrado para ${r.customerName}: ${r.rewardTitle ?? template.vocab.reward}. Sigue sumando sellos en la misma tarjeta.`
       : `Canje registrado para ${r.customerName}. La tarjeta volvió a empezar (${template.vocab.reward} entregado).` };
   } catch (e) {
-    return { ok: false, error: e instanceof Error && e.message ? e.message : 'No se pudo canjear. Revisa que la tarjeta esté completa.' };
+    return { ok: false, error: e instanceof Error && e.message ? e.message : 'No se pudo canjear. Recarga la página para ver si el premio sigue pendiente.' };
   }
 }

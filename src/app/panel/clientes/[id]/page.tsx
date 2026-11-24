@@ -7,11 +7,12 @@ import { cn } from '@/lib/cn';
 import { lcfirst, nextReward, pendingRewards } from '@/lib/rewards';
 import { Badge, Card, PageHeader } from '@/components/ui';
 import { NotesForm, RedeemButton, SegmentBadge, StampDots, birthdayLabel, contactHref, contactLabel } from '@/components/customers';
+import { backHref } from '@/components/customers/list-href';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Ficha del cliente · Stampa' };
 
-export default async function ClienteDetallePage({ params }: { params: { id: string } }) {
+export default async function ClienteDetallePage({ params, searchParams }: { params: { id: string }; searchParams: { volver?: string } }) {
   const ctx = await getContext();
   requireRole(ctx, ['owner', 'manager']);
   const { repo, business, program, template } = ctx;
@@ -24,31 +25,35 @@ export default async function ClienteDetallePage({ params }: { params: { id: str
   const ready = pending.length > 0;
   const next = nextReward(c.stamps, program);
   const now = Date.now();
+  const missing = Math.max(0, next.at - c.stamps);
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
   const EVENT = {
     stamp: { label: 'Sello registrado', dot: 'bg-navy' },
     void: { label: 'Sello anulado', dot: 'bg-bad' },
-    redeem: { label: `${v.reward.charAt(0).toUpperCase() + v.reward.slice(1)} canjeado`, dot: 'bg-sun ring-2 ring-navy' }
+    redeem: { label: `${cap(v.reward)} canjeado`, dot: 'bg-sun ring-2 ring-navy' }
   } as const;
 
   return (
     <div className="flex flex-col gap-5">
-      <nav aria-label="Ruta de navegación" className="text-sm">
-        <Link href="/panel/clientes" className="font-medium text-navy underline underline-offset-4">Volver a {v.customers}</Link>
+      <nav aria-label="Ruta de navegación" className="-mb-3 text-sm">
+        <Link href={backHref(searchParams.volver)} className="-ml-1 inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-1 font-semibold text-navy underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-sun/60">
+          <span aria-hidden>←</span> {cap(v.customers)}
+        </Link>
       </nav>
-      <PageHeader title={c.name} subtitle={`Desde el ${dateShort(c.createdAt)}`} actions={<SegmentBadge segment={c.segment} />} />
+      <PageHeader title={c.name} subtitle={`${cap(v.customer)} desde el ${dateShort(c.createdAt)}`} actions={<SegmentBadge segment={c.segment} />} />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,420px)_1fr]">
         <div className="flex flex-col gap-4">
           <StampDots filled={c.stamps} total={program.stampsRequired} colors={program.colors} logoText={program.logoText} title={program.name} subtitle={`Premio: ${program.rewardTitle}`} />
-          <Card>
-            <h2 className="font-display text-base font-semibold text-navy">{ready ? 'Premio por canjear' : 'Premio'}</h2>
+          <Card className={ready ? 'ring-2 ring-sun' : undefined}>
+            <h2 className="font-display text-base font-semibold text-navy">{ready ? 'Premio listo para entregar' : 'Próximo premio'}</h2>
             <p className="mt-1 text-sm text-muted">
-              {ready ? `${c.name} ya puede canjear: ${pending.map((p) => p.title).join(', ')}.` : `Le faltan ${Math.max(0, next.at - c.stamps)} sellos para ${lcfirst(next.title)}.`}
+              {ready
+                ? `Ya puede canjear: ${pending.map((p) => p.title).join(', ')}.`
+                : `Le ${missing === 1 ? 'falta 1 sello' : `faltan ${missing} sellos`} para ${lcfirst(next.title)}.`}
             </p>
-            {pending.map((p) => (
-              <RedeemButton key={p.milestone ?? 'final'} customerId={c.id} customerName={c.name} rewardTitle={p.title} milestone={p.milestone} />
-            ))}
+            <RedeemButton customerId={c.id} customerName={c.name} rewards={pending} />
           </Card>
           <Card>
             <h2 className="font-display text-base font-semibold text-navy">Resumen</h2>
