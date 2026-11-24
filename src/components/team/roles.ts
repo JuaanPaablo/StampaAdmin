@@ -16,5 +16,12 @@ export function roleDescription(role: Role, vocab: Vocabulary): string {
   return `Atiende en ${vocab.counter.toLowerCase()} y da sellos.`;
 }
 
+/** Qué puede hacer el rol, en una línea, para elegirlo sin tener que recordar la matriz de permisos. */
+export function roleSummary(role: Role, vocab: Vocabulary): string {
+  if (role === 'owner') return 'Acceso total: equipo, ajustes y plan.';
+  if (role === 'manager') return `${vocab.counter}, resumen, clientes, tarjeta y marketing. Aprueba cupos con su PIN. Sin equipo ni ajustes.`;
+  return `Solo ${vocab.counter.toLowerCase()}: da sellos y canjea premios.`;
+}
+
 export type BadgeTone = 'neutral' | 'ok' | 'warn' | 'bad' | 'info' | 'sun';
 export const roleTone: Record<Role, BadgeTone> = { owner: 'info', manager: 'warn', cashier: 'neutral' };

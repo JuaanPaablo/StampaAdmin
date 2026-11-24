@@ -37,7 +37,7 @@ export async function updateBusinessAction(fd: FormData): Promise<ActionResult> 
   });
   if (!parsed.success) return errors(parsed.error);
   const place = validatePlace(parsed.data.province, parsed.data.city);
-  if (place.province || place.city) return { ok: false, fieldErrors: place as Record<string, string> };
+  if (place.province || place.city) return { ok: false, error: place.province ?? place.city, fieldErrors: place as Record<string, string> };
   try {
     await ctx.repo.updateBusiness(ctx.business.id, {
       name: parsed.data.name, province: parsed.data.province, city: parsed.data.city, timezone: parsed.data.timezone, type: parsed.data.type as BusinessType

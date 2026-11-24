@@ -81,7 +81,14 @@ export async function saveStaff(_prev: StaffFormState, formData: FormData): Prom
   revalidatePath(`/panel/equipo/${savedId}`);
   if (isNew) redirect(`/panel/equipo/${savedId}?ok=${emailError ? 'creado-sin-correo' : 'creado'}`);
   if (emailError) return { ok: false, message: 'Guardamos los datos, pero no el correo.', errors: { email: emailError } };
-  return { ok: true, message: emailChanged ? 'Cambios guardados. Envíale la invitación a su correo nuevo.' : 'Cambios guardados.', at: Date.now() };
+  const statusNote = existing?.active && !active
+    ? `${d.name} quedó desactivada. Para reactivarla, vuelve a encender "Activo".`
+    : !existing?.active && active ? `${d.name} está activa otra vez.` : '';
+  return {
+    ok: true,
+    message: emailChanged ? 'Cambios guardados. Envíale la invitación a su correo nuevo.' : statusNote || 'Cambios guardados.',
+    at: Date.now()
+  };
 }
 
 /** Restablece el PIN de una persona. Solo dueño. */

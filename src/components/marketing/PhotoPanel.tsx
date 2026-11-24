@@ -7,6 +7,7 @@ import { cn } from '@/lib/cn';
 import type { MarketingPhoto } from '@/lib/contracts';
 import { PHOTO_STYLES, SEASON_LABEL, type PhotoAdvice, type PhotoStyle, type Season } from '@/lib/marketing/photos';
 import type { Quota } from '@/lib/marketing/service';
+import { QuotaMeter } from './QuotaMeter';
 
 /** Foto elegida para los posts: una foto subida (id) o la portada de la tarjeta. */
 export type PhotoChoice = { kind: 'photo'; id: string; url: string } | { kind: 'portada'; url: string } | null;
@@ -43,7 +44,7 @@ export function PhotoPanel({ photos: initial, coverUrl, quota: initialQuota, adv
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<'subiendo' | PhotoStyle | null>(null);
   const [pending, start] = useTransition();
-  const [before, setBefore] = useState<string | null>(null);
+  const [before, setBefore] = useState<{ id: string; url: string } | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const recommended = new Map(advice.map((a) => [a.style, a]));
   const season: Season | undefined = advice.find((a) => a.style === 'temporada')?.season;
@@ -71,7 +72,7 @@ export function PhotoPanel({ photos: initial, coverUrl, quota: initialQuota, adv
   function enhance(style: PhotoStyle) {
     if (value?.kind !== 'photo') return;
     setError(null); setBusy(style);
-    const original = value.url;
+    const original = { id: value.id, url: value.url };
     start(async () => {
       const r = await enhancePhotoAction({ photoId: value.id, style, season: style === 'temporada' ? season ?? 'navidad' : undefined });
       setBusy(null);
@@ -94,7 +95,7 @@ export function PhotoPanel({ photos: initial, coverUrl, quota: initialQuota, adv
           <h2 className="font-display text-lg font-semibold text-navy">Tu foto</h2>
           <p className="text-sm text-muted">Real, de tu producto o local. La IA la mejora, no la inventa.</p>
         </div>
-        <p className="text-xs text-muted" title="Mejoras con IA este mes. Se renuevan el día 1.">Fotos IA <strong className="text-navy">{quota.used}/{quota.limit}</strong></p>
+        <QuotaMeter quota={quota} noun="mejoras de foto" label="Mejoras de foto con IA que te quedan este mes" />
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -105,19 +106,19 @@ export function PhotoPanel({ photos: initial, coverUrl, quota: initialQuota, adv
         </label>
         {coverUrl && (
           <button type="button" onClick={() => { setBefore(null); onChange(value?.kind === 'portada' ? null : { kind: 'portada', url: coverUrl }); }}
-            aria-pressed={value?.kind === 'portada'} className={btnClass(value?.kind === 'portada' ? 'dark' : 'ghost', 'sm')}>Usar mi portada</button>
+            aria-pressed={value?.kind === 'portada'} className={btnClass(value?.kind === 'portada' ? 'dark' : 'ghost')}>Usar mi portada</button>
         )}
-        {value && <button type="button" onClick={() => { setBefore(null); onChange(null); }} className={btnClass('ghost', 'sm')}>Sin foto</button>}
+        {value && <button type="button" onClick={() => { setBefore(null); onChange(null); }} className={btnClass('ghost')}>Sin foto</button>}
       </div>
 
       {photos.length > 0 && (
         <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Tus fotos">
-          {photos.map((p) => (
+          {photos.map((p, i) => (
             <button key={p.id} type="button" onClick={() => { setBefore(null); onChange({ kind: 'photo', id: p.id, url: p.url }); }}
               aria-pressed={value?.kind === 'photo' && value.id === p.id}
               className={cn('size-20 shrink-0 overflow-hidden rounded-xl ring-2 ring-offset-2', value?.kind === 'photo' && value.id === p.id ? 'ring-navy' : 'ring-transparent')}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p.url} alt="Foto subida" className="size-full object-cover" loading="lazy" />
+              <img src={p.url} alt={`Foto ${photos.length - i}`} className="size-full object-cover" loading="lazy" />
             </button>
           ))}
         </div>
@@ -129,10 +130,14 @@ export function PhotoPanel({ photos: initial, coverUrl, quota: initialQuota, adv
             {before && (
               <div className="grid grid-cols-2 gap-2 text-center text-xs text-muted">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <figure className="flex flex-col gap-1"><img src={before} alt="Antes" className="aspect-square w-full rounded-xl object-cover" /><figcaption>Antes</figcaption></figure>
+                <figure className="flex flex-col gap-1"><img src={before.url} alt="Antes" className="aspect-square w-full rounded-xl object-cover" /><figcaption>Antes</figcaption></figure>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <figure className="flex flex-col gap-1"><img src={selectedUrl} alt="Después" className="aspect-square w-full rounded-xl object-cover" /><figcaption>Después</figcaption></figure>
               </div>
+            )}
+            {before && (
+              <button type="button" onClick={() => { const o = before; setBefore(null); onChange({ kind: 'photo', id: o.id, url: o.url }); }}
+                className={btnClass('ghost')}>Usar la original</button>
             )}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             {!before && <img src={selectedUrl} alt="Foto elegida" className="aspect-square w-full rounded-xl bg-white object-cover shadow-sm" />}
@@ -150,10 +155,10 @@ export function PhotoPanel({ photos: initial, coverUrl, quota: initialQuota, adv
                   const rec = recommended.get(s.id);
                   const name = s.id === 'temporada' && season ? `${s.label}: ${SEASON_LABEL[season]}` : s.label;
                   return (
-                    <button key={s.id} type="button" disabled={pending || noQuota} onClick={() => enhance(s.id)}
+                    <button key={s.id} type="button" disabled={pending || noQuota} aria-busy={busy === s.id} onClick={() => enhance(s.id)}
                       className={cn('flex min-h-[44px] flex-col items-start gap-1 rounded-xl border-[1.5px] bg-white p-3 text-left transition hover:border-navy disabled:opacity-60', rec ? 'border-[#E0B400]' : 'border-[#C9D6E3]')}>
                       <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-navy">
-                        {busy === s.id ? 'Mejorando… (hasta 40 s)' : name}
+                        {busy === s.id ? 'Mejorando… puede tardar hasta 40 s' : name}
                         {rec && busy !== s.id && <span className="rounded-full bg-[#FFF3CC] px-2 py-0.5 text-[11px] font-semibold text-[#7A5A00]">Recomendado</span>}
                       </span>
                       <span className="text-xs text-muted">{rec?.why ?? s.hint}</span>
@@ -162,13 +167,23 @@ export function PhotoPanel({ photos: initial, coverUrl, quota: initialQuota, adv
                 })}
               </div>
             )}
-            {noQuota && value?.kind === 'photo' && aiReady && <p className="text-sm text-muted">Ya usaste tus mejoras de este mes. Tus fotos siguen disponibles tal cual.</p>}
+            {noQuota && value?.kind === 'photo' && aiReady && <p className="rounded-xl bg-[#FFF3CC] px-3 py-2 text-sm text-[#7A5A00]">Ya usaste tus {quota.limit} mejoras de este mes. Se renuevan el día 1; mientras, usa tu foto tal cual.</p>}
+            <p className="text-xs text-muted">Cada mejora usa 1 de tus mejoras del mes. Si falla, no se descuenta.</p>
             <p className="text-xs text-muted">Buena luz y producto al centro. La original se conserva.</p>
           </div>
         </div>
       )}
 
-      <p role="status" aria-live="polite" className={cn('text-sm', error ? 'font-medium text-bad' : 'sr-only')}>{error ?? ''}</p>
+      <div role="status" aria-live="polite">
+        {error && (
+          <div className="flex items-start justify-between gap-3 rounded-xl bg-[#FBE0DE] px-4 py-3 text-sm font-medium text-[#9B2A22]">
+            <p>{error}</p>
+            <button type="button" onClick={() => setError(null)} className="-my-2 -mr-2 grid size-11 shrink-0 place-items-center rounded-full hover:bg-white/60" aria-label="Cerrar aviso">
+              <span aria-hidden="true">×</span>
+            </button>
+          </div>
+        )}
+      </div>
     </Card>
   );
 }

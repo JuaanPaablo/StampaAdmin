@@ -10,6 +10,7 @@ import type { GenerateResult, Quota } from '@/lib/marketing/service';
 import type { MarketingPhoto } from '@/lib/contracts';
 import { DESIGN_LABEL, PHOTO_DESIGNS, PLAIN_DESIGNS, type PhotoAdvice, type PostDesign } from '@/lib/marketing/photos';
 import { PhotoPanel, type PhotoChoice } from './PhotoPanel';
+import { QuotaMeter } from './QuotaMeter';
 
 type Tab = 'ideas' | 'post' | 'semana' | 'resenas';
 type Design = PostDesign;
@@ -27,6 +28,8 @@ export interface StudioProps {
   advice: PhotoAdvice[];
   aiImagesReady: boolean;
   locks: { ideas: React.ReactNode; semana: React.ReactNode; resenas: React.ReactNode };
+  /** Enlace para pedir más cupo (WhatsApp de Stampa). */
+  moreUrl?: string;
 }
 
 /** Parámetro "ph" de la imagen: id de una foto subida o "portada". */
@@ -42,13 +45,20 @@ function imageUrl(d: Design, o: { titulo: string; subtitulo?: string }, big: str
 }
 
 function CopyButton({ text, children = 'Copiar texto' }: { text: string; children?: React.ReactNode }) {
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState<'ok' | 'fail' | null>(null);
   return (
-    <button type="button" className={btnClass('dark', 'sm')} onClick={async () => {
-      try { await navigator.clipboard.writeText(text); setDone(true); setTimeout(() => setDone(false), 1800); } catch { /* sin permiso */ }
-    }}>{done ? '¡Copiado!' : children}</button>
+    <span className="inline-flex flex-col gap-1">
+      <button type="button" className={btnClass('dark')} onClick={async () => {
+        try { await navigator.clipboard.writeText(text); setDone('ok'); setTimeout(() => setDone(null), 2000); }
+        catch { setDone('fail'); }
+      }}>{done === 'ok' ? '✓ Copiado' : children}</button>
+      <span role="status" aria-live="polite" className={done === 'fail' ? 'max-w-[16rem] text-xs font-medium text-bad' : 'sr-only'}>
+        {done === 'ok' ? 'Texto copiado.' : done === 'fail' ? 'No pudimos copiar. Mantén presionado el texto y elige Copiar.' : ''}
+      </span>
+    </span>
   );
 }
+
 
 /** Guía visual del flujo: foto → mejora → texto → imagen. */
 function Steps({ done }: { done: boolean[] }) {
@@ -106,7 +116,7 @@ function PostCard({ o, n, layout, big, ph }: { o: PostOption; n: number; layout?
         <div className="flex flex-wrap gap-1.5" role="group" aria-label="Diseño de la imagen">
           {designs.map((d) => (
             <button key={d} type="button" aria-pressed={design === d} onClick={() => setDesign(d)}
-              className={cn('rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset', design === d ? 'bg-navy text-white ring-navy' : 'bg-white text-navy ring-[#C9D6E3]')}>
+              className={cn('min-h-[44px] rounded-full px-3.5 text-[13px] font-semibold ring-1 ring-inset', design === d ? 'bg-navy text-white ring-navy' : 'bg-white text-navy ring-[#C9D6E3]')}>
               {DESIGN_LABEL[d]}
             </button>
           ))}
@@ -127,17 +137,17 @@ function PostCard({ o, n, layout, big, ph }: { o: PostOption; n: number; layout?
           <textarea value={text} onChange={(e) => setText(e.target.value)} rows={8} className={cn(inputClass, 'h-auto py-2.5 leading-relaxed')} />
         </label>
         {/\[[^\]]+\]/.test(text + title + sub) &&<p className="rounded-xl bg-[#FFF4CC] px-3 py-2 text-xs text-navy">Completa lo que está entre corchetes antes de publicar.</p>}
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-start gap-2">
           <CopyButton text={text} />
-          <a href={imageUrl(design, view, big, false, true, ph)} className={btnClass('ghost', 'sm')}>Descargar imagen</a>
-          <a href={imageUrl(design, view, big, true, true, ph)} className={btnClass('ghost', 'sm')}>Descargar para historia</a>
+          <a href={imageUrl(design, view, big, false, true, ph)} className={btnClass('ghost')}>Descargar imagen</a>
+          <a href={imageUrl(design, view, big, true, true, ph)} className={btnClass('ghost')}>Descargar para historia</a>
         </div>
       </div>
     </article>
   );
 }
 
-export function MarketingStudio({ quota: initialQuota, insights, can, coverUrl, photos, imageQuota, advice, aiImagesReady, locks }: StudioProps) {
+export function MarketingStudio({ quota: initialQuota, insights, can, coverUrl, photos, imageQuota, advice, aiImagesReady, locks, moreUrl }: StudioProps) {
   const [photo, setPhoto] = useState<PhotoChoice>(null);
   const ph = photoParam(photo);
   const [tab, setTab] = useState<Tab>(can.dataPosts && insights.length ? 'ideas' : 'post');
@@ -151,9 +161,12 @@ export function MarketingStudio({ quota: initialQuota, insights, can, coverUrl, 
   const [stars, setStars] = useState(5);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [enhanced, setEnhanced] = useState(false);
+  // Último pedido, para "Intentar de nuevo" sin volver a llenar nada.
+  const [last, setLast] = useState<{ req: unknown; t: Tab; insight?: Insight } | null>(null);
 
   function run(req: unknown, t: Tab, insight?: Insight) {
     setError(null);
+    setLast({ req, t, insight });
     setBusyId(insight?.id ?? t);
     start(async () => {
       const r: GenerateResult = await generateMarketingAction(req);
@@ -165,8 +178,9 @@ export function MarketingStudio({ quota: initialQuota, insights, can, coverUrl, 
     });
   }
 
-  const tabs: { id: Tab; label: string }[] = [
-    { id: 'ideas', label: 'Ideas con tus datos' }, { id: 'post', label: 'Post libre' }, { id: 'semana', label: 'Tu semana' }, { id: 'resenas', label: 'Reseñas' }
+  const tabs: { id: Tab; label: string; locked: boolean }[] = [
+    { id: 'ideas', label: 'Ideas con tus datos', locked: !can.dataPosts }, { id: 'post', label: 'Post libre', locked: false },
+    { id: 'semana', label: 'Tu semana', locked: !can.calendar }, { id: 'resenas', label: 'Reseñas', locked: !can.reviews }
   ];
   const noQuota = quota.left <= 0;
   const channelPicker = (
@@ -187,19 +201,22 @@ export function MarketingStudio({ quota: initialQuota, insights, can, coverUrl, 
 
       <div className="-mb-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <h2 className="font-display text-lg font-semibold text-navy">Tu texto</h2>
-        <div className="flex items-center gap-2 text-xs text-muted" title="Se renuevan el 1 de cada mes. Las fotos no cuentan.">
-          <span>Textos IA <strong className="text-navy">{quota.used}/{quota.limit}</strong></span>
-          <div className="h-2 w-24 overflow-hidden rounded-full bg-[#E3EAF2]" role="meter" aria-valuemin={0} aria-valuemax={quota.limit} aria-valuenow={quota.used} aria-label="Textos usados este mes">
-            <div className={cn('h-full rounded-full', quota.left <= 0 ? 'bg-bad' : 'bg-navy')} style={{ width: `${Math.min(100, (quota.used / Math.max(1, quota.limit)) * 100)}%` }} />
-          </div>
-        </div>
+        <QuotaMeter quota={quota} noun="textos" label="Textos con IA que te quedan este mes" />
       </div>
-      {noQuota && <p className="-mb-2 rounded-xl bg-[#FFF3CC] px-3 py-2 text-sm text-[#7A5A00]">Ya usaste tus textos de este mes. Se renuevan el día 1.</p>}
+      {noQuota && (
+        <p className="-mb-2 rounded-xl bg-[#FFF3CC] px-3 py-2 text-sm text-[#7A5A00]">
+          Ya usaste tus {quota.limit} textos de este mes. Se renuevan el día 1.
+          {moreUrl && <>{' '}<a href={moreUrl} target="_blank" rel="noopener noreferrer" className="font-semibold underline underline-offset-4">Pide más</a></>}
+        </p>
+      )}
 
       <nav className="flex flex-wrap gap-2" aria-label="Herramientas de marketing">
         {tabs.map((t) => (
           <button key={t.id} type="button" aria-pressed={tab === t.id} onClick={() => { setTab(t.id); setError(null); }}
-            className={cn(btnClass(tab === t.id ? 'dark' : 'ghost', 'sm'), 'shrink-0')}>{t.label}</button>
+            className={cn(btnClass(tab === t.id ? 'dark' : 'ghost'), 'shrink-0')}>
+            {t.label}
+            {t.locked && <><span aria-hidden="true" className="text-xs">🔒</span><span className="sr-only"> (requiere otro plan)</span></>}
+          </button>
         ))}
       </nav>
 
@@ -223,7 +240,7 @@ export function MarketingStudio({ quota: initialQuota, insights, can, coverUrl, 
                     </div>
                   </div>
                   <button type="button" disabled={pending || noQuota} onClick={() => run({ kind: 'data_post', insightId: i.id, channel }, 'ideas', i)}
-                    className={cn(btnClass('primary', 'sm'), 'self-start')}>{busyId === i.id ? 'Escribiendo…' : 'Crear post'}</button>
+                    aria-busy={busyId === i.id} className={cn(btnClass('primary'), 'self-start')}>{busyId === i.id ? 'Escribiendo…' : 'Crear post'}</button>
                 </Card>
               ))}
             </div>
@@ -275,7 +292,18 @@ export function MarketingStudio({ quota: initialQuota, insights, can, coverUrl, 
         </Card>
       ))}
 
-      <p role="status" aria-live="polite" className={cn('text-sm', error ? 'font-medium text-bad' : 'sr-only')}>{error ?? (pending ? 'Generando…' : '')}</p>
+      <div role="status" aria-live="polite">
+        {error ? (
+          <div className="flex flex-col gap-3 rounded-xl bg-[#FBE0DE] px-4 py-3 text-sm text-[#9B2A22] sm:flex-row sm:items-center sm:justify-between">
+            <p className="font-medium">{error}</p>
+            {last && last.t === tab && !noQuota && !/plan|Avísale/i.test(error) && (
+              <button type="button" disabled={pending} onClick={() => run(last.req, last.t, last.insight)} className={cn(btnClass('ghost'), 'shrink-0')}>Intentar de nuevo</button>
+            )}
+          </div>
+        ) : pending && busyId !== null ? (
+          <p className="text-sm text-muted">La IA está escribiendo. Tarda unos segundos…</p>
+        ) : null}
+      </div>
 
       {result && result.tab === tab && (
         <section id="resultado" className="flex scroll-mt-6 flex-col gap-4" aria-label="Resultado">
@@ -287,9 +315,9 @@ export function MarketingStudio({ quota: initialQuota, insights, can, coverUrl, 
               <p className="font-display text-base font-semibold capitalize text-navy">{d.dia}: <span className="normal-case">{d.idea}</span></p>
               <p className="whitespace-pre-line text-sm text-navy">{d.texto}</p>
               {d.hashtags.length > 0 && <p className="text-sm text-muted">{d.hashtags.map((h) => '#' + h).join(' ')}</p>}
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-start gap-2">
                 <CopyButton text={d.texto + (d.hashtags.length ? '\n\n' + d.hashtags.map((h) => '#' + h).join(' ') : '')} />
-                <a href={imageUrl(ph ? 'impacto' : 'color', { titulo: d.titulo || d.idea.slice(0, 40) }, undefined, false, true, ph)} className={btnClass('ghost', 'sm')}>Descargar imagen</a>
+                <a href={imageUrl(ph ? 'impacto' : 'color', { titulo: d.titulo || d.idea.slice(0, 40) }, undefined, false, true, ph)} className={btnClass('ghost')}>Descargar imagen</a>
               </div>
             </article>
           ))}
@@ -297,7 +325,7 @@ export function MarketingStudio({ quota: initialQuota, insights, can, coverUrl, 
             <article key={n} className="flex flex-col gap-2 rounded-2xl bg-surface p-4">
               <p className={label}>Respuesta {n + 1}</p>
               <p className="whitespace-pre-line text-sm text-navy">{r}</p>
-              <CopyButton text={r} />
+              <div><CopyButton text={r} /></div>
             </article>
           ))}
         </section>

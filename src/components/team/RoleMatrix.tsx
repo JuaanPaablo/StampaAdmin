@@ -12,12 +12,12 @@ function navAllows(href: string, role: Role): boolean {
 
 function Cell({ yes }: { yes: boolean }) {
   return (
-    <td className="border-b border-line/70 px-4 py-3 text-center align-middle">
+    <td className="border-b border-line/70 px-2 py-3 text-center align-middle sm:px-4">
       <span className={'inline-flex items-center gap-1.5 text-sm font-semibold ' + (yes ? 'text-[#12683F]' : 'text-muted')}>
         <svg viewBox="0 0 20 20" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           {yes ? <path d="M4 10.5l4 4 8-9" /> : <path d="M5 10h10" />}
         </svg>
-        {yes ? 'Sí' : 'No'}
+        <span className="sr-only sm:not-sr-only">{yes ? 'Sí' : 'No'}</span>
       </span>
     </td>
   );
@@ -31,6 +31,7 @@ export function RoleMatrix({ vocab }: { vocab: Vocabulary }) {
     { label: `Ver y buscar a tus ${vocab.customers}`, allow: (r) => navAllows('/panel/clientes', r) },
     { label: 'Aprobar más cupos de los permitidos con su PIN', allow: (r) => r === 'owner' || r === 'manager' },
     { label: 'Revisar el control antifraude y las alertas', allow: (r) => navAllows('/panel/control', r) },
+    { label: 'Crear posts y mejorar fotos con IA', allow: (r) => navAllows('/panel/marketing', r) },
     { label: 'Editar la tarjeta, el premio y las reglas de sellos', allow: (r) => navAllows('/panel/tarjeta', r) },
     { label: 'Agregar personas, cambiar roles y restablecer PIN', allow: (r) => navAllows('/panel/equipo', r) },
     { label: 'Cambiar los ajustes del negocio', allow: (r) => navAllows('/panel/ajustes', r) }
@@ -41,16 +42,16 @@ export function RoleMatrix({ vocab }: { vocab: Vocabulary }) {
         <h2 className="font-display text-lg font-semibold text-navy">Qué puede hacer cada rol</h2>
         <p className="mt-1 text-sm text-muted">Solo un dueño puede crear o editar dueños.</p>
       </div>
-      <div className="relative -mx-5 overflow-x-auto px-5">
-        <table className="w-full min-w-[520px] border-collapse text-left text-sm">
+      <div className="relative -mx-5 overflow-x-auto px-3 sm:px-5">
+        <table className="w-full min-w-[300px] border-collapse text-left text-sm">
           <caption className="sr-only">Permisos por rol: dueño, gerente y {vocab.staffRole}</caption>
           <thead>
             <tr>
-              <th scope="col" className="border-b border-line px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted">Acción</th>
+              <th scope="col" className="border-b border-line px-2 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted sm:px-4">Acción</th>
               {ROLES.map((r) => (
-                <th key={r} scope="col" className="border-b border-line px-4 py-3 text-center align-top">
+                <th key={r} scope="col" className="border-b border-line px-2 py-3 text-center align-top sm:px-4">
                   <span className="block text-sm font-semibold text-navy">{roleLabel(r, vocab)}</span>
-                  <span className="block text-[11px] font-normal text-muted">{roleDescription(r, vocab)}</span>
+                  <span className="hidden text-[11px] font-normal text-muted sm:block">{roleDescription(r, vocab)}</span>
                 </th>
               ))}
             </tr>
@@ -58,7 +59,7 @@ export function RoleMatrix({ vocab }: { vocab: Vocabulary }) {
           <tbody>
             {rows.map((row) => (
               <tr key={row.label}>
-                <th scope="row" className="border-b border-line/70 px-4 py-3 text-left text-sm font-medium text-navy">{row.label}</th>
+                <th scope="row" className="border-b border-line/70 px-2 py-3 text-left text-sm font-medium text-navy sm:px-4">{row.label}</th>
                 {ROLES.map((r) => <Cell key={r} yes={row.allow(r)} />)}
               </tr>
             ))}

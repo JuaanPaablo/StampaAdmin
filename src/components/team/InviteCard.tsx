@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useFormState } from 'react-dom';
 import { sendInviteAction } from '@/app/panel/equipo/actions';
 import { Badge, Card, Input, btnClass } from '@/components/ui';
@@ -13,7 +13,8 @@ export function InviteCard({ staffId, name, email, status, active, isMe }: {
   staffId: string; name: string; email?: string; status: AccessStatus; active: boolean; isMe: boolean;
 }) {
   const [state, action] = useFormState<InviteState, FormData>(sendInviteAction, { ok: false });
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<'ok' | 'fail' | null>(null);
+  const linkRef = useRef<HTMLParagraphElement>(null);
   const first = name.split(' ')[0];
   const canInvite = active && !isMe && status !== 'active';
 
@@ -21,10 +22,14 @@ export function InviteCard({ staffId, name, email, status, active, isMe }: {
     if (!state.url) return;
     try {
       await navigator.clipboard.writeText(state.url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
+      setCopied('ok');
+      setTimeout(() => setCopied(null), 2500);
     } catch {
-      setCopied(false);
+      // Sin permiso de portapapeles: dejamos el enlace seleccionado para copiarlo a mano.
+      const el = linkRef.current;
+      const sel = typeof window !== 'undefined' ? window.getSelection() : null;
+      if (el && sel) { const r = document.createRange(); r.selectNodeContents(el); sel.removeAllRanges(); sel.addRange(r); }
+      setCopied('fail');
     }
   }
 
@@ -44,7 +49,7 @@ export function InviteCard({ staffId, name, email, status, active, isMe }: {
       ) : (
         <p className="text-sm text-muted">
           {status === 'pending'
-            ? `Invitación enviada a ${email}. Reenviarla anula el enlace anterior.`
+            ? <>Invitación enviada a <span className="font-semibold text-navy">{email}</span>, aún sin aceptar. El enlace vence a las 72 horas: si no le llegó o ya venció, reenvíala.</>
             : `Envía la invitación para que ${first} cree su contraseña.`}
         </p>
       )}
@@ -58,6 +63,7 @@ export function InviteCard({ staffId, name, email, status, active, isMe }: {
               aria-describedby={describedBy('invite-email', undefined, state.ok ? undefined : state.error)} />
           </FormField>
           <SubmitButton variant="dark" pendingText="Enviando…">{status === 'pending' ? 'Reenviar invitación' : 'Enviar invitación'}</SubmitButton>
+          {status === 'pending' && <p className="text-xs text-muted">Al reenviarla, el enlace anterior deja de servir.</p>}
         </form>
       )}
       {!canInvite && !state.ok && state.error && <p role="alert" className="text-sm font-medium text-bad">{state.error}</p>}
@@ -66,14 +72,15 @@ export function InviteCard({ staffId, name, email, status, active, isMe }: {
         {state.ok && state.url && (
           <div className="space-y-3 rounded-xl bg-surface p-4">
             <p className="text-sm font-medium text-navy">{state.message}</p>
-            <p className="break-all rounded-lg bg-white px-3 py-2 font-mono text-xs text-navy ring-1 ring-inset ring-line">{state.url}</p>
+            <p ref={linkRef} className="select-all break-all rounded-lg bg-white px-3 py-2 font-mono text-xs text-navy ring-1 ring-inset ring-line">{state.url}</p>
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={copy} className={btnClass('ghost', 'sm')}>{copied ? 'Copiado' : 'Copiar enlace'}</button>
               {state.shareUrl && (
-                <a href={state.shareUrl} target="_blank" rel="noopener noreferrer" className={btnClass('primary', 'sm')}>Enviar por WhatsApp</a>
+                <a href={state.shareUrl} target="_blank" rel="noopener noreferrer" className={btnClass('primary')}>Enviar por WhatsApp</a>
               )}
+              <button type="button" onClick={copy} className={btnClass('ghost')}>{copied === 'ok' ? '✓ Copiado' : 'Copiar enlace'}</button>
             </div>
-            <p className="text-xs text-muted">El enlace vence en 72 horas y sirve una sola vez.</p>
+            {copied === 'fail' && <p className="text-xs font-medium text-bad">No pudimos copiarlo. Ya está seleccionado: mantenlo presionado y elige Copiar.</p>}
+            <p className="text-xs text-muted">Vence en 72 horas y sirve una sola vez.</p>
           </div>
         )}
       </div>

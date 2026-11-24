@@ -7,6 +7,7 @@ import { features } from '@/lib/plans';
 import { imageQuotaOf, loadInsights, quotaOf } from '@/lib/marketing/service';
 import { recommendStyles } from '@/lib/marketing/photos';
 import { imageAiConfigured } from '@/lib/ai/fal';
+import { stampaWhatsappUrl } from '@/lib/urls';
 
 export const dynamic = 'force-dynamic';
 // Mejorar una foto con IA tarda entre 10 y 40 s: las server actions de esta página necesitan más tiempo.
@@ -37,6 +38,7 @@ export default async function MarketingPage() {
         imageQuota={imageQuota}
         advice={recommendStyles(ctx.business.type)}
         aiImagesReady={aiImagesReady}
+        moreUrl={stampaWhatsappUrl(`Hola, necesito más textos con IA en Stampa para ${name}`)}
         locks={{
           ideas: <PlanLock plan="standard" businessName={name} title="Ideas con tus datos"
             text="Posts con tus cifras reales: días flojos, premios y clientes nuevos." />,

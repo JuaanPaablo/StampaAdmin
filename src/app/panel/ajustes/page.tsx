@@ -9,8 +9,10 @@ import { ActionForm, FormField } from '@/components/shell/action-form';
 import { TIMEZONES } from '@/components/shell/labels';
 import { PlaceFields } from '@/components/shell/PlaceFields';
 import { provinceOfCity } from '@/lib/ecuador';
-import { maxLocations } from '@/lib/plan-rules';
-import { deleteLocationAction, saveLocationAction, updateBusinessAction } from './actions';
+import { maxLocations, maxStaff } from '@/lib/plan-rules';
+import { saveLocationAction, updateBusinessAction } from './actions';
+import { DeleteLocation } from './_components/DeleteLocation';
+import { CopyLink } from './_components/CopyLink';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Ajustes · Stampa' };
@@ -27,12 +29,15 @@ export default async function AjustesPage() {
   const ctx = await getContext();
   requireRole(ctx, ['owner']);
   const { repo, business, template } = ctx;
-  const locations = await repo.listLocations(business.id);
+  const [locations, people] = await Promise.all([repo.listLocations(business.id), repo.listStaff(business.id)]);
+  const staffAt = (id: string) => people.filter((p) => p.active && p.locationId === id).length;
   const tzOptions = TIMEZONES.some((t) => t.value === business.timezone) ? TIMEZONES : [{ value: business.timezone, label: business.timezone }, ...TIMEZONES];
   const typeOptions = BUSINESS_TYPES.map((t) => ({ value: t.type, label: t.label }));
   const publicUrl = customerUrl(business.slug);
   const expiry = daysToExpiry(business.planExpiresAt);
   const limit = maxLocations(business.plan);
+  const staffLimit = maxStaff(business.plan);
+  const activeTeam = people.filter((p) => p.active && p.role !== 'owner').length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -44,6 +49,7 @@ export default async function AjustesPage() {
           <p className="text-xs font-semibold text-muted">Tu dirección pública</p>
           <a href={publicUrl} target="_blank" rel="noopener noreferrer" className="mt-0.5 block break-all text-sm font-semibold text-navy underline underline-offset-4">{publicUrl}</a>
           <p className="mt-1 text-xs text-muted">La abre tu QR. No cambia si cambias el nombre.</p>
+          <div className="mt-2"><CopyLink text={publicUrl} /></div>
         </div>
         <ActionForm action={updateBusinessAction} submitLabel="Guardar cambios" className="mt-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -58,9 +64,8 @@ export default async function AjustesPage() {
       <Card className="sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-display text-lg font-bold text-navy">Sucursales</h2>
-          <Badge tone="info">{locations.length} de {limit}</Badge>
+          <Badge tone={locations.length >= limit ? 'warn' : 'info'}>{locations.length} de {limit} en tu plan</Badge>
         </div>
-        <p className="mt-1 text-sm text-muted">Al eliminar una, sus sellos se conservan.</p>
 
         {locations.length === 0 ? (
           <p className="mt-4 rounded-xl border border-dashed border-[#C9D6E3] px-4 py-6 text-center text-sm text-muted">Aún no tienes sucursales.</p>
@@ -68,7 +73,7 @@ export default async function AjustesPage() {
           <ul className="mt-4 flex flex-col gap-3">
             {locations.map((l) => (
               <li key={l.id} className="rounded-xl bg-surface p-4">
-                <ActionForm key={l.id + l.name + (l.address ?? '')} action={saveLocationAction} submitLabel="Guardar" size="sm" variant="dark" actionsClassName="mt-3">
+                <ActionForm key={l.id + l.name + (l.address ?? '')} action={saveLocationAction} submitLabel="Guardar" variant="dark" actionsClassName="mt-3">
                   <input type="hidden" name="id" value={l.id} />
                   <div className="grid gap-3 sm:grid-cols-2">
                     <FormField name="name" label="Nombre" defaultValue={l.name} maxLength={60} required />
@@ -76,9 +81,9 @@ export default async function AjustesPage() {
                   </div>
                 </ActionForm>
                 {locations.length > 1 && (
-                  <ActionForm key={"del-" + l.id} action={deleteLocationAction} submitLabel={`Eliminar ${l.name}`} variant="danger" size="sm" className="mt-2" actionsClassName="mt-0">
-                    <input type="hidden" name="id" value={l.id} />
-                  </ActionForm>
+                  <div className="mt-3 border-t border-line pt-3">
+                    <DeleteLocation key={'del-' + l.id} id={l.id} name={l.name} staffCount={staffAt(l.id)} />
+                  </div>
                 )}
               </li>
             ))}
@@ -87,7 +92,7 @@ export default async function AjustesPage() {
 
         {locations.length >= limit ? (
           <p className="mt-5 rounded-xl bg-[#FFF4CC] px-4 py-3 text-sm text-navy">
-            Llegaste al máximo de tu plan.{' '}
+            Llegaste al máximo de sucursales de tu plan.{' '}
             <a href={stampaWhatsappUrl(`Hola, quiero ampliar mi plan de Stampa para ${business.name} y agregar más sucursales`)} target="_blank" rel="noopener noreferrer" className="font-semibold underline underline-offset-4">Escríbenos para ampliarlo</a>.
           </p>
         ) : (
@@ -117,6 +122,10 @@ export default async function AjustesPage() {
             <dd className="mt-1 font-display text-2xl font-bold text-navy">{business.planExpiresAt ? longDate(business.planExpiresAt, business.timezone) : 'Sin fecha de vencimiento'}</dd>
           </div>
         </dl>
+        <p className="mt-3 text-sm text-muted">
+          Usas <strong className="text-navy">{locations.length} de {limit}</strong> {limit === 1 ? 'sucursal' : 'sucursales'} y{' '}
+          <strong className="text-navy">{Number.isFinite(staffLimit) ? `${activeTeam} de ${staffLimit}` : activeTeam}</strong> {activeTeam === 1 && !Number.isFinite(staffLimit) ? 'persona' : 'personas'} en tu equipo.
+        </p>
         {expiry !== null && expiry <= 7 && (
           <p role="status" className={'mt-4 rounded-xl px-4 py-3 text-sm font-medium ' + (expiry < 0 ? 'bg-[#FBE0DE] text-[#9B2A22]' : 'bg-[#FFF3CC] text-[#7A5A00]')}>
             {expiry < 0
