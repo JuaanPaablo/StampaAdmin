@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useFormState, useFormStatus } from 'react-dom';
 import { joinAction } from '@/app/u/actions';
 import { BirthdateFields, type BirthValue } from './BirthdateFields';
@@ -10,7 +10,12 @@ import type { SimpleState } from './types';
 
 function Submit({ children }: { children: string }) {
   const { pending } = useFormStatus();
-  return <button type="submit" className={primaryBtn} disabled={pending}>{pending ? 'Creando tu tarjeta…' : children}</button>;
+  return (
+    <>
+      <button type="submit" className={primaryBtn} disabled={pending}>{pending ? 'Creando tu tarjeta…' : children}</button>
+      <span role="status" className="sr-only">{pending ? 'Creando tu tarjeta…' : ''}</span>
+    </>
+  );
 }
 
 export interface JoinPrefill { name?: string; day?: number; month?: number; year?: number }
@@ -24,13 +29,18 @@ export function JoinForm({ slug, businessName, email, prefill, stampCode }: { sl
   });
   const [consent, setConsent] = useState(false);
   const fe = state.fieldErrors ?? {};
+  const form = useRef<HTMLFormElement>(null);
+  // Tras un error, el foco va al primer dato marcado para corregirlo sin buscarlo.
+  useEffect(() => {
+    if (state.fieldErrors) form.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+  }, [state]);
   return (
-    <form action={action} className="space-y-4" noValidate>
+    <form ref={form} action={action} className="space-y-4" noValidate>
       <input type="hidden" name="slug" value={slug} />
       {stampCode && <input type="hidden" name="stampCode" value={stampCode} />}
       <div>
         <h2 className="font-display text-2xl font-bold text-navy">Únete a {businessName}</h2>
-        <p className="mt-1 text-sm text-muted">Con <strong className="break-all text-navy">{email}</strong></p>
+        <p className="mt-1 text-sm text-muted">Tu correo ya está confirmado: <strong className="break-all text-navy">{email}</strong></p>
       </div>
       {state.error && <Notice tone="error">{state.error}</Notice>}
       <div>

@@ -109,3 +109,23 @@ describe('cleanCode', () => {
     expect(cleanCode(null)).toBeNull();
   });
 });
+
+describe('ayudas del formulario', () => {
+  it('sugiere el dominio correcto en correos mal escritos', async () => {
+    const { suggestEmail } = await import('./card-model');
+    expect(suggestEmail('Ana@Gmial.com')).toBe('ana@gmail.com');
+    expect(suggestEmail('luis@hotmail.con')).toBe('luis@hotmail.com');
+    expect(suggestEmail('ana@gmail.com')).toBeNull();
+    expect(suggestEmail('ana@empresa.ec')).toBeNull();
+    expect(suggestEmail('ana@')).toBeNull();
+    expect(suggestEmail('')).toBeNull();
+  });
+  it('días de cada mes', async () => {
+    const { daysInMonth } = await import('./card-model');
+    expect(daysInMonth(1, 2023)).toBe(28);
+    expect(daysInMonth(1, 2024)).toBe(29);
+    expect(daysInMonth(1)).toBe(29);
+    expect(daysInMonth(3, 1990)).toBe(30);
+    expect(daysInMonth(NaN)).toBe(31);
+  });
+});

@@ -27,9 +27,14 @@ import type { FlowField, FlowState, SimpleState } from '@/components/customer/ty
 const GENERIC = 'Algo salió mal. Inténtalo de nuevo en unos minutos.';
 const SEND_FAILED = 'No pudimos enviarte el código. Inténtalo de nuevo en unos minutos.';
 const PREVIEW_EXISTING = 'Este correo ya tiene tarjeta. Por ahora ábrela desde el teléfono donde te registraste.';
-const TOO_MANY = 'Pediste demasiados códigos. Espera un rato e inténtalo de nuevo.';
-const BAD_CODE = 'El código no es correcto o ya venció. Revisa el correo o pide uno nuevo.';
-const EXPIRED = 'Pasó demasiado tiempo. Vuelve a escribir tu correo para recibir un código nuevo.';
+/** "Espera 12 minutos": el tiempo que el límite ya calculó, para que el cliente sepa cuánto esperar. */
+const waitText = (ms: number) => {
+  const min = Math.max(1, Math.ceil(ms / 60_000));
+  return `${min} ${min === 1 ? 'minuto' : 'minutos'}`;
+};
+const tooMany = (ms: number) => `Pediste demasiados códigos. Espera ${waitText(ms)} y vuelve a intentarlo.`;
+const BAD_CODE = 'Ese código no coincide o ya venció. Copia los 6 números del último correo o toca "Reenviar código".';
+const EXPIRED = 'Pasó demasiado tiempo. Escribe tu correo otra vez y te enviamos un código nuevo.';
 const NOT_OPEN = 'Este negocio no está recibiendo clientes nuevos por ahora.';
 
 const str = (fd: FormData, k: string) => {
@@ -66,7 +71,8 @@ async function issueAndSend(pending: PendingSignup, businessName: string | undef
   const base: FlowState = { step: 'code', mode: pending.mode, email: pending.email, nonce: Date.now() };
   const ip = await clientIp();
   const limiter = otpRequestLimiter();
-  if (limiter.lockedFor(ip) > 0) return { ...base, step: 'form', error: TOO_MANY };
+  const locked = limiter.lockedFor(ip);
+  if (locked > 0) return { ...base, step: 'form', error: tooMany(locked) };
   limiter.fail(ip);
 
   const repo = getRepo();
@@ -163,7 +169,8 @@ export async function verifyCodeAction(prev: FlowState, fd: FormData): Promise<F
 
   const ip = await clientIp();
   const limiter = otpVerifyLimiter();
-  if (limiter.lockedFor(ip) > 0) return { ...state, error: 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.' };
+  const locked = limiter.lockedFor(ip);
+  if (locked > 0) return { ...state, error: `Demasiados intentos. Espera ${waitText(locked)} y vuelve a intentarlo.` };
   const code = cleanCode(str(fd, 'code'));
   if (!code) return { ...state, fieldErrors: { code: 'Escribe los 6 números del código.' } };
 
@@ -231,9 +238,10 @@ export async function claimAction(_prev: SimpleState, fd: FormData): Promise<Sim
 
   const ip = await clientIp();
   const limiter = claimLimiter();
-  if (limiter.lockedFor(ip) > 0) return { error: 'Demasiados intentos. Espera unos minutos y pide ayuda en caja.' };
+  const locked = limiter.lockedFor(ip);
+  if (locked > 0) return { error: `Demasiados intentos. Espera ${waitText(locked)} o pide ayuda en caja.` };
   const code = cleanCode(str(fd, 'code'));
-  if (!code) return { fieldErrors: { code: 'Escribe los 6 números del código.' } };
+  if (!code) return { fieldErrors: { code: 'Escribe los 6 números del código que te dieron en caja.' } };
 
   const repo = getRepo();
   const customer = await repo.findCustomerByEmail(business.id, session.email);

@@ -48,12 +48,12 @@ export default async function CustomerPage({ params, searchParams }: Props) {
             </Notice>
           )}
           {sealed && <Notice tone="success" title={sealedText(mine.customer.stamps, program)} />}
-          {!sealed && searchParams.nueva === '1' && <Notice tone="success" title="¡Tu tarjeta ya está lista!">En cada compra pide tu código en caja.</Notice>}
+          {!sealed && searchParams.nueva === '1' && <Notice tone="success" title="¡Tu tarjeta ya está lista!" />}
           {!sealed && searchParams.hola === '1' && <Notice tone="info" title={`¡Qué bueno verte, ${mine.customer.name.split(' ')[0]}!`} />}
           <LoyaltyCard card={mine} frozen={frozen} pop={sealed} claimSlot={<ClaimForm slug={business.slug} />} />
           {googleWalletButtonVisible() && (
             <a href={`/u/${encodeURIComponent(business.slug)}/wallet/google`} rel="nofollow"
-              className="flex w-full items-center justify-center gap-2 rounded-full bg-black px-5 py-3 text-sm font-semibold text-white">
+              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-black px-5 py-3 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-navy/40 focus-visible:ring-offset-2">
               Agregar a Google Wallet
             </a>
           )}

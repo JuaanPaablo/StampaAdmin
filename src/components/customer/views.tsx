@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import type { Business, CustomerCard, Program } from '@/lib/contracts';
-import { signOutAction } from '@/app/u/actions';
 import { PLACEHOLDER_BUSINESS_NAME } from '@/lib/mvp-rules';
 import { Isotipo } from '@/components/shell/logo';
 import { rewardPhrase } from './card-model';
@@ -23,17 +22,8 @@ export function CardsTopBar({ index, total }: { index?: number; total: number })
   );
 }
 
-/** "No soy yo / salir": borra la sesión de este teléfono. */
-export function SignOut({ slug, email, stampCode }: { slug?: string; email: string; stampCode?: string }) {
-  return (
-    <form action={signOutAction} className="mt-6 text-center">
-      {slug && <input type="hidden" name="slug" value={slug} />}
-      {stampCode && <input type="hidden" name="c" value={stampCode} />}
-      <p className="text-xs text-muted">Entraste como <span className="break-all font-semibold text-navy">{email}</span></p>
-      <button type="submit" className="mt-1 inline-flex min-h-12 items-center px-3 text-sm font-semibold text-navy underline underline-offset-4">No soy yo / salir</button>
-    </form>
-  );
-}
+/** "No soy yo / salir" con confirmación (componente de cliente). */
+export { SignOut } from './SignOut';
 
 /** Negocio todavía en configuración. */
 export function ComingSoon({ business }: { business: Business }) {

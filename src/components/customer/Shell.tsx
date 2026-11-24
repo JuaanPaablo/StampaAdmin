@@ -70,10 +70,13 @@ export function Notice({ tone = 'info', title, children }: { tone?: 'success' | 
   );
 }
 
+/** Foco visible con teclado (anillo Azul Noche) en todos los botones del cliente. */
+const focusRing = 'focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-navy/40 focus-visible:ring-offset-2';
+
 export const primaryBtn =
-  'inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-sun px-5 text-base font-semibold text-navy transition hover:bg-sun-2 disabled:cursor-not-allowed disabled:opacity-60';
+  'inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-sun px-5 text-base font-semibold text-navy transition hover:bg-sun-2 disabled:cursor-not-allowed disabled:opacity-60 ' + focusRing;
 export const secondaryBtn =
-  'inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-white px-5 text-base font-semibold text-navy ring-1 ring-[#C9D6E3] transition hover:bg-surface disabled:opacity-60';
-export const linkBtn = 'inline-flex min-h-12 items-center justify-center px-2 text-sm font-semibold text-navy underline underline-offset-4 hover:text-navy-3';
+  'inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-white px-5 text-base font-semibold text-navy ring-1 ring-[#C9D6E3] transition hover:bg-surface disabled:opacity-60 ' + focusRing;
+export const linkBtn = 'inline-flex min-h-12 items-center justify-center rounded-lg px-2 text-sm font-semibold text-navy underline underline-offset-4 hover:text-navy-3 disabled:cursor-not-allowed disabled:no-underline disabled:opacity-60 ' + focusRing;
 export const fieldInput =
   'h-12 w-full rounded-xl border-[1.5px] border-[#C9D6E3] bg-white px-3.5 text-base text-navy placeholder:text-[#6B819A] focus:border-navy focus:outline-none focus:ring-4 focus:ring-sun/50 aria-[invalid=true]:border-bad';

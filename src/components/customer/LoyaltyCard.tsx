@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { Business, CustomerCard, Program } from '@/lib/contracts';
 import { getTemplate } from '@/lib/templates';
-import { readableOn } from '@/components/card/contrast';
+import { contrastRatio, readableOn } from '@/components/card/contrast';
 import { logoInitials, remainingText, visitDate, visitRows } from './card-model';
 import { framingStyle, milestoneMap, nextReward, pendingRewards } from '@/lib/rewards';
 import { BusinessLogo } from './Shell';
@@ -10,10 +10,15 @@ import { StampGrid, StampProgress } from './Stamps';
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const safe = (c: string | undefined, fallback: string) => (c && HEX.test(c) ? c : fallback);
 
+/** Texto del negocio sobre su fondo: si el par elegido no llega a AA (4,5:1), usa blanco o Azul Noche. */
+export function headerInk(bg: string, ink: string): string {
+  return contrastRatio(ink, bg) >= 4.5 ? ink : readableOn(bg);
+}
+
 /** Cabecera con la marca del negocio (va primero): portada, logo, nombre y nombre de la tarjeta. */
 export function BusinessHeader({ business, program, children }: { business: Pick<Business, 'name' | 'city'>; program?: Program; children?: ReactNode }) {
   const bg = safe(program?.colors.bg, '#001D3D');
-  const ink = safe(program?.colors.ink, '#FFFFFF');
+  const ink = headerInk(bg, safe(program?.colors.ink, '#FFFFFF'));
   const accent = safe(program?.colors.accent, '#FFC301');
   const initials = logoInitials(program?.logoText, business.name);
   return (
@@ -67,15 +72,9 @@ export function LoyaltyCard({ card, frozen = false, pop = false, claimSlot, nowM
         <div className="space-y-4 px-5 pb-5 pt-5">
           {/* Lo principal primero: premio listo, cuántos sellos llevas y cuánto falta. */}
           {complete ? (
-            <div className="rounded-2xl bg-sun px-4 py-3 text-navy">
-              <p className="font-display text-xl font-bold leading-snug">{remainingText(filled, total, program.rewardTitle)}</p>
-              <p className="mt-0.5 text-sm font-semibold">{frozen ? 'Canjéalo cuando el negocio vuelva a atender.' : `Muéstrale esta pantalla al ${vocab.staffRole}.`}</p>
-            </div>
+            <RewardReady title={remainingText(filled, total, program.rewardTitle)} frozen={frozen} staff={vocab.staffRole} />
           ) : ready.map((r) => (
-            <div key={r.milestone} className="rounded-2xl bg-sun px-4 py-3 text-navy">
-              <p className="font-display text-xl font-bold leading-snug">¡Ganaste: {r.title}!</p>
-              <p className="mt-0.5 text-sm font-semibold">{frozen ? 'Canjéalo cuando el negocio vuelva a atender.' : `Muéstrale esta pantalla al ${vocab.staffRole}.`}</p>
-            </div>
+            <RewardReady key={r.milestone} title={`¡Ganaste: ${r.title}!`} frozen={frozen} staff={vocab.staffRole} />
           ))}
           <div>
             <StampProgress filled={filled} total={total} />
@@ -87,11 +86,10 @@ export function LoyaltyCard({ card, frozen = false, pop = false, claimSlot, nowM
         </div>
       </article>
 
-      <section aria-labelledby="visitas" className="rounded-3xl bg-white px-5 py-4 shadow-card ring-1 ring-line/70">
-        <h2 id="visitas" className="text-xs font-semibold uppercase tracking-[0.08em] text-muted">Últimas {vocab.visits}</h2>
-        {rows.length === 0 ? (
-          <p className="mt-2 text-sm text-muted">Aún no tienes sellos.</p>
-        ) : (
+      {/* Sin sellos todavía no hay nada que listar: la sección aparece con la primera visita. */}
+      {rows.length > 0 && (
+        <section aria-labelledby="visitas" className="rounded-3xl bg-white px-5 py-4 shadow-card ring-1 ring-line/70">
+          <h2 id="visitas" className="text-xs font-semibold uppercase tracking-[0.08em] text-muted">Últimas {vocab.visits}</h2>
           <ul className="mt-1 divide-y divide-line">
             {rows.map((r, i) => (
               <li key={i} className="flex items-center justify-between gap-3 py-2.5 text-sm">
@@ -100,8 +98,8 @@ export function LoyaltyCard({ card, frozen = false, pop = false, claimSlot, nowM
               </li>
             ))}
           </ul>
-        )}
-      </section>
+        </section>
+      )}
 
       {program.birthdayReward && (
         <section className="flex items-start gap-3 rounded-3xl bg-white px-5 py-4 shadow-card ring-1 ring-line/70">
@@ -122,6 +120,23 @@ export function LoyaltyCard({ card, frozen = false, pop = false, claimSlot, nowM
           {program.rewardExpiresDays ? <p className="mt-2 text-sm text-muted">El premio vence {program.rewardExpiresDays} días después de completar la tarjeta.</p> : null}
         </details>
       )}
+    </div>
+  );
+}
+
+/** Premio listo para canjear: lo más visible de la tarjeta, con la instrucción de qué hacer. */
+function RewardReady({ title, frozen, staff }: { title: string; frozen: boolean; staff: string }) {
+  return (
+    <div className="flex items-start gap-3 rounded-2xl bg-sun px-4 py-3 text-navy">
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="mt-1 h-6 w-6 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="8" width="18" height="4" rx="1" /><path d="M12 8v13M19 12v9H5v-9" />
+        <path d="M7.5 8a2.5 2.5 0 0 1 0-5C10 3 12 8 12 8s2-5 4.5-5a2.5 2.5 0 0 1 0 5" />
+      </svg>
+      <div>
+        <p className="text-xs font-bold uppercase tracking-[0.08em]">Premio listo</p>
+        <p className="font-display text-xl font-bold leading-snug">{title}</p>
+        <p className="mt-0.5 text-sm font-semibold">{frozen ? 'Canjéalo cuando el negocio vuelva a atender.' : `Para canjearlo, muéstrale esta pantalla al ${staff}.`}</p>
+      </div>
     </div>
   );
 }

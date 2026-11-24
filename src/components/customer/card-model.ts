@@ -153,3 +153,31 @@ export function cleanCode(raw: unknown): string | null {
   const s = raw.replace(/[\s-]/g, '');
   return /^\d{6}$/.test(s) ? s : null;
 }
+
+/** Días del mes `m` (0..11) en el año `y` (sin año, 29 para febrero: no descarta el 29 antes de elegirlo). */
+export function daysInMonth(m: number, y?: number): number {
+  if (!Number.isInteger(m) || m < 0 || m > 11) return 31;
+  return new Date(Date.UTC(Number.isInteger(y) ? (y as number) : 2000, m + 1, 0)).getUTCDate();
+}
+
+/* ---------- Correo mal escrito ---------- */
+
+const DOMAIN_FIXES: Record<string, string> = {
+  'gmial.com': 'gmail.com', 'gmai.com': 'gmail.com', 'gamil.com': 'gmail.com', 'gnail.com': 'gmail.com', 'gmal.com': 'gmail.com',
+  'gmaill.com': 'gmail.com', 'gmail.co': 'gmail.com', 'gmail.cm': 'gmail.com', 'gmail.con': 'gmail.com', 'gmail.om': 'gmail.com',
+  'gmail.es': 'gmail.com', 'gmail.com.ec': 'gmail.com', 'gmail': 'gmail.com',
+  'hotmial.com': 'hotmail.com', 'hotmai.com': 'hotmail.com', 'hotmal.com': 'hotmail.com', 'homail.com': 'hotmail.com',
+  'hotmail.co': 'hotmail.com', 'hotmail.con': 'hotmail.com', 'hotmail.cm': 'hotmail.com', 'hotmail': 'hotmail.com',
+  'outlok.com': 'outlook.com', 'outloo.com': 'outlook.com', 'outlook.co': 'outlook.com', 'outlook.con': 'outlook.com',
+  'yahooo.com': 'yahoo.com', 'yaho.com': 'yahoo.com', 'yahoo.co': 'yahoo.com', 'yahoo.con': 'yahoo.com',
+  'iclod.com': 'icloud.com', 'icloud.co': 'icloud.com', 'icloud.con': 'icloud.com'
+};
+
+/** "ana@gmial.com" → "ana@gmail.com"; null si el dominio no parece un error común. */
+export function suggestEmail(raw: string): string | null {
+  const s = (raw ?? '').trim().toLowerCase();
+  const at = s.lastIndexOf('@');
+  if (at < 1 || at === s.length - 1) return null;
+  const fix = DOMAIN_FIXES[s.slice(at + 1)];
+  return fix ? `${s.slice(0, at)}@${fix}` : null;
+}
