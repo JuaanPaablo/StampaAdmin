@@ -19,6 +19,12 @@ import { hashPassword, validatePassword, verifyPassword } from '../password';
 import { AttemptLimiter, LOCK_MS, MAX_FAILED_LOGINS } from '../login-throttle';
 import type { Repo } from './index';
 import type { AccessTokenInfo, AdminAccount, AdminBusinessRow, BusinessSetupInput, CustomerCard, IssuedToken, PlatformSummary } from '../contracts';
+import type { AdminAction, AdminBusinessDetail, AdminPayment, AiUsage, NewPaymentInput } from '../contracts';
+import {
+  adminActionSummary, aiCostRow, buildAdminInsights, businessHealth, daysSince, ecDayKey, ecMonthStartIso, fillSeries,
+  nextPlanExpiry, validatePayment
+} from '../domain/admin-insights';
+import { normalizeEcPhone } from '../phone';
 import { INVITE_TTL_HOURS, RESET_TTL_MINUTES } from '../contracts';
 import { generateOtp, generateToken, hashOtp, hashToken, isTokenShape } from '../tokens';
 import {
@@ -230,6 +236,17 @@ export function createSupabaseRepo(): Repo {
     const ownerOf = new Map<string, Staff>();
     for (const o of owners.map(toStaff)) if (!ownerOf.has(o.businessId)) ownerOf.set(o.businessId, o);   // el dueño más antiguo
     const statsOf = new Map(stats.map((s) => [s.biz_id as string, s]));
+    // Vencimiento de la invitación vigente (sin usar) de los dueños que aún no crean su contraseña.
+    const pendingIds = [...ownerOf.values()].filter((o) => o.invitePending).map((o) => o.id);
+    const inviteOf = new Map<string, string>();
+    for (let i = 0; i < pendingIds.length; i += 100) {
+      const toks = must(await db.from('access_tokens').select('staff_id,expires_at').eq('kind', 'invite').is('used_at', null)
+        .in('staff_id', pendingIds.slice(i, i + 100)), 'Invitaciones') as Row[];
+      for (const t of toks) {
+        const prev = inviteOf.get(t.staff_id);
+        if (!prev || Date.parse(t.expires_at) > Date.parse(prev)) inviteOf.set(t.staff_id, iso(t.expires_at)!);
+      }
+    }
     return bizRows.map((r) => {
       const o = ownerOf.get(r.id);
       const s = statsOf.get(r.id);
@@ -239,10 +256,53 @@ export function createSupabaseRepo(): Repo {
         note: nn(r.admin_note) ?? undefined,
         stats: {
           customers: Number(s?.n_customers ?? 0), stamps30d: Number(s?.n_stamps_30d ?? 0),
-          redemptions30d: Number(s?.n_redemptions_30d ?? 0), lastActivityAt: iso(s?.last_activity_at)
-        }
+          redemptions30d: Number(s?.n_redemptions_30d ?? 0), lastActivityAt: iso(s?.last_activity_at),
+          stamps7d: Number(s?.n_stamps_7d ?? 0), lastStampAt: iso(s?.last_stamp_at)
+        },
+        ownerPhone: nn(r.owner_phone),
+        inviteExpiresAt: o?.invitePending ? inviteOf.get(o.id) : undefined
       };
     });
+  }
+
+  /* ---------- Panel de administrador (0009) ---------- */
+
+  const toPayment = (r: Row): AdminPayment => ({
+    id: r.id, businessId: r.business_id, amountCents: Number(r.amount_cents), paidAt: String(r.paid_at).slice(0, 10), plan: planOf(r.plan),
+    months: r.months == null ? null : Number(r.months), previousExpiresAt: iso(r.previous_expires_at), newExpiresAt: iso(r.new_expires_at)!,
+    method: r.method, note: nn(r.note), createdBy: nn(r.created_by), createdAt: iso(r.created_at)!
+  });
+  const toAction = (r: Row): AdminAction => {
+    const detail = (r.detail && typeof r.detail === 'object' ? r.detail : {}) as Record<string, unknown>;
+    return {
+      id: r.id, businessId: r.business_id, adminId: nn(r.admin_id), adminEmail: nn(r.platform_admins?.email), kind: r.kind,
+      detail, summary: adminActionSummary(r.kind, detail), createdAt: iso(r.created_at)!
+    };
+  };
+  const ACTION_SELECT = 'id,business_id,admin_id,kind,detail,created_at,platform_admins(email)';
+
+  /** Conteos de admin_series (0009) separados por tipo. */
+  async function seriesCounts(businessId: string | null): Promise<Record<'stamps' | 'redemptions' | 'customers' | 'businesses', Record<string, number>>> {
+    const rows = must(await db.rpc('admin_series', { p_business_id: businessId }), 'Series') as Row[] | null;
+    const out = { stamps: {}, redemptions: {}, customers: {}, businesses: {} } as Record<'stamps' | 'redemptions' | 'customers' | 'businesses', Record<string, number>>;
+    for (const r of rows ?? []) {
+      const k = r.kind as keyof typeof out;
+      if (out[k]) out[k][String(r.bucket)] = Number(r.n) || 0;
+    }
+    return out;
+  }
+
+  /** Uso de IA (admin_ai_usage, 0009) por negocio desde `sinceIso`. */
+  async function aiUsageSince(sinceIso: string, businessId: string | null): Promise<Record<string, AiUsage>> {
+    const rows = must(await db.rpc('admin_ai_usage', { p_since: sinceIso, p_business_id: businessId }), 'Uso de IA') as Row[] | null;
+    const out: Record<string, AiUsage> = {};
+    for (const r of rows ?? []) {
+      out[r.biz_id] = {
+        texts: Number(r.texts) || 0, images: Number(r.images) || 0, promptTokens: Number(r.prompt_tokens) || 0,
+        cachedTokens: Number(r.cached_tokens) || 0, completionTokens: Number(r.completion_tokens) || 0
+      };
+    }
+    return out;
   }
 
   /** Tarjeta del cliente: negocio, programa, cliente y sus últimos 10 movimientos (sellos no anulados y canjes). */
@@ -950,6 +1010,131 @@ export function createSupabaseRepo(): Repo {
         u.count++; u.promptTokens += Number(r.prompt_tokens) || 0; u.cachedTokens += Number(r.cached_tokens) || 0; u.completionTokens += Number(r.completion_tokens) || 0;
       }
       return out;
+    },
+
+    /* ---------- Panel de administrador: métricas, cobros, historial y teléfono (0009) ---------- */
+    async getAdminInsights(now) {
+      // Las ventanas de 7 y 30 días y las series las calcula Postgres con now(); `now` solo fija el lado de la app.
+      const nowMs = now ? now.getTime() : Date.now();
+      const sinceDay = ecDayKey(nowMs - 200 * DAY);
+      const [rows, counts, pays, aiUsage] = await Promise.all([
+        adminRows(),
+        seriesCounts(null),
+        fetchAll((f, t) => db.from('admin_payments').select('amount_cents,paid_at').gte('paid_at', sinceDay).order('paid_at').order('id').range(f, t), 'Pagos'),
+        aiUsageSince(ecMonthStartIso(nowMs), null)
+      ]);
+      return buildAdminInsights({
+        now: nowMs,
+        rows,
+        counts: { businessesByMonth: counts.businesses, customersByWeek: counts.customers, stampsByDay: counts.stamps, redemptionsByDay: counts.redemptions },
+        payments: pays.map((p) => ({ amountCents: Number(p.amount_cents), paidAt: String(p.paid_at).slice(0, 10) })),
+        aiUsage
+      });
+    },
+
+    async getAdminBusinessDetail(id) {
+      const row = (await adminRows(id))[0];
+      if (!row) return null;
+      const nowMs = Date.now();
+      const [progRow, locations, staffRows, alerts, counts, payments, actions, ai] = await Promise.all([
+        db.from('programs').select('*').eq('business_id', id).maybeSingle(),
+        repo.listLocations(id),
+        db.from('staff').select(STAFF_COLS).eq('business_id', id).order('created_at').order('id'),
+        repo.listAlerts(id, 500).catch(() => [] as Alert[]),
+        seriesCounts(id),
+        repo.listPayments(id, 200),
+        repo.listAdminActions(id, 50),
+        aiUsageSince(ecMonthStartIso(nowMs), id)
+      ]);
+      const program = must(progRow, 'Programa') as Row | null;
+      const b = row.business;
+      const detail: AdminBusinessDetail = {
+        row,
+        health: businessHealth({ status: b.status, createdAt: b.createdAt, setupCompletedAt: b.setupCompletedAt, lastStampAt: row.stats.lastStampAt }, nowMs),
+        daysSinceLastStamp: daysSince(row.stats.lastStampAt, nowMs),
+        program: program ? toProgram(program) : null,
+        locations,
+        staff: (must(staffRows, 'Equipo') as Row[]).map((r) => ({
+          id: r.id, name: r.name, role: r.role, active: r.active, email: nn(r.email), hasPassword: !!r.has_password,
+          invitePending: !!r.email && !r.has_password, createdAt: iso(r.created_at)!
+        })),
+        alerts: {
+          total: alerts.length,
+          critical: alerts.filter((a) => a.severity === 'critical').length,
+          warning: alerts.filter((a) => a.severity === 'warning').length,
+          recent: alerts.slice(0, 10)
+        },
+        stampsByDay: fillSeries('day', 90, nowMs, counts.stamps),
+        redemptionsByDay: fillSeries('day', 90, nowMs, counts.redemptions),
+        customers: row.stats.customers,
+        payments,
+        actions,
+        ai: aiCostRow(b, ai[id])
+      };
+      return detail;
+    },
+
+    async recordPayment(input: NewPaymentInput) {
+      const raw = must(await db.from('businesses').select('id,plan,plan_expires_at,auto_renew').eq('id', input.businessId).maybeSingle(), 'Negocio') as Row | null;
+      if (!raw) return fail('No encontramos ese negocio.');
+      const nowMs = Date.now();
+      const note = input.note?.trim() || undefined;
+      const newExpiresAt = input.newExpiresAt?.trim() || undefined;
+      const months = newExpiresAt ? input.months : input.months ?? 1;
+      const err = validatePayment({ ...input, newExpiresAt, months, note }, nowMs);
+      if (err) fail(err.error);
+      const plan = planOf(raw.plan);
+      // Con renovación automática el vencimiento vigente es el "rodado" (effectiveExpiry); el control usa el guardado.
+      const current = effectiveExpiry(iso(raw.plan_expires_at), !!raw.auto_renew, nowMs);
+      const next = nextPlanExpiry({ currentExpiresAt: current, paidAt: input.paidAt, months, newExpiresAt });
+      const r = await rpcOrThrow('admin_record_payment', {
+        p_business_id: input.businessId, p_amount_cents: input.amountCents, p_paid_at: input.paidAt, p_plan: input.plan ?? plan,
+        p_months: next.months, p_prev_expires_at: raw.plan_expires_at ?? null, p_new_expires_at: next.expiresAt, p_method: input.method,
+        p_note: note ?? null, p_admin_id: input.createdBy ?? null,
+        p_detail: { amountCents: input.amountCents, months: next.months, method: input.method, previousExpiresAt: current ?? null, newExpiresAt: next.expiresAt },
+        p_audit_detail: `Pago registrado. Plan ${PLAN_LABEL[plan]} hasta ${ecDayKey(next.expiresAt)}.`
+      });
+      const payment = toPayment(must(await db.from('admin_payments').select('*').eq('id', r.payment_id).single(), 'Pago'));
+      return { payment, business: await getBiz(input.businessId) };
+    },
+
+    async listPayments(businessId, limit = 100) {
+      const rows = must(await db.from('admin_payments').select('*').eq('business_id', businessId)
+        .order('paid_at', { ascending: false }).order('created_at', { ascending: false }).limit(limit), 'Pagos') as Row[];
+      return rows.map(toPayment);
+    },
+
+    async logAdminAction(input) {
+      const res = await db.from('admin_actions').insert({
+        business_id: input.businessId, admin_id: input.adminId ?? null, kind: input.kind, detail: input.detail ?? {}
+      }).select(ACTION_SELECT).single();
+      if (res.error?.code === '23503') {
+        // admin_id que ya no existe: se guarda sin admin (el negocio inexistente sí es error).
+        if (/admin_id/.test(res.error.message)) {
+          return toAction(must(await db.from('admin_actions').insert({ business_id: input.businessId, admin_id: null, kind: input.kind, detail: input.detail ?? {} })
+            .select(ACTION_SELECT).single(), 'Historial'));
+        }
+        throw new Error('No encontramos ese negocio.');
+      }
+      return toAction(must(res, 'Historial'));
+    },
+
+    async listAdminActions(businessId, limit = 50) {
+      const rows = must(await db.from('admin_actions').select(ACTION_SELECT).eq('business_id', businessId)
+        .order('created_at', { ascending: false }).order('id', { ascending: false }).limit(limit), 'Historial') as Row[];
+      return rows.map(toAction);
+    },
+
+    async setOwnerPhone(businessId, phone) {
+      let value: string | null = null;
+      if (phone !== null && phone.trim() !== '') {
+        const r = normalizeEcPhone(phone);
+        if (!r.ok) return fail(r.error);
+        value = r.phone;
+      }
+      const rows = must(await db.from('businesses').update({ owner_phone: value }).eq('id', businessId).select('id'), 'Negocio') as Row[];
+      if (!rows.length) fail('No encontramos ese negocio.');
+      return value;
     }
   };
 

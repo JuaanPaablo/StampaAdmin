@@ -22,6 +22,13 @@ import { effectiveExpiry, maxLocations, maxStaff, staffLimitError } from '../pla
 import { cleanMilestones } from '../rewards';
 import type { Repo } from './index';
 import type { AccessTokenKind, AdminAccount, AdminBusinessRow, BusinessSetupInput, CustomerCard, IssuedToken, PlatformSummary } from '../contracts';
+import type { AdminAction, AdminActionKind, AdminBusinessDetail, AdminPayment, AiUsage, NewPaymentInput } from '../contracts';
+import {
+  adminActionSummary, aiCostRow, buildAdminInsights, businessHealth, countByKey, daysSince, ecDayKey, ecMonthStartIso,
+  nextPlanExpiry, seriesFromTimes, validatePayment
+} from '../domain/admin-insights';
+import { normalizeEcPhone } from '../phone';
+import { buildPlatformDemo } from '../seed-platform';
 import { INVITE_TTL_HOURS, RESET_TTL_MINUTES } from '../contracts';
 import { generateOtp, generateToken, hashOtp, hashToken, isTokenShape } from '../tokens';
 import {
@@ -43,6 +50,11 @@ export interface MemoryRepoOptions {
   seed?: boolean;
   /** Reloj inyectable para pruebas. */
   clock?: () => number;
+  /**
+   * true = además de los 5 negocios de ejemplo, carga los 12 negocios inventados del panel de administrador
+   * (seed-platform.ts: 12 meses de historia, pagos, historial, teléfonos, uso de IA). getRepo() lo activa en desarrollo.
+   */
+  platformDemo?: boolean;
 }
 
 interface StaffRec extends Staff { pinHash?: string; passwordHash?: string; failedLogins?: number; lockedUntil?: number }
@@ -99,6 +111,12 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
   const notes = new Map<string, string>();
   const unknownAdmins = new AttemptLimiter(MAX_FAILED_LOGINS, LOCK_MS);
 
+  /* ---------- Panel de administrador (0009) ---------- */
+  interface ActionRec { id: string; businessId: string; adminId?: string; kind: AdminActionKind; detail: Record<string, unknown>; createdAt: string }
+  const payments: AdminPayment[] = [];
+  const adminActions: ActionRec[] = [];
+  const phones = new Map<string, string>();
+
   if (opts.seed !== false) {
     const seed = buildSeed(clock());
     businesses.push(...seed.businesses);
@@ -113,6 +131,30 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
     rejections.push(...seed.rejections);
     // Cuenta de administrador de ejemplo (solo repo en memoria): administrador@stampa.com / Stampa-Demo-2026
     admins.push({ id: 'adm_demo', email: 'administrador@stampa.com', passwordHash: demoPasswordHash, failedLogins: 0, createdAt: new Date(clock()).toISOString() });
+
+    if (opts.platformDemo) {
+      const demo = buildPlatformDemo(clock(), businesses);
+      for (const b of businesses) Object.assign(b, demo.patches[b.id] ?? {});
+      businesses.push(...demo.seed.businesses);
+      locations.push(...demo.seed.locations);
+      const pending = new Set(demo.invites.map((i) => i.staffId));
+      for (const st of demo.seed.staff) {
+        const { pin, ...rest } = st;
+        staff.push({ ...rest, pinHash: hashPin(pin), passwordHash: pending.has(st.id) ? undefined : demoPasswordHash });
+      }
+      for (const inv of demo.invites) tokens.push({ hash: hashToken(generateToken()), staffId: inv.staffId, kind: 'invite', expiresAt: inv.expiresAt });
+      programs.push(...demo.seed.programs);
+      customers.push(...demo.seed.customers);
+      codes.push(...demo.seed.codes);
+      redemptions.push(...demo.seed.redemptions);
+      audit.push(...demo.seed.audit);
+      rejections.push(...demo.seed.rejections);
+      for (const [id, phone] of Object.entries(demo.phones)) phones.set(id, phone);
+      for (const [id, note] of Object.entries(demo.notes)) notes.set(id, note);
+      payments.push(...demo.payments);
+      adminActions.push(...demo.actions);
+      marketing.push(...demo.marketing.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+    }
   }
 
   // Los ids de lo creado en ejecución llevan 5 dígitos (10001...); los de ejemplo, 3 o 4: no chocan.
@@ -905,6 +947,120 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
         u.count++; u.promptTokens += m.promptTokens; u.cachedTokens += m.cachedTokens; u.completionTokens += m.completionTokens;
       }
       return out;
+    },
+
+    /* ---------- Panel de administrador: métricas, cobros, historial y teléfono ---------- */
+    async getAdminInsights(now) {
+      rollAll();
+      const nowMs = now ? now.getTime() : clock();
+      const rows = businesses.map((b) => adminRow(b, nowMs));
+      const stampTimes: string[] = [];
+      for (const c of codes) for (const cl of c.claims) if (!cl.voidedAt) stampTimes.push(cl.at);
+      const sinceDay = ecDayKey(nowMs - 200 * DAY);
+      return buildAdminInsights({
+        now: nowMs,
+        rows,
+        counts: {
+          businessesByMonth: countByKey('month', businesses.map((b) => b.createdAt)),
+          customersByWeek: countByKey('week', customers.map((c) => c.createdAt)),
+          stampsByDay: countByKey('day', stampTimes),
+          redemptionsByDay: countByKey('day', redemptions.map((r) => r.at))
+        },
+        payments: payments.filter((p) => p.paidAt >= sinceDay),
+        aiUsage: aiUsageSince(ecMonthStartIso(nowMs))
+      });
+    },
+
+    async getAdminBusinessDetail(id) {
+      rollAll();
+      const b = businesses.find((x) => x.id === id);
+      if (!b) return null;
+      const nowMs = clock();
+      const row = adminRow(b, nowMs);
+      const stampTimes: string[] = [];
+      for (const c of bizCodes(id)) for (const cl of c.claims) if (!cl.voidedAt) stampTimes.push(cl.at);
+      const alerts = programs.some((p) => p.businessId === id) ? await repo.listAlerts(id, 500) : [];
+      const detail: AdminBusinessDetail = {
+        row,
+        health: businessHealth({ status: b.status, createdAt: b.createdAt, setupCompletedAt: b.setupCompletedAt, lastStampAt: row.stats.lastStampAt }, nowMs),
+        daysSinceLastStamp: daysSince(row.stats.lastStampAt, nowMs),
+        program: programs.some((p) => p.businessId === id) ? clone(prog(id)) : null,
+        locations: clone(liveLocs(id)),
+        staff: bizStaff(id).map((s) => ({
+          id: s.id, name: s.name, role: s.role, active: s.active, email: s.email, hasPassword: !!s.passwordHash,
+          invitePending: !!s.email && !s.passwordHash, createdAt: s.createdAt
+        })),
+        alerts: {
+          total: alerts.length,
+          critical: alerts.filter((a) => a.severity === 'critical').length,
+          warning: alerts.filter((a) => a.severity === 'warning').length,
+          recent: alerts.slice(0, 10)
+        },
+        stampsByDay: seriesFromTimes('day', 90, nowMs, stampTimes),
+        redemptionsByDay: seriesFromTimes('day', 90, nowMs, redemptions.filter((r) => r.businessId === id).map((r) => r.at)),
+        customers: row.stats.customers,
+        payments: clone(sortPayments(payments.filter((p) => p.businessId === id))),
+        actions: await repo.listAdminActions(id, 50),
+        ai: aiCostRow(b, aiUsageSince(ecMonthStartIso(nowMs), id)[id])
+      };
+      return detail;
+    },
+
+    async recordPayment(input: NewPaymentInput) {
+      rollAll();
+      const b = biz(input.businessId);
+      const nowMs = clock();
+      const note = input.note?.trim() || undefined;
+      const newExpiresAt = input.newExpiresAt?.trim() || undefined;
+      const months = newExpiresAt ? input.months : input.months ?? 1;
+      const err = validatePayment({ ...input, newExpiresAt, months, note }, nowMs);
+      if (err) fail(err.error);
+      const previous = b.planExpiresAt;
+      const next = nextPlanExpiry({ currentExpiresAt: previous, paidAt: input.paidAt, months, newExpiresAt });
+      const payment: AdminPayment = {
+        id: `pay_${++seq}`, businessId: b.id, amountCents: input.amountCents, paidAt: input.paidAt, plan: input.plan ?? b.plan,
+        months: next.months, previousExpiresAt: previous, newExpiresAt: next.expiresAt, method: input.method, note,
+        createdBy: input.createdBy, createdAt: nowIso()
+      };
+      payments.push(payment);
+      b.planExpiresAt = next.expiresAt;
+      log(b.id, undefined, 'business.plan', `Pago registrado. Plan ${b.plan} hasta ${ecDayKey(next.expiresAt)}.`);
+      await repo.logAdminAction({
+        businessId: b.id, adminId: input.createdBy, kind: 'payment_recorded',
+        detail: { paymentId: payment.id, amountCents: payment.amountCents, months: payment.months, method: payment.method, previousExpiresAt: previous ?? null, newExpiresAt: next.expiresAt }
+      });
+      return { payment: clone(payment), business: clone(b) };
+    },
+
+    async listPayments(businessId, limit = 100) {
+      return clone(sortPayments(payments.filter((p) => p.businessId === businessId)).slice(0, limit));
+    },
+
+    async logAdminAction(input) {
+      biz(input.businessId);
+      const rec: ActionRec = {
+        id: `act_${++seq}`, businessId: input.businessId, adminId: input.adminId, kind: input.kind,
+        detail: clone(input.detail ?? {}), createdAt: nowIso()
+      };
+      adminActions.push(rec);
+      return toAction(rec);
+    },
+
+    async listAdminActions(businessId, limit = 50) {
+      return adminActions
+        .filter((a) => a.businessId === businessId)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
+        .slice(0, limit)
+        .map(toAction);
+    },
+
+    async setOwnerPhone(businessId, phone) {
+      biz(businessId);
+      if (phone === null || phone.trim() === '') { phones.delete(businessId); return null; }
+      const r = normalizeEcPhone(phone);
+      if (!r.ok) return fail(r.error);
+      phones.set(businessId, r.phone);
+      return r.phone;
     }
   };
 
@@ -918,18 +1074,28 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
     return t;
   }
 
-  function adminRow(b: Business): AdminBusinessRow {
-    const since = clock() - 30 * DAY;
+  function adminRow(b: Business, nowMs: number = clock()): AdminBusinessRow {
+    const since = nowMs - 30 * DAY;
+    const since7 = nowMs - 7 * DAY;
     const owner = staff
       .filter((s) => s.businessId === b.id && s.role === 'owner')
       .sort((x, y) => Date.parse(x.createdAt) - Date.parse(y.createdAt))[0];
     let stamps30d = 0;
+    let stamps7d = 0;
     let last = 0;
+    let lastStamp = 0;
     for (const c of bizCodes(b.id)) for (const cl of c.claims) {
       const t = Date.parse(cl.at);
       last = Math.max(last, t);
-      if (!cl.voidedAt && t >= since) stamps30d++;
+      if (!cl.voidedAt) {
+        lastStamp = Math.max(lastStamp, t);
+        if (t >= since) stamps30d++;
+        if (t >= since7) stamps7d++;
+      }
     }
+    const invitePending = !!owner && !!owner.email && !owner.passwordHash;
+    let inviteExp = 0;
+    if (owner && invitePending) for (const t of tokens) if (t.staffId === owner.id && t.kind === 'invite' && !t.usedAt) inviteExp = Math.max(inviteExp, t.expiresAt);
     const reds = redemptions.filter((r) => r.businessId === b.id);
     for (const r of reds) last = Math.max(last, Date.parse(r.at));
     return {
@@ -940,9 +1106,33 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
         customers: customers.filter((c) => c.businessId === b.id).length,
         stamps30d,
         redemptions30d: reds.filter((r) => Date.parse(r.at) >= since).length,
-        lastActivityAt: last ? new Date(last).toISOString() : undefined
-      }
+        lastActivityAt: last ? new Date(last).toISOString() : undefined,
+        stamps7d,
+        lastStampAt: lastStamp ? new Date(lastStamp).toISOString() : undefined
+      },
+      ownerPhone: phones.get(b.id),
+      inviteExpiresAt: inviteExp ? new Date(inviteExp).toISOString() : undefined
     };
+  }
+
+  function toAction(a: ActionRec): AdminAction {
+    return { ...clone(a), adminEmail: admins.find((x) => x.id === a.adminId)?.email, summary: adminActionSummary(a.kind, a.detail) };
+  }
+
+  /** Uso de IA por negocio desde `sinceIso`, separando textos y fotos. */
+  function aiUsageSince(sinceIso: string, businessId?: string): Record<string, AiUsage> {
+    const out: Record<string, AiUsage> = {};
+    for (const m of marketing) {
+      if (m.createdAt < sinceIso || (businessId && m.businessId !== businessId)) continue;
+      const u = (out[m.businessId] ??= { texts: 0, images: 0, promptTokens: 0, cachedTokens: 0, completionTokens: 0 });
+      if (m.kind === 'photo_edit') u.images++; else u.texts++;
+      u.promptTokens += m.promptTokens; u.cachedTokens += m.cachedTokens; u.completionTokens += m.completionTokens;
+    }
+    return out;
+  }
+
+  function sortPayments(xs: AdminPayment[]): AdminPayment[] {
+    return xs.sort((a, b) => b.paidAt.localeCompare(a.paidAt) || b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
   }
 
   function cardOf(b: Business, c: Customer): CustomerCard {

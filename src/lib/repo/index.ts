@@ -4,7 +4,8 @@ import type {
   Redemption, Staff, StaffReportRow, StampCode, Role,
   AccessTokenInfo, AccessTokenKind, AdminAccount, AdminBusinessRow, BusinessSetupInput, BusinessStatus, CustomerCard,
   IssuedToken, NewBusinessAccessInput, OtpRequestResult, Plan, PlatformSummary,
-  MarketingGeneration, MarketingKind, MarketingPhoto, MarketingUsage, NewMarketingGeneration
+  MarketingGeneration, MarketingKind, MarketingPhoto, MarketingUsage, NewMarketingGeneration,
+  AdminAction, AdminBusinessDetail, AdminInsights, AdminPayment, NewAdminActionInput, NewPaymentInput
 } from '../contracts';
 import { createMemoryRepo } from './memory';
 import { createSupabaseRepo } from './supabase';
@@ -161,6 +162,34 @@ export interface Repo {
   finishMarketing(businessId: string, id: string, patch: { output?: unknown; model?: string } | null): Promise<void>;
   /** Uso por negocio desde `sinceIso` (panel de administrador). */
   marketingUsage(sinceIso: string, businessId?: string): Promise<Record<string, MarketingUsage>>;
+
+  /* ---------- Panel de administrador: métricas, cobros, historial y teléfono (0009_admin_insights.sql) ---------- */
+  /**
+   * Todo el resumen del admin en una sola llamada: "Hoy te toca", dinero (MRR, renovaciones, en riesgo, cobrado),
+   * semáforo, top/bottom 5, series (12 meses, 12 semanas, 90 días) y costo de IA del mes. Ver AdminInsights.
+   * `now` solo para pruebas (por defecto, el reloj del repo).
+   */
+  getAdminInsights(now?: Date): Promise<AdminInsights>;
+  /** Detalle completo de un negocio (fila, sucursales, equipo, alertas, sellos por día, pagos, acciones, IA) o null. */
+  getAdminBusinessDetail(id: string): Promise<AdminBusinessDetail | null>;
+  /**
+   * Registra un pago y extiende el vencimiento del plan (ver NewPaymentInput y nextPlanExpiry). No cambia el estado ni
+   * el plan del negocio. Registra también la acción 'payment_recorded' (con input.createdBy como admin).
+   * Lanza Error con mensaje en español si los datos no son válidos o el negocio no existe.
+   */
+  recordPayment(input: NewPaymentInput): Promise<{ payment: AdminPayment; business: Business }>;
+  /** Pagos de un negocio, del más reciente (por día de pago) al más antiguo. limit por defecto 100. */
+  listPayments(businessId: string, limit?: number): Promise<AdminPayment[]>;
+  /** Guarda una acción del admin en el historial del negocio. Lanza si el negocio no existe. */
+  logAdminAction(input: NewAdminActionInput): Promise<AdminAction>;
+  /** Historial del negocio, la más reciente primero. limit por defecto 50. */
+  listAdminActions(businessId: string, limit?: number): Promise<AdminAction[]>;
+  /**
+   * Celular del dueño para WhatsApp. Lo valida y normaliza a E.164 (normalizeEcPhone en src/lib/phone.ts);
+   * null o '' lo borra. Devuelve lo guardado. Lanza Error (PHONE_ERROR) si no es un celular de Ecuador.
+   * No registra la acción: la server action llama a logAdminAction('phone_changed').
+   */
+  setOwnerPhone(businessId: string, phone: string | null): Promise<string | null>;
 }
 
 const g = globalThis as unknown as { __stampaRepo?: Repo };
@@ -171,6 +200,7 @@ export function getRepo(): Repo {
   if (!g.__stampaRepo && process.env.VERCEL_ENV === 'production' && process.env.STAMPA_REPO !== 'supabase') {
     throw new Error('Producción sin base de datos: define STAMPA_REPO=supabase y SUPABASE_SERVICE_ROLE_KEY en Vercel.');
   }
-  if (!g.__stampaRepo) g.__stampaRepo = process.env.STAMPA_REPO === 'supabase' ? createSupabaseRepo() : createMemoryRepo();
+  // En memoria (npm run dev) se cargan también los negocios de demostración del panel de administrador (seed-platform.ts).
+  if (!g.__stampaRepo) g.__stampaRepo = process.env.STAMPA_REPO === 'supabase' ? createSupabaseRepo() : createMemoryRepo({ platformDemo: true });
   return g.__stampaRepo;
 }

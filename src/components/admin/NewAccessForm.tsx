@@ -67,6 +67,17 @@ export function NewAccessForm({ plans, defaultPlan }: { plans: { value: Plan; la
           {err('email') ?? <p id="email-hint" className="text-xs text-muted">Con este correo entrará a su panel.</p>}
         </div>
 
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="phone" className={label}>Celular del dueño (WhatsApp, opcional)</label>
+          <input
+            id="phone" name="phone" type="tel" inputMode="tel" autoComplete="tel" maxLength={30}
+            defaultValue={v.phone ?? ''} placeholder="09XXXXXXXX"
+            aria-invalid={!!fe.phone} aria-describedby={fe.phone ? 'phone-err' : 'phone-hint'}
+            className={cn(inputClass, 'h-12', fe.phone && 'border-bad')}
+          />
+          {err('phone') ?? <p id="phone-hint" className="text-xs text-muted">09XXXXXXXX. Para escribirle por WhatsApp desde el panel.</p>}
+        </div>
+
         <div className="grid gap-5 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5">
             <label htmlFor="plan" className={label}>Plan</label>

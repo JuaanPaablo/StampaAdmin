@@ -35,7 +35,7 @@ export interface SeedData {
 
 /* ---------- Generador pseudoaleatorio ---------- */
 
-class Rng {
+export class Rng {
   private s: number;
   constructor(seed: number) { this.s = seed >>> 0; }
   next(): number {
@@ -62,9 +62,9 @@ class Rng {
 
 /* ---------- Catálogos ---------- */
 
-const FEMALE = ['María', 'Andrea', 'Daniela', 'Gabriela', 'Camila', 'Valeria', 'Paola', 'Karla', 'Fernanda', 'Estefanía', 'Michelle', 'Jéssica', 'Carolina', 'Mónica', 'Tatiana', 'Lorena', 'Verónica', 'Ximena', 'Nathaly', 'Rosa', 'Mayra', 'Katherine', 'Doménica', 'Pamela', 'Lissette', 'Dayana'];
-const MALE = ['Juan', 'Carlos', 'Luis', 'José', 'Diego', 'Andrés', 'Kevin', 'Bryan', 'Jorge', 'Wilson', 'Fabián', 'Mauricio', 'Santiago', 'Esteban', 'Galo', 'Patricio', 'Xavier', 'Byron', 'Cristian', 'Darwin', 'Mateo', 'Sebastián', 'Alexis', 'Henry', 'Gustavo', 'Iván'];
-const SURNAMES = ['Cevallos', 'Zambrano', 'Mero', 'Villamar', 'Intriago', 'Cedeño', 'Loor', 'Párraga', 'Macías', 'Alcívar', 'Vera', 'Quimí', 'Tomalá', 'Reyes', 'Salazar', 'Calderón', 'Naranjo', 'Chávez', 'Andrade', 'Pazmiño', 'Yánez', 'Villacís', 'Espinoza', 'Mora', 'Burgos', 'Franco', 'Ponce', 'Bravo', 'Barzola', 'Morán', 'Suárez', 'Cabrera', 'Guerrero', 'Herrera', 'Jiménez', 'Lara', 'Moreno', 'Ortiz', 'Paredes', 'Rivera', 'Torres', 'Zúñiga', 'Ochoa', 'Briones', 'Delgado', 'Escobar'];
+export const FEMALE = ['María', 'Andrea', 'Daniela', 'Gabriela', 'Camila', 'Valeria', 'Paola', 'Karla', 'Fernanda', 'Estefanía', 'Michelle', 'Jéssica', 'Carolina', 'Mónica', 'Tatiana', 'Lorena', 'Verónica', 'Ximena', 'Nathaly', 'Rosa', 'Mayra', 'Katherine', 'Doménica', 'Pamela', 'Lissette', 'Dayana'];
+export const MALE = ['Juan', 'Carlos', 'Luis', 'José', 'Diego', 'Andrés', 'Kevin', 'Bryan', 'Jorge', 'Wilson', 'Fabián', 'Mauricio', 'Santiago', 'Esteban', 'Galo', 'Patricio', 'Xavier', 'Byron', 'Cristian', 'Darwin', 'Mateo', 'Sebastián', 'Alexis', 'Henry', 'Gustavo', 'Iván'];
+export const SURNAMES = ['Cevallos', 'Zambrano', 'Mero', 'Villamar', 'Intriago', 'Cedeño', 'Loor', 'Párraga', 'Macías', 'Alcívar', 'Vera', 'Quimí', 'Tomalá', 'Reyes', 'Salazar', 'Calderón', 'Naranjo', 'Chávez', 'Andrade', 'Pazmiño', 'Yánez', 'Villacís', 'Espinoza', 'Mora', 'Burgos', 'Franco', 'Ponce', 'Bravo', 'Barzola', 'Morán', 'Suárez', 'Cabrera', 'Guerrero', 'Herrera', 'Jiménez', 'Lara', 'Moreno', 'Ortiz', 'Paredes', 'Rivera', 'Torres', 'Zúñiga', 'Ochoa', 'Briones', 'Delgado', 'Escobar'];
 const MAIL = ['gmail.com', 'hotmail.com', 'outlook.com', 'yahoo.com'];
 const NOTES = ['Prefiere que le escriban por la tarde.', 'Cliente desde la inauguración.', 'Suele venir con su familia.', 'Pide factura con datos.'];
 

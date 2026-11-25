@@ -35,3 +35,13 @@ export function stampaWhatsappUrl(text: string): string {
 export function shareWhatsappUrl(text: string): string {
   return `https://wa.me/?text=${encodeURIComponent(text)}`;
 }
+
+/**
+ * Chat de WhatsApp con el dueño de un negocio. `phone` en E.164 ("+593991234567") u otro formato con dígitos;
+ * se quitan todos los caracteres que no son dígitos. Devuelve null si no hay número. `text` es opcional (mensaje prellenado).
+ */
+export function ownerWhatsappUrl(phone: string | undefined | null, text?: string): string | null {
+  const digits = (phone ?? '').replace(/\D/g, '');
+  if (digits.length < 8) return null;
+  return `https://wa.me/${digits}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
+}

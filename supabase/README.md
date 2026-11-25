@@ -10,6 +10,8 @@ con la service role (servidor); los navegadores nunca hablan con la base directa
 | `migrations/0002_functions.sql` | `create_business`, `create_stamp_code`, `claim_stamp_code`, `void_claim`, `cancel_stamp_code`, `redeem_reward`, `verify_staff_pin`, `set_staff_pin`. Mismas reglas y mensajes que `src/lib/domain`. |
 | `migrations/0003_auth.sql` | Acceso al panel con correo + contraseña: columnas `staff.email/password_hash/...`, `auth_lookup`, `auth_record_failure`, `auth_record_success`. |
 | `migrations/0004_mvp.sql` | MVP: estado y plan de los negocios (`status`, `plan_expires_at`, `suspended_at`, `setup_completed_at`, `admin_note`), `programs.cover_url`, `customers.birthday_y/email_verified_at`, `staff.has_password`; tablas `platform_admins`, `access_tokens`, `email_otps`; funciones `create_business_access`, `issue_access_token`, `peek_access_token`, `consume_access_token`, `set_staff_email`, `request_email_otp`, `verify_email_otp`, `admin_record_failure/success`, `admin_business_stats`, `platform_stats`; `claim_stamp_code` rechaza negocios que no están activos; bucket público `branding`. |
+| `migrations/0009_admin_insights.sql` | Panel de administrador: `businesses.owner_phone`, tablas `admin_payments` y `admin_actions` (RLS sin políticas), `admin_business_stats` ampliada, `admin_series`, `admin_ai_usage`, `admin_record_payment`. |
+| `demo/admin_demo_seed.sql`, `demo/admin_demo_clean.sql` | Datos inventados del panel de administrador (negocios `demo_biz_*`) y su limpieza. Requieren 0009. |
 | `seed.sql` | Un negocio demo mínimo (Café La Esquina) con PIN 1234 / 2345 / 1111. |
 
 ## Aplicar las migraciones

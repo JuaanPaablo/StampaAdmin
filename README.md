@@ -101,10 +101,24 @@ Los permisos se definen en `src/lib/nav.ts` y se aplican en servidor con `requir
 
 ## Cambiar a Supabase
 
-1. Crea el proyecto y aplica `supabase/migrations/0001` a `0008` en orden (`supabase db push`, o el editor SQL). `supabase/seed.sql` es opcional. Detalles en `supabase/README.md`.
+1. Crea el proyecto y aplica `supabase/migrations/0001` a `0009` en orden (`supabase db push`, o el editor SQL). `supabase/seed.sql` es opcional. Detalles en `supabase/README.md`.
 2. Define variables de servidor (ver `.env.example`): `STAMPA_REPO=supabase`, `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `AUTH_SECRET`, `NEXT_PUBLIC_APP_URL` (p. ej. `https://stampaecu.app`), `RESEND_API_KEY` y `EMAIL_FROM` (o `STAMPA_EMAIL_PREVIEW=on` mientras no haya clave), y para Marketing `DEEPSEEK_API_KEY` y `FAL_KEY` (Sensitive, sin `NEXT_PUBLIC_`). En producción de Vercel la app se niega a usar el repo en memoria. La service role salta RLS: nunca al navegador.
 3. `getRepo()` ya elige la implementación según `STAMPA_REPO`.
 4. Crea la cuenta de administrador con `npm run admin:create` y deja `STAMPA_DEMO` apagado. Las cuentas de los dueños se crean desde `/admin`.
+
+## Panel de administrador: métricas, cobros e historial
+
+Datos en una llamada: `repo.getAdminInsights()` (resumen) y `repo.getAdminBusinessDetail(id)` (detalle). Reglas puras y probadas en `src/lib/domain/admin-insights.ts`; tipos en `contracts.ts`; migración `0009_admin_insights.sql` (tablas `admin_payments`, `admin_actions`, columna `businesses.owner_phone`, funciones `admin_series`, `admin_ai_usage`, `admin_record_payment` y `admin_business_stats` ampliada). Calendario en hora de Ecuador.
+
+- **Hoy te toca**: plan vence en 7 días o menos, plan vencido (activo o configurando), activo sin sellos hace más de 7 días, más de 3 días en el asistente con contraseña ya creada, invitación de 72 h vencida.
+- **Dinero**: MRR = precio del plan de los negocios activos con el plan al día (no cuenta configurando, suspendidos ni vencidos). Ingreso en riesgo = activos o suspendidos con el plan vencido. Renovaciones de los próximos 30 días. Cobrado este mes y últimos 6 meses (según `admin_payments`).
+- **Semáforo**: verde = sellos en los últimos 7 días; amarillo = último sello hace 7 a 14 días; rojo = más de 14 (o nunca, contando desde que terminó el asistente); sin semáforo si está configurando o suspendido.
+- **Pagos**: `recordPayment` extiende el vencimiento desde el más tardío entre el vencimiento actual y el día del pago (+N meses, fin del día en Ecuador) o a una fecha exacta. No reactiva ni cambia el plan.
+- **Historial**: cada acción del admin (dar acceso, suspender, reactivar, plan, vencimiento, nota, reenviar acceso, pago, celular) queda en `admin_actions` desde `src/lib/admin-actions.ts`.
+- **Celular del dueño**: `src/lib/phone.ts` (acepta 09… o +593 9…, guarda E.164); `ownerWhatsappUrl()` en `urls.ts`.
+- **Costo de IA**: DeepSeek por tokens y fal.ai por foto (`AI_PRICES`), comparado con el precio del plan.
+
+Datos inventados: `npm run dev` carga además 12 negocios de demostración con 12 meses de historia (`src/lib/seed-platform.ts`). En Supabase: `supabase/demo/admin_demo_seed.sql` crea 12 negocios falsos (ids `demo_biz_*`, slugs `demo-*`, correos `@demo.stampaecu.app`, sin contraseñas válidas ni invitaciones vigentes) y `supabase/demo/admin_demo_clean.sql` borra todo lo que cuelga de ellos. Ambos en una transacción; el seed se puede repetir (limpia antes) y refresca las fechas.
 
 ## Agregar un tipo de negocio
 
