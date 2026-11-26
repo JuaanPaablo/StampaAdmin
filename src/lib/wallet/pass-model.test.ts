@@ -39,5 +39,17 @@ describe('pase de Wallet', () => {
     const g = googleLoyaltyObject(m, '3388000000001', 'biz_demo');
     expect(g.id).toBe('3388000000001.cus_1');
     expect(g.loyaltyPoints.balance.string).toBe('3 de 10');
+    expect(g).not.toHaveProperty('merchantLocations');
+  });
+
+  it('Google usa merchantLocations (no el campo obsoleto locations) y Apple locations', () => {
+    const locs = Array.from({ length: 12 }, (_, i) => ({ name: `S${i}`, latitude: -2.17 + i / 100, longitude: -79.9 }));
+    const m = buildPassModel(biz, program, { id: 'cus_1', name: 'Ana', stamps: 3 }, url, locs);
+    const g = googleLoyaltyObject(m, '3388000000001', 'biz_demo');
+    expect(g).not.toHaveProperty('locations');
+    expect(g.merchantLocations).toHaveLength(10);
+    expect(g.merchantLocations?.[0]).toEqual({ latitude: -2.17, longitude: -79.9 });
+    const a = applePassJson(m, { passTypeIdentifier: 'pass.app.stampa', teamIdentifier: 'TEAM123' });
+    expect(a.locations).toHaveLength(10);
   });
 });

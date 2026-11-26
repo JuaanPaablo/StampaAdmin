@@ -40,9 +40,9 @@ const FAQ: { q: string; a: string }[] = [
 ];
 
 const PLANS: { id: Plan; for: string; best?: boolean; items: string[]; inherit?: string }[] = [
-  { id: 'basico', for: 'Para tu primer local.', items: ['1 sucursal y hasta 3 personas', 'Tarjeta en Apple y Google Wallet', 'Premio intermedio y regalo de cumpleaños', 'Estadísticas de 30 días', '10 textos y 5 fotos con IA al mes'] },
-  { id: 'standard', best: true, for: 'Para cuando ya tienes clientes que vuelven.', items: ['Hasta 3 sucursales y 10 personas', 'Avisos por cercanía', 'Alertas antifraude y exportar a Excel', 'Ideas de publicaciones con tus datos', '40 textos y 20 fotos con IA al mes'], inherit: 'Todo lo de Básico' },
-  { id: 'pro', for: 'Para cadenas y franquicias.', items: ['Hasta 10 sucursales, equipo sin límite', 'Reporte por persona del equipo', 'Calendario semanal y respuestas a reseñas', '120 textos y 60 fotos con IA al mes'], inherit: 'Todo lo de Standard' }
+  { id: 'basico', for: 'Para tu primer local.', items: ['1 sucursal y hasta 3 personas', 'Tarjeta de sellos en Apple y Google Wallet', 'Premio intermedio y regalo de cumpleaños', 'Estadísticas de 30 días', '10 textos y 5 fotos con IA al mes'] },
+  { id: 'standard', best: true, for: 'Para cuando ya tienes clientes que vuelven.', items: ['Hasta 3 sucursales y 10 personas', 'Cupones en el Wallet de tus clientes', 'Avisos por cercanía', '2 campañas de cupones al mes', 'Alertas antifraude y exportar a Excel', 'Ideas de publicaciones con tus datos', '40 textos y 20 fotos con IA al mes'], inherit: 'Todo lo de Básico' },
+  { id: 'pro', for: 'Para cadenas y franquicias.', items: ['Hasta 10 sucursales, equipo sin límite', 'Gift cards con saldo', '8 campañas de cupones al mes', 'Reporte por persona del equipo', 'Calendario semanal y respuestas a reseñas', '120 textos y 60 fotos con IA al mes'], inherit: 'Todo lo de Standard' }
 ];
 
 const FEATURES: [string, string][] = [

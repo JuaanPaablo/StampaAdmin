@@ -35,23 +35,28 @@ export interface PlanFeatures {
   aiCalendar: boolean;
   /** Respuestas a reseñas de Google. */
   aiReviews: boolean;
+  /** Avisos de cercanía en Wallet (coordenadas de las sucursales en el pase). */
   proximity: boolean;
+  /** Cupones que se pueden ENVIAR (con aviso en Wallet) por mes calendario de Ecuador. Crear sin enviar no cuenta. */
   pushCampaigns: number;
+  /** Cupones (Offers) en Wallet: crear, enviar y canjear en Caja. Ver docs/TARJETAS.md. */
+  offers: boolean;
+  /** Gift Cards con saldo (solo Pro). Lo ya emitido sigue funcionando si el negocio baja de plan. */
   giftCards: boolean;
 }
 
 export const PLAN_FEATURES: Record<Plan, PlanFeatures> = {
   basico: {
     label: 'Básico', priceCents: 2999, maxLocations: 1, maxStaff: 3, maxMilestones: 1, statsDays: 30, alerts: false, staffReport: false, exportCsv: false,
-    posterDesign: false, aiTexts: 10, aiImages: 5, dataPosts: false, aiCalendar: false, aiReviews: false, proximity: false, pushCampaigns: 0, giftCards: false
+    posterDesign: false, aiTexts: 10, aiImages: 5, dataPosts: false, aiCalendar: false, aiReviews: false, proximity: false, pushCampaigns: 0, offers: false, giftCards: false
   },
   standard: {
     label: 'Standard', priceCents: 5499, maxLocations: 3, maxStaff: 10, maxMilestones: 3, statsDays: 90, alerts: true, staffReport: false, exportCsv: true,
-    posterDesign: true, aiTexts: 40, aiImages: 20, dataPosts: true, aiCalendar: false, aiReviews: false, proximity: true, pushCampaigns: 2, giftCards: true
+    posterDesign: true, aiTexts: 40, aiImages: 20, dataPosts: true, aiCalendar: false, aiReviews: false, proximity: true, pushCampaigns: 2, offers: true, giftCards: false
   },
   pro: {
     label: 'Pro', priceCents: 7999, maxLocations: 10, maxStaff: Number.POSITIVE_INFINITY, maxMilestones: 3, statsDays: 90, alerts: true, staffReport: true, exportCsv: true,
-    posterDesign: true, aiTexts: 120, aiImages: 60, dataPosts: true, aiCalendar: true, aiReviews: true, proximity: true, pushCampaigns: 8, giftCards: true
+    posterDesign: true, aiTexts: 120, aiImages: 60, dataPosts: true, aiCalendar: true, aiReviews: true, proximity: true, pushCampaigns: 8, offers: true, giftCards: true
   }
 };
 
@@ -94,6 +99,9 @@ export function planIncludes(plan: Plan): string[] {
     `${f.aiTexts} textos con IA al mes`,
     `${f.aiImages} fotos mejoradas con IA al mes`,
     f.dataPosts ? 'Posts con tus datos' : '',
-    f.aiCalendar ? 'Calendario semanal y respuestas a reseñas' : ''
+    f.aiCalendar ? 'Calendario semanal y respuestas a reseñas' : '',
+    f.offers ? `Cupones en Wallet (${f.pushCampaigns} envíos al mes)` : '',
+    f.proximity ? 'Avisos al pasar cerca de tu local' : '',
+    f.giftCards ? 'Gift cards con saldo' : ''
   ].filter(Boolean);
 }

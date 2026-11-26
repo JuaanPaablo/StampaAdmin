@@ -1,3 +1,4 @@
+import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { ClaimForm } from '@/components/customer/ClaimForm';
 import { JoinForm } from '@/components/customer/JoinForm';
@@ -9,6 +10,10 @@ import { stampedText } from '@/components/customer/card-model';
 import { milestoneMap, nextReward } from '@/lib/rewards';
 import type { Program } from '@/lib/contracts';
 import { googleWalletButtonVisible } from '@/lib/wallet/google';
+import { appleWalletEnabled } from '@/lib/wallet/apple';
+import { WalletButtons } from '@/components/customer/WalletButtons';
+import { WalletCards } from '@/components/customer/WalletCards';
+import { detectPlatform, walletButtons } from '@/components/customer/wallet-model';
 
 /** "¡Sello 4 de 10! Ganaste: Postre gratis." o "¡Sello 5 de 10! Te faltan 2 para tu postre." */
 function sealedText(stamps: number, program: Program): string {
@@ -39,6 +44,8 @@ export default async function CustomerPage({ params, searchParams }: Props) {
     const frozen = status === 'suspended';
     const total = program.stampsRequired;
     const sealed = searchParams.sellado === '1' && !frozen;
+    // iPhone: solo Apple; Android: solo Google; computadora u otro: ambos.
+    const walletKinds = walletButtons(detectPlatform(headers().get('user-agent')), { apple: appleWalletEnabled(), google: googleWalletButtonVisible() });
     return (
       <CustomerShell top={<CardsTopBar index={cardIndex(cards, business.id)} total={cards.length} />}>
         <div className="space-y-4">
@@ -51,13 +58,9 @@ export default async function CustomerPage({ params, searchParams }: Props) {
           {!sealed && searchParams.nueva === '1' && <Notice tone="success" title="¡Tu tarjeta ya está lista!" />}
           {!sealed && searchParams.hola === '1' && <Notice tone="info" title={`¡Qué bueno verte, ${mine.customer.name.split(' ')[0]}!`} />}
           <LoyaltyCard card={mine} frozen={frozen} pop={sealed} claimSlot={<ClaimForm slug={business.slug} />} />
-          {googleWalletButtonVisible() && (
-            // Botón oficial de Google (es-419, sin modificar): Google exige su imagen, mínimo 48 px de alto y 8 px libres.
-            <a href={`/u/${encodeURIComponent(business.slug)}/wallet/google`} rel="nofollow"
-              className="mx-auto block w-fit rounded-full p-2 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-navy/40">
-              <img src="/wallet/agregar-a-google-wallet.svg" alt="Agregar a Google Wallet" width={239} height={55} className="h-[55px] w-auto" />
-            </a>
-          )}
+          {/* Botones oficiales (Google es-419 sin modificar: su imagen, 55 px de alto y 8 px libres alrededor). */}
+          <WalletButtons slug={business.slug} kinds={walletKinds} />
+          {!frozen && <div className="pt-2"><WalletCards card={mine} walletKinds={walletKinds} /></div>}
         </div>
         <SignOut slug={business.slug} email={session.email} />
       </CustomerShell>

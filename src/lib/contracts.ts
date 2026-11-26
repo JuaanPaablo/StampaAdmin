@@ -42,6 +42,9 @@ export interface Location {
   name: string;
   address?: string;
   active: boolean;
+  /** Coordenadas para los avisos de cercanía en Wallet (ambas o ninguna). Ver repo.setLocationCoords. */
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface Staff {
@@ -340,6 +343,12 @@ export interface CustomerCard {
   customer: Customer;
   /** milestone: canje de un premio intermedio (no reinicia la tarjeta). */
   recent: { at: string; kind: 'stamp' | 'redeem'; milestone?: number; title?: string }[];
+  /** Sucursales ACTIVAS con coordenadas (máx. 10), para merchantLocations (Google) y locations (Apple). */
+  locations: Location[];
+  /** Cupones del cliente vigentes y sin usar (oferta enviada, dentro de sus fechas), con la oferta adentro. */
+  offers: CustomerOfferWithOffer[];
+  /** Gift cards activas del cliente (las vendidas sin cliente no aparecen). */
+  giftCards: GiftCard[];
 }
 
 export type OtpRequestResult =
@@ -652,4 +661,149 @@ export interface AdminBusinessDetail {
   actions: AdminAction[];
   /** Uso de IA del mes actual. */
   ai: AiCostRow;
+}
+
+/* =====================================================================================================
+ * Tarjetas extra en Wallet: Cupones (Offers), Gift Cards y servicio web de Apple (migración 0010_wallet_cards.sql).
+ * Contrato común en docs/TARJETAS.md. Reglas puras en src/lib/domain/wallet-cards.ts.
+ * ===================================================================================================== */
+
+/** draft = creado sin enviar · sent = enviado a todos los clientes · ended = terminado a mano (ya no se canjea). */
+export type OfferStatus = 'draft' | 'sent' | 'ended';
+
+/** Cupón que crea el dueño o gerente. Se usa una vez por cliente. */
+export interface Offer {
+  id: string;
+  businessId: string;
+  /** Máx. 40 letras. */
+  title: string;
+  /** Máx. 200 letras. */
+  description: string;
+  /** Condiciones, máx. 300 letras. */
+  terms?: string;
+  /** Imagen https pública (opcional). */
+  imageUrl?: string;
+  /** Vigencia (ISO). Se canjea entre startsAt y endsAt inclusive. */
+  startsAt: string;
+  endsAt: string;
+  status: OfferStatus;
+  sentAt?: string;
+  /** staffId que lo creó. */
+  createdBy?: string;
+  createdAt: string;
+}
+
+/** El cupón de un cliente (uno por oferta y cliente). Su id es lo que codifica el QR del pase. */
+export interface CustomerOffer {
+  id: string;
+  offerId: string;
+  businessId: string;
+  customerId: string;
+  createdAt: string;
+  redeemedAt?: string;
+  /** staffId que lo canjeó. */
+  redeemedBy?: string;
+  redeemedLocationId?: string;
+}
+
+export type CustomerOfferWithOffer = CustomerOffer & { offer: Offer };
+
+/** Lo que ve Caja al escanear o escribir un cupón. */
+export type CustomerOfferDetail = CustomerOfferWithOffer & { customerName: string };
+
+/** Datos del formulario de cupón (fechas ISO; ver offerWindowFromDays para días de Ecuador). */
+export interface NewOfferInput {
+  title: string;
+  description: string;
+  terms?: string;
+  imageUrl?: string;
+  startsAt: string;
+  endsAt: string;
+}
+
+export interface OfferStats {
+  offerId: string;
+  /** Cupones entregados (clientes que lo recibieron). */
+  sent: number;
+  redeemed: number;
+  /** redeemed / sent (0 si no se envió). */
+  rate: number;
+}
+
+export type GiftCardStatus = 'active' | 'void';
+
+/** Gift card con saldo. Saldo máximo US$500 (GIFT_CARD_MAX_CENTS). */
+export interface GiftCard {
+  id: string;
+  businessId: string;
+  /** Ausente = se vendió sin cliente registrado. */
+  customerId?: string;
+  /** 12 caracteres sin ambiguos (A-Z sin I, L, O + 2-9). Se muestra como XXXX-XXXX-XXXX (formatGiftCardCode). */
+  code: string;
+  balanceCents: number;
+  initialCents: number;
+  status: GiftCardStatus;
+  createdAt: string;
+  /** staffId que la vendió. */
+  createdBy?: string;
+}
+
+/** issue = venta · topup = recarga · charge = cobro · void = anulación (deja el saldo en 0) · adjust = ajuste. */
+export type GiftCardMovementKind = 'issue' | 'topup' | 'charge' | 'void' | 'adjust';
+
+export interface GiftCardMovement {
+  id: string;
+  giftCardId: string;
+  businessId: string;
+  kind: GiftCardMovementKind;
+  /** Con signo: positivo suma saldo (issue, topup), negativo resta (charge, void). */
+  amountCents: number;
+  balanceAfterCents: number;
+  staffId?: string;
+  locationId?: string;
+  note?: string;
+  /** Id de la operación que mandó la pantalla (idempotencia: el mismo id nunca mueve el saldo dos veces). */
+  requestId?: string;
+  createdAt: string;
+}
+
+/** Opciones de recarga y cobro. `requestId`: ver GiftCardMovement.requestId. */
+export interface GiftCardOpOptions { locationId?: string; note?: string; requestId?: string }
+
+export interface IssueGiftCardInput {
+  /** Centavos, entero entre GIFT_CARD_MIN_CENTS y GIFT_CARD_MAX_CENTS. */
+  amountCents: number;
+  /** Quién la vende (dueño o gerente activo). */
+  staffId: string;
+  /** Cliente del negocio que la recibe (opcional). */
+  customerId?: string;
+  locationId?: string;
+  /** Máx. 200 letras. */
+  note?: string;
+  /** Idempotencia: repetir el mismo id devuelve la venta ya hecha (no crea otra tarjeta). */
+  requestId?: string;
+}
+
+/** Resultado de una venta, recarga, cobro o anulación. */
+export interface GiftCardResult { giftCard: GiftCard; movement: GiftCardMovement }
+
+export type WalletPlatform = 'google' | 'apple';
+
+/** Aviso enviado a un cliente (tope de 3 cada 24 h, ver WALLET_NOTIFY_MAX). */
+export interface NewWalletNotification {
+  businessId: string;
+  customerId: string;
+  platform: WalletPlatform;
+  /** 'offer' | 'gift' | 'stamp' | ... (texto libre corto). */
+  kind: string;
+}
+
+/** Registro de un pase en un iPhone (servicio web de Apple). */
+export interface AppleRegistration {
+  deviceLibraryId: string;
+  pushToken: string;
+  passTypeId: string;
+  serial: string;
+  /** Última vez que cambió el pase (lo marca appleMarkUpdated) o se registró. */
+  updatedAt: string;
 }

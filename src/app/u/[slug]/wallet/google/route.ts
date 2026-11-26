@@ -2,12 +2,13 @@ import { NextResponse } from 'next/server';
 import { getRepo } from '@/lib/repo';
 import { customerUrl } from '@/lib/urls';
 import { googleSaveUrl, googleWalletButtonVisible, googleWalletConfig, syncGoogleWallet } from '@/lib/wallet/google';
+import { sameSiteNavigation } from '@/lib/wallet/fetch-site';
 import { loadCustomerPage } from '../../data';
 
 export const dynamic = 'force-dynamic';
 
 /** "Agregar a Google Wallet": solo para el cliente con sesión y tarjeta en este negocio (su propio pase). */
-export async function GET(_req: Request, { params }: { params: { slug: string } }) {
+export async function GET(req: Request, { params }: { params: { slug: string } }) {
   const data = await loadCustomerPage(params.slug);
   const config = googleWalletConfig();
   if (!data || !data.session || !data.mine || !config || !googleWalletButtonVisible()) {
@@ -17,7 +18,8 @@ export async function GET(_req: Request, { params }: { params: { slug: string } 
   await syncGoogleWallet(data.mine);
   // Para la ficha del cliente ("Tarjeta en el celular"). Se marca al tocar el botón: Google no avisa si al final la
   // guardó. Un fallo aquí no debe impedir que la agregue.
-  if (data.mine.customer.wallet !== 'google') {
+  // Solo si la navegación no viene de otro sitio (un GET ajeno no debe cambiar la ficha).
+  if (data.mine.customer.wallet !== 'google' && sameSiteNavigation(req)) {
     try { await getRepo().setCustomerWallet(data.business.id, data.mine.customer.id, 'google'); }
     catch (e) { console.error('setCustomerWallet:', e instanceof Error ? e.message : e); }
   }

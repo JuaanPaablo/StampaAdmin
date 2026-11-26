@@ -7,6 +7,8 @@ import { hasRole } from '@/lib/auth';
 import { TEMPLATES } from '@/lib/templates';
 import type { BusinessType } from '@/lib/contracts';
 import { validatePlace } from '@/lib/ecuador';
+import { cheapestWith, features, PLAN_LABEL } from '@/lib/plans';
+import { validateCoords } from '@/lib/domain/wallet-cards';
 
 export interface ActionResult { ok: boolean; error?: string; message?: string; fieldErrors?: Record<string, string> }
 
@@ -95,4 +97,35 @@ export async function deleteLocationAction(fd: FormData): Promise<ActionResult> 
   revalidatePath('/panel/ajustes');
   revalidatePath('/bienvenida');
   return { ok: true, message: 'Sucursal eliminada.' };
+}
+
+/**
+ * Guarda (o quita, con clear=1) las coordenadas de una sucursal para los avisos de cercanía en Wallet.
+ * Solo dueño y solo si el plan incluye cercanía. Luego el pase de cada cliente toma las sucursales nuevas al
+ * actualizarse (sello, canje, cupón).
+ */
+export async function setLocationCoordsAction(fd: FormData): Promise<ActionResult> {
+  const ctx = await getContext();
+  if (!hasRole(ctx, ['owner'])) return NO_PERMISSION;
+  if (!features(ctx.business.plan).proximity) {
+    const from = cheapestWith((f) => f.proximity);
+    return { ok: false, error: `Los avisos por cercanía están disponibles desde el plan ${from ? PLAN_LABEL[from] : 'Standard'}.` };
+  }
+  const id = String(fd.get('id') ?? '').slice(0, 64);
+  if (!id) return { ok: false, error: 'No encontramos esa sucursal.' };
+  let coords: { latitude: number; longitude: number } | null = null;
+  if (fd.get('clear') !== '1') {
+    const latitude = Number(fd.get('latitude'));
+    const longitude = Number(fd.get('longitude'));
+    const err = validateCoords(latitude, longitude);
+    if (err) return { ok: false, error: err };
+    coords = { latitude: Math.round(latitude * 1e6) / 1e6, longitude: Math.round(longitude * 1e6) / 1e6 };
+  }
+  try {
+    await ctx.repo.setLocationCoords(ctx.business.id, id, coords, ctx.staff.id);
+  } catch (e) {
+    return { ok: false, error: repoMessage(e, 'No pudimos guardar la ubicación. Inténtalo de nuevo.') };
+  }
+  revalidatePath('/panel/ajustes');
+  return { ok: true, message: coords ? 'Ubicación guardada.' : 'Ubicación quitada.' };
 }

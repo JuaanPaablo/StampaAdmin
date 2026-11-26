@@ -29,6 +29,16 @@ import {
 } from '../domain/admin-insights';
 import { normalizeEcPhone } from '../phone';
 import { buildPlatformDemo } from '../seed-platform';
+import { buildWalletSeed } from '../seed-wallet';
+import type {
+  CustomerOffer, CustomerOfferWithOffer, GiftCard, GiftCardMovement, GiftCardMovementKind, NewWalletNotification, Offer, OfferStats
+} from '../contracts';
+import {
+  campaignLimitError, campaignMonthStartIso, campaignsRemaining, cleanGiftCardNote, cleanOfferInput, customerOfferRedeemError,
+  APPLE_MAX_REGISTRATIONS_PER_PASS, cleanRequestId, formatCents, REQUEST_ID_REUSED, generateGiftCardCode, GIFT_CARD_MAX_CENTS, liveCustomerOffers, maskGiftCardCode, normalizeGiftCardCode,
+  validateCoords, validateGiftCardCharge, validateGiftCardLoad, validateOffer, WALLET_MANAGER_ONLY, walletFeatureError,
+  type WalletFeature
+} from '../domain/wallet-cards';
 import { INVITE_TTL_HOURS, RESET_TTL_MINUTES } from '../contracts';
 import { generateOtp, generateToken, hashOtp, hashToken, isTokenShape } from '../tokens';
 import {
@@ -117,6 +127,16 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
   const adminActions: ActionRec[] = [];
   const phones = new Map<string, string>();
 
+  /* ---------- Cupones, gift cards, avisos y Apple (0010) ---------- */
+  const offers: Offer[] = [];
+  const customerOffers: CustomerOffer[] = [];
+  const giftCards: GiftCard[] = [];
+  const giftMovements: GiftCardMovement[] = [];
+  const walletNotifications: (NewWalletNotification & { createdAt: string })[] = [];
+  /** device_library_id -> push token */
+  const appleDevices = new Map<string, string>();
+  const appleRegs: { deviceLibraryId: string; passTypeId: string; serial: string; updatedAt: string }[] = [];
+
   if (opts.seed !== false) {
     const seed = buildSeed(clock());
     businesses.push(...seed.businesses);
@@ -129,6 +149,9 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
     redemptions.push(...seed.redemptions);
     audit.push(...seed.audit);
     rejections.push(...seed.rejections);
+    const w = buildWalletSeed(clock(), { locations, customers, staff });
+    for (const l of locations) { const c = w.coords[l.id]; if (c) Object.assign(l, c); }
+    offers.push(...w.offers); customerOffers.push(...w.customerOffers); giftCards.push(...w.giftCards); giftMovements.push(...w.movements);
     // Cuenta de administrador de ejemplo (solo repo en memoria): administrador@stampa.com / Stampa-Demo-2026
     admins.push({ id: 'adm_demo', email: 'administrador@stampa.com', passwordHash: demoPasswordHash, failedLogins: 0, createdAt: new Date(clock()).toISOString() });
 
@@ -186,6 +209,50 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
   /** PIN de un dueño o gerente activo del negocio. Devuelve su id. */
   const findApprover = (businessId: string, pin: string): string | undefined =>
     bizStaff(businessId).find((s) => s.active && (s.role === 'owner' || s.role === 'manager') && checkPin(pin, s.pinHash))?.id;
+
+  /* ---------- Auxiliares de cupones y gift cards ---------- */
+  /** Persona activa del negocio; manage = solo dueño o gerente. */
+  const member = (businessId: string, staffId: string, manage = false): StaffRec => {
+    const s = staff.find((x) => x.id === staffId && x.businessId === businessId && x.active) ?? fail('Esta persona no está activa en este negocio.');
+    if (manage && s.role === 'cashier') fail(WALLET_MANAGER_ONLY);
+    return s;
+  };
+  const needFeature = (businessId: string, f: WalletFeature) => { const e = walletFeatureError(biz(businessId).plan, f); if (e) fail(e); };
+  const liveLocId = (businessId: string, locationId?: string): string | undefined =>
+    locationId ? (liveLocs(businessId).find((l) => l.id === locationId)?.id ?? fail('No encontramos esa sucursal.')) : undefined;
+  const findOffer = (businessId: string, id: string) => offers.find((o) => o.id === id && o.businessId === businessId);
+  const findGift = (businessId: string, id: string) => giftCards.find((g) => g.id === id && g.businessId === businessId) ?? fail('No encontramos esa gift card.');
+  const withOffer = (co: CustomerOffer): CustomerOfferWithOffer => ({ ...clone(co), offer: clone(offers.find((o) => o.id === co.offerId)!) });
+  /** Igual que gift_card_apply en SQL: el único lugar donde cambia el saldo. delta con signo (void lo calcula). */
+  /** Idempotencia: movimiento ya hecho con ese requestId (mismo negocio). Otra tarjeta u otra operación → error. */
+  const replayGift = (businessId: string, requestId: string | undefined, giftCardId: string | null, kind: GiftCardMovementKind) => {
+    if (!requestId) return null;
+    const mv = giftMovements.find((m) => m.businessId === businessId && m.requestId === requestId);
+    if (!mv) return null;
+    if ((giftCardId && mv.giftCardId !== giftCardId) || mv.kind !== kind) fail(REQUEST_ID_REUSED);
+    const g = giftCards.find((x) => x.id === mv.giftCardId)!;
+    return { giftCard: clone(g), movement: clone(mv) };
+  };
+
+  const applyGift = (g: GiftCard, kind: GiftCardMovementKind, delta: number, staffId: string, locationId: string | undefined, note: string | undefined, audit: string, requestId?: string) => {
+    if (g.status !== 'active') fail('Esta gift card está anulada.');
+    if (kind === 'void') delta = -g.balanceCents;
+    const next = g.balanceCents + delta;
+    if (next < 0) fail(`Saldo insuficiente: quedan ${formatCents(g.balanceCents)}.`);
+    if (next > GIFT_CARD_MAX_CENTS) fail(`El saldo máximo es ${formatCents(GIFT_CARD_MAX_CENTS)}.`);
+    g.balanceCents = next;
+    if (kind === 'void') g.status = 'void';
+    const mv: GiftCardMovement = {
+      id: newId('gmv', g.businessId), giftCardId: g.id, businessId: g.businessId, kind, amountCents: delta, balanceAfterCents: next,
+      staffId, createdAt: nowIso()
+    };
+    if (locationId) mv.locationId = locationId;
+    if (note) mv.note = note;
+    if (requestId) mv.requestId = requestId;
+    giftMovements.push(mv);
+    log(g.businessId, staffId, `gift.${kind}`, audit);
+    return { giftCard: clone(g), movement: clone(mv) };
+  };
 
   const repo: Repo = {
     /* ---------- Negocios ---------- */
@@ -1066,6 +1133,278 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
       if (!r.ok) return fail(r.error);
       phones.set(businessId, r.phone);
       return r.phone;
+    },
+
+    /* ---------- Cupones, gift cards, avisos y Apple (0010) ---------- */
+    async setLocationCoords(businessId, locationId, coords, actorId) {
+      const loc = liveLocs(businessId).find((l) => l.id === locationId) ?? fail('No encontramos esa sucursal.');
+      if (coords) {
+        const e = validateCoords(coords.latitude, coords.longitude);
+        if (e) fail(e);
+        loc.latitude = coords.latitude; loc.longitude = coords.longitude;
+      } else { delete loc.latitude; delete loc.longitude; }
+      log(businessId, actorId, 'location.coords', coords ? `Se ubicó la sucursal ${loc.name} en el mapa.` : `Se quitó la ubicación de la sucursal ${loc.name}.`);
+      return clone(loc);
+    },
+
+    async listOffers(businessId) {
+      return clone(offers.filter((o) => o.businessId === businessId).sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id)));
+    },
+
+    async getOffer(businessId, id) { const o = findOffer(businessId, id); return o ? clone(o) : null; },
+
+    async createOffer(businessId, input, staffId) {
+      needFeature(businessId, 'offers');
+      member(businessId, staffId, true);
+      const clean = cleanOfferInput(input);
+      const err = validateOffer(clean, clock());
+      if (err) fail(err.error);
+      const o: Offer = { id: newId('ofr', businessId), businessId, ...clean, status: 'draft', createdBy: staffId, createdAt: nowIso() };
+      if (!o.terms) delete o.terms;
+      if (!o.imageUrl) delete o.imageUrl;
+      offers.push(o);
+      log(businessId, staffId, 'offer.create', `Cupón "${o.title}" creado.`);
+      return clone(o);
+    },
+
+    async updateOffer(businessId, id, patch, staffId) {
+      needFeature(businessId, 'offers');
+      member(businessId, staffId, true);
+      const o = findOffer(businessId, id) ?? fail('No encontramos ese cupón.');
+      if (o.status !== 'draft') fail('Solo puedes editar cupones que aún no se enviaron.');
+      const clean = cleanOfferInput({ ...o, ...patch });
+      const err = validateOffer(clean, clock());
+      if (err) fail(err.error);
+      Object.assign(o, clean);
+      if (!o.terms) delete o.terms;
+      if (!o.imageUrl) delete o.imageUrl;
+      log(businessId, staffId, 'offer.update', `Cupón "${o.title}" editado.`);
+      return clone(o);
+    },
+
+    async sendOffer(businessId, id, staffId) {
+      needFeature(businessId, 'offers');
+      member(businessId, staffId, true);
+      const o = findOffer(businessId, id) ?? fail('No encontramos ese cupón.');
+      if (o.status === 'sent') fail('Ese cupón ya se envió.');
+      if (o.status === 'ended') fail('Ese cupón ya terminó.');
+      if (Date.parse(o.endsAt) <= clock()) fail('La fecha final ya pasó. Cambia las fechas antes de enviarlo.');
+      const plan = biz(businessId).plan;
+      if (campaignsRemaining(plan, await repo.countCampaignsThisMonth(businessId)) <= 0) fail(campaignLimitError(plan));
+      const at = nowIso();
+      const have = new Set(customerOffers.filter((co) => co.offerId === o.id).map((co) => co.customerId));
+      const customerIds: string[] = [];
+      for (const c of customers) {
+        if (c.businessId !== businessId || have.has(c.id)) continue;
+        customerOffers.push({ id: newId('cof', businessId), offerId: o.id, businessId, customerId: c.id, createdAt: at });
+        customerIds.push(c.id);
+      }
+      o.status = 'sent'; o.sentAt = at;
+      log(businessId, staffId, 'offer.send', `Cupón "${o.title}" enviado a ${customerIds.length} ${customerIds.length === 1 ? 'cliente' : 'clientes'}.`);
+      return { offer: clone(o), customerIds };
+    },
+
+    async endOffer(businessId, id, staffId) {
+      member(businessId, staffId, true);
+      const o = findOffer(businessId, id) ?? fail('No encontramos ese cupón.');
+      if (o.status !== 'ended') {
+        o.status = 'ended';
+        log(businessId, staffId, 'offer.end', `Cupón "${o.title}" terminado.`);
+      }
+      return clone(o);
+    },
+
+    async offerStats(businessId, offerId) {
+      const out: Record<string, OfferStats> = {};
+      for (const o of offers) if (o.businessId === businessId && (!offerId || o.id === offerId)) out[o.id] = { offerId: o.id, sent: 0, redeemed: 0, rate: 0 };
+      for (const co of customerOffers) {
+        const st = co.businessId === businessId ? out[co.offerId] : undefined;
+        if (!st) continue;
+        st.sent++;
+        if (co.redeemedAt) st.redeemed++;
+      }
+      for (const st of Object.values(out)) st.rate = st.sent ? st.redeemed / st.sent : 0;
+      return out;
+    },
+
+    async findCustomerOffer(businessId, id) {
+      const co = customerOffers.find((x) => x.id === (id ?? '').trim() && x.businessId === businessId);
+      if (!co) return null;
+      return { ...withOffer(co), customerName: findCustomer(businessId, co.customerId)?.name ?? 'Cliente' };
+    },
+
+    async redeemCustomerOffer(businessId, customerOfferId, staffId, locationId) {
+      member(businessId, staffId);
+      const co = customerOffers.find((x) => x.id === customerOfferId && x.businessId === businessId) ?? fail('No encontramos ese cupón.');
+      const o = offers.find((x) => x.id === co.offerId)!;
+      const err = customerOfferRedeemError(co, o, clock());
+      if (err) fail(err);
+      const loc = liveLocId(businessId, locationId);
+      co.redeemedAt = nowIso(); co.redeemedBy = staffId;
+      if (loc) co.redeemedLocationId = loc;
+      log(businessId, staffId, 'offer.redeem', `Cupón canjeado a ${findCustomer(businessId, co.customerId)?.name ?? 'un cliente'}: ${o.title}.`);
+      return withOffer(co);
+    },
+
+    async listGiftCards(businessId, q) {
+      return clone(giftCards
+        .filter((g) => g.businessId === businessId && (!q?.customerId || g.customerId === q.customerId) && (!q?.status || g.status === q.status))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id)));
+    },
+
+    async getGiftCard(businessId, id) {
+      const g = giftCards.find((x) => x.id === id && x.businessId === businessId);
+      return g ? clone(g) : null;
+    },
+
+    async findGiftCardByCode(businessId, raw) {
+      const code = normalizeGiftCardCode(raw);
+      const g = code ? giftCards.find((x) => x.code === code && x.businessId === businessId) : undefined;
+      return g ? clone(g) : null;
+    },
+
+    async issueGiftCard(businessId, input) {
+      needFeature(businessId, 'giftCards');
+      member(businessId, input.staffId, true);
+      const requestId = cleanRequestId(input.requestId);
+      const again = replayGift(businessId, requestId, null, 'issue');
+      if (again) return again;
+      const e = validateGiftCardLoad(input.amountCents);
+      if (e) fail(e);
+      const customer = input.customerId ? findCustomer(businessId, input.customerId) ?? fail('No encontramos a ese cliente.') : undefined;
+      const loc = liveLocId(businessId, input.locationId);
+      let code = generateGiftCardCode();
+      while (giftCards.some((g) => g.code === code)) code = generateGiftCardCode();
+      const g: GiftCard = {
+        id: newId('gft', businessId), businessId, code, balanceCents: 0, initialCents: input.amountCents, status: 'active',
+        createdAt: nowIso(), createdBy: input.staffId
+      };
+      if (customer) g.customerId = customer.id;
+      giftCards.push(g);
+      return applyGift(g, 'issue', input.amountCents, input.staffId, loc, cleanGiftCardNote(input.note),
+        `Gift card ${maskGiftCardCode(code)} vendida por ${formatCents(input.amountCents)}${customer ? ` a ${customer.name}` : ''}.`, requestId);
+    },
+
+    async topupGiftCard(businessId, giftCardId, amountCents, staffId, o) {
+      needFeature(businessId, 'giftCards');
+      member(businessId, staffId, true);
+      const g = findGift(businessId, giftCardId);
+      const requestId = cleanRequestId(o?.requestId);
+      const again = replayGift(businessId, requestId, g.id, 'topup');
+      if (again) return again;
+      if (g.status !== 'active') fail('Esta gift card está anulada.');
+      const e = validateGiftCardLoad(amountCents, g.balanceCents);
+      if (e) fail(e);
+      return applyGift(g, 'topup', amountCents, staffId, liveLocId(businessId, o?.locationId), cleanGiftCardNote(o?.note),
+        `Recarga de ${formatCents(amountCents)} a la gift card ${maskGiftCardCode(g.code)}.`, requestId);
+    },
+
+    async chargeGiftCard(businessId, giftCardId, amountCents, staffId, o) {
+      member(businessId, staffId);
+      const g = findGift(businessId, giftCardId);
+      const requestId = cleanRequestId(o?.requestId);
+      const again = replayGift(businessId, requestId, g.id, 'charge');
+      if (again) return again;
+      const e = validateGiftCardCharge(amountCents, g);
+      if (e) fail(e);
+      return applyGift(g, 'charge', -amountCents, staffId, liveLocId(businessId, o?.locationId), cleanGiftCardNote(o?.note),
+        `Cobro de ${formatCents(amountCents)} con la gift card ${maskGiftCardCode(g.code)}.`, requestId);
+    },
+
+    async voidGiftCard(businessId, giftCardId, staffId, note, rid) {
+      member(businessId, staffId, true);
+      const g = findGift(businessId, giftCardId);
+      const requestId = cleanRequestId(rid);
+      const again = replayGift(businessId, requestId, g.id, 'void');
+      if (again) return again;
+      return applyGift(g, 'void', 0, staffId, undefined, cleanGiftCardNote(note),
+        `Se anuló la gift card ${maskGiftCardCode(g.code)} (saldo ${formatCents(g.balanceCents)}).`, requestId);
+    },
+
+    async findGiftCardResultByRequest(businessId, rid) {
+      const requestId = cleanRequestId(rid);
+      const mv = requestId ? giftMovements.find((m) => m.businessId === businessId && m.requestId === requestId) : undefined;
+      const g = mv ? giftCards.find((x) => x.id === mv.giftCardId) : undefined;
+      return mv && g ? { giftCard: clone(g), movement: clone(mv) } : null;
+    },
+
+    async listGiftCardMovements(businessId, giftCardId, limit = 100) {
+      return clone(giftMovements
+        .filter((m) => m.businessId === businessId && m.giftCardId === giftCardId)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
+        .slice(0, limit));
+    },
+
+    async countWalletNotifications(businessId, customerId, sinceIso) {
+      return walletNotifications.filter((n) => n.businessId === businessId && n.customerId === customerId && n.createdAt >= sinceIso).length;
+    },
+
+    async hasWalletNotification(businessId, customerId, kind) {
+      const k = String(kind).slice(0, 40);
+      return walletNotifications.some((n) => n.businessId === businessId && n.customerId === customerId && n.kind === k);
+    },
+
+    async listCustomerOfferPage(businessId, offerId, opts) {
+      const all = customerOffers
+        .filter((co) => co.businessId === businessId && co.offerId === offerId && (!opts.unredeemedOnly || !co.redeemedAt))
+        .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+      const after = opts.afterId;
+      const limit = Math.max(1, Math.min(100, opts.limit));
+      const items = all.filter((co) => !after || co.id > after).slice(0, limit).map((co) => ({ id: co.id, customerId: co.customerId }));
+      return { items, total: all.length };
+    },
+
+    async logWalletNotification(n) {
+      walletNotifications.push({ businessId: n.businessId, customerId: n.customerId, platform: n.platform, kind: String(n.kind).slice(0, 40), createdAt: nowIso() });
+    },
+
+    async countCampaignsThisMonth(businessId, now) {
+      const since = campaignMonthStartIso(now ? now.getTime() : clock());
+      return offers.filter((o) => o.businessId === businessId && !!o.sentAt && o.sentAt >= since).length;
+    },
+
+    async appleRegister(reg) {
+      appleDevices.set(reg.deviceLibraryId, reg.pushToken);
+      const existing = appleRegs.find((r) => r.deviceLibraryId === reg.deviceLibraryId && r.passTypeId === reg.passTypeId && r.serial === reg.serial);
+      if (existing) return { created: false };
+      // Tope por pase: se borran los registros más antiguos (el arreglo está en orden de llegada).
+      const same = appleRegs.filter((r) => r.passTypeId === reg.passTypeId && r.serial === reg.serial);
+      while (same.length >= APPLE_MAX_REGISTRATIONS_PER_PASS) {
+        const old = same.shift()!;
+        appleRegs.splice(appleRegs.indexOf(old), 1);
+        if (!appleRegs.some((r) => r.deviceLibraryId === old.deviceLibraryId)) appleDevices.delete(old.deviceLibraryId);
+      }
+      appleRegs.push({ deviceLibraryId: reg.deviceLibraryId, passTypeId: reg.passTypeId, serial: reg.serial, updatedAt: nowIso() });
+      return { created: true };
+    },
+
+    async appleUnregister(deviceLibraryId, passTypeId, serial) {
+      const i = appleRegs.findIndex((r) => r.deviceLibraryId === deviceLibraryId && r.passTypeId === passTypeId && r.serial === serial);
+      if (i >= 0) appleRegs.splice(i, 1);
+      if (!appleRegs.some((r) => r.deviceLibraryId === deviceLibraryId)) appleDevices.delete(deviceLibraryId);
+    },
+
+    async appleSerialsForDevice(deviceLibraryId, passTypeId, updatedSinceIso) {
+      const since = updatedSinceIso && Number.isFinite(Date.parse(updatedSinceIso)) ? Date.parse(updatedSinceIso) : -Infinity;
+      const regs = appleRegs.filter((r) => r.deviceLibraryId === deviceLibraryId && r.passTypeId === passTypeId && Date.parse(r.updatedAt) > since);
+      const last = regs.reduce((mx, r) => Math.max(mx, Date.parse(r.updatedAt)), -Infinity);
+      return { serials: regs.map((r) => r.serial), lastUpdated: Number.isFinite(last) ? new Date(last).toISOString() : null };
+    },
+
+    async applePushTokensForSerial(passTypeId, serial) {
+      const ids = new Set(appleRegs.filter((r) => r.passTypeId === passTypeId && r.serial === serial).map((r) => r.deviceLibraryId));
+      return [...ids].map((d) => appleDevices.get(d)).filter((t): t is string => !!t);
+    },
+
+    async appleUnregisterToken(pushToken) {
+      const gone = new Set([...appleDevices].filter(([, t]) => t === pushToken).map(([d]) => d));
+      for (const d of gone) appleDevices.delete(d);
+      for (let i = appleRegs.length - 1; i >= 0; i--) if (gone.has(appleRegs[i].deviceLibraryId)) appleRegs.splice(i, 1);
+    },
+
+    async appleMarkUpdated(passTypeId, serial) {
+      const at = nowIso();
+      for (const r of appleRegs) if (r.passTypeId === passTypeId && r.serial === serial) r.updatedAt = at;
     }
   };
 
@@ -1145,7 +1484,14 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
     for (const code of bizCodes(b.id)) for (const cl of code.claims) if (cl.customerId === c.id && !cl.voidedAt) recent.push({ at: cl.at, kind: 'stamp' });
     for (const r of redemptions) if (r.businessId === b.id && r.customerId === c.id) recent.push({ at: r.at, kind: 'redeem', ...(r.milestone != null ? { milestone: r.milestone } : {}), ...(r.rewardTitle ? { title: r.rewardTitle } : {}) });
     recent.sort((x, y) => Date.parse(y.at) - Date.parse(x.at));
-    return { business: clone(b), program: clone(prog(b.id)), customer: clone(c), recent: recent.slice(0, 10) };
+    const locs = liveLocs(b.id).filter((l) => l.active && Number.isFinite(l.latitude) && Number.isFinite(l.longitude)).slice(0, 10);
+    const offs = liveCustomerOffers(customerOffers.filter((co) => co.businessId === b.id && co.customerId === c.id).map(withOffer), clock());
+    const gifts = giftCards.filter((g) => g.businessId === b.id && g.customerId === c.id && g.status === 'active')
+      .sort((x, y) => y.createdAt.localeCompare(x.createdAt));
+    return {
+      business: clone(b), program: clone(prog(b.id)), customer: clone(c), recent: recent.slice(0, 10),
+      locations: clone(locs), offers: offs, giftCards: clone(gifts)
+    };
   }
 
   return repo;

@@ -26,6 +26,13 @@ import {
 } from '../domain/admin-insights';
 import { normalizeEcPhone } from '../phone';
 import { INVITE_TTL_HOURS, RESET_TTL_MINUTES } from '../contracts';
+import type { CustomerOffer, CustomerOfferWithOffer, GiftCard, GiftCardMovement, GiftCardResult, Offer, OfferStats } from '../contracts';
+import {
+  campaignLimitError, campaignMonthStartIso, cleanGiftCardNote, cleanOfferInput, customerOfferRedeemError, formatCents,
+  APPLE_MAX_REGISTRATIONS_PER_PASS, cleanRequestId, REQUEST_ID_REUSED, generateGiftCardCode, liveCustomerOffers, maskGiftCardCode, normalizeGiftCardCode, validateCoords, validateGiftCardCharge,
+  validateGiftCardLoad, validateOffer, WALLET_MANAGER_ONLY, walletFeatureError, type WalletFeature
+} from '../domain/wallet-cards';
+import { features } from '../plans';
 import { generateOtp, generateToken, hashOtp, hashToken, isTokenShape } from '../tokens';
 import {
   OTP_MAX_ATTEMPTS, OTP_MAX_PER_HOUR, OTP_TTL_MINUTES, PLACEHOLDER_BUSINESS_NAME, PLANS, provisionalSlug, validateBirthYear, validateBusinessImage
@@ -97,7 +104,28 @@ export function createSupabaseRepo(): Repo {
     status: r.status ?? 'active', planExpiresAt: effectiveExpiry(iso(r.plan_expires_at), !!r.auto_renew), suspendedAt: iso(r.suspended_at),
     setupCompletedAt: iso(r.setup_completed_at), province: nn(r.province), autoRenew: !!r.auto_renew
   });
-  const toLocation = (r: Row): Location => ({ id: r.id, businessId: r.business_id, name: r.name, address: nn(r.address), active: r.active });
+  const toLocation = (r: Row): Location => ({
+    id: r.id, businessId: r.business_id, name: r.name, address: nn(r.address), active: r.active,
+    ...(r.latitude != null && r.longitude != null ? { latitude: Number(r.latitude), longitude: Number(r.longitude) } : {})
+  });
+  const toOffer = (r: Row): Offer => ({
+    id: r.id, businessId: r.business_id, title: r.title, description: r.description, terms: nn(r.terms), imageUrl: nn(r.image_url),
+    startsAt: iso(r.starts_at)!, endsAt: iso(r.ends_at)!, status: r.status, sentAt: iso(r.sent_at), createdBy: nn(r.created_by),
+    createdAt: iso(r.created_at)!
+  });
+  const toCustomerOffer = (r: Row): CustomerOffer => ({
+    id: r.id, offerId: r.offer_id, businessId: r.business_id, customerId: r.customer_id, createdAt: iso(r.created_at)!,
+    redeemedAt: iso(r.redeemed_at), redeemedBy: nn(r.redeemed_by), redeemedLocationId: nn(r.redeemed_location_id)
+  });
+  const toGiftCard = (r: Row): GiftCard => ({
+    id: r.id, businessId: r.business_id, customerId: nn(r.customer_id), code: r.code, balanceCents: Number(r.balance_cents),
+    initialCents: Number(r.initial_cents), status: r.status, createdAt: iso(r.created_at)!, createdBy: nn(r.created_by)
+  });
+  const toMovement = (r: Row): GiftCardMovement => ({
+    id: r.id, giftCardId: r.gift_card_id, businessId: r.business_id, kind: r.kind, amountCents: Number(r.amount_cents),
+    balanceAfterCents: Number(r.balance_after_cents), staffId: nn(r.staff_id), locationId: nn(r.location_id), note: nn(r.note),
+    requestId: nn(r.request_id), createdAt: iso(r.created_at)!
+  });
   const toStaff = (r: Row): Staff => ({
     id: r.id, businessId: r.business_id, name: r.name, role: r.role, active: r.active, locationId: nn(r.location_id),
     email: nn(r.email), hasPin: !!r.has_pin, createdAt: iso(r.created_at)!, invitePending: !!r.email && !r.has_password
@@ -307,11 +335,19 @@ export function createSupabaseRepo(): Repo {
 
   /** Tarjeta del cliente: negocio, programa, cliente y sus últimos 10 movimientos (sellos no anulados y canjes). */
   async function cardOf(business: Business, customer: Customer): Promise<CustomerCard> {
-    const [program, claims, reds] = await Promise.all([
+    const [program, claims, reds, locs, cos, gifts] = await Promise.all([
       getProg(business.id),
       db.from('stamp_claims').select('at').eq('business_id', business.id).eq('customer_id', customer.id).is('voided_at', null).order('at', { ascending: false }).limit(10),
-      db.from('redemptions').select('at, milestone, reward_title').eq('business_id', business.id).eq('customer_id', customer.id).order('at', { ascending: false }).limit(10)
+      db.from('redemptions').select('at, milestone, reward_title').eq('business_id', business.id).eq('customer_id', customer.id).order('at', { ascending: false }).limit(10),
+      db.from('locations').select('*').eq('business_id', business.id).is('deleted_at', null).eq('active', true)
+        .not('latitude', 'is', null).not('longitude', 'is', null).order('created_at').order('id').limit(10),
+      db.from('customer_offers').select('*, offers!inner(*)').eq('business_id', business.id).eq('customer_id', customer.id)
+        .is('redeemed_at', null).eq('offers.status', 'sent').gte('offers.ends_at', new Date().toISOString())
+        .order('created_at', { ascending: false }).limit(200),
+      db.from('gift_cards').select('*').eq('business_id', business.id).eq('customer_id', customer.id).eq('status', 'active')
+        .order('created_at', { ascending: false }).limit(50)
     ]);
+    const offers = liveCustomerOffers((must(cos, 'Cupones') as Row[]).map((r) => ({ ...toCustomerOffer(r), offer: toOffer(r.offers) })));
     const recent: CustomerCard['recent'] = [
       ...(must(claims, 'Sellos') as Row[]).map((r) => ({ at: iso(r.at)!, kind: 'stamp' as const })),
       ...(must(reds, 'Canjes') as Row[]).map((r) => ({
@@ -319,8 +355,71 @@ export function createSupabaseRepo(): Repo {
         ...(r.milestone != null ? { milestone: Number(r.milestone) } : {}), ...(r.reward_title ? { title: String(r.reward_title) } : {})
       }))
     ].sort((x, y) => Date.parse(y.at) - Date.parse(x.at)).slice(0, 10);
-    return { business, program, customer, recent };
+    return {
+      business, program, customer, recent,
+      locations: (must(locs, 'Sucursales') as Row[]).map(toLocation), offers, giftCards: (must(gifts, 'Gift cards') as Row[]).map(toGiftCard)
+    };
   }
+
+  /* ---------- Auxiliares de cupones y gift cards (0010) ---------- */
+
+  /** Persona activa del negocio; manage = solo dueño o gerente. */
+  async function member(businessId: string, staffId: string, manage = false): Promise<Row> {
+    const s = must(await db.from('staff').select('id,role,active').eq('business_id', businessId).eq('id', staffId).maybeSingle(), 'Equipo') as Row | null;
+    if (!s || !s.active) return fail('Esta persona no está activa en este negocio.');
+    if (manage && s.role === 'cashier') fail(WALLET_MANAGER_ONLY);
+    return s;
+  }
+  async function needFeature(businessId: string, f: WalletFeature): Promise<Business> {
+    const b = await getBiz(businessId);
+    const e = walletFeatureError(b.plan, f);
+    if (e) fail(e);
+    return b;
+  }
+  async function liveLocId(businessId: string, locationId?: string): Promise<string | null> {
+    if (!locationId) return null;
+    const row = must(await db.from('locations').select('id').eq('business_id', businessId).eq('id', locationId).is('deleted_at', null).maybeSingle(), 'Sucursal');
+    return row ? (row as Row).id : fail('No encontramos esa sucursal.');
+  }
+  async function offerRow(businessId: string, id: string): Promise<Row | null> {
+    return must(await db.from('offers').select('*').eq('business_id', businessId).eq('id', id).maybeSingle(), 'Cupón') as Row | null;
+  }
+  async function giftRow(businessId: string, id: string): Promise<GiftCard> {
+    const row = must(await db.from('gift_cards').select('*').eq('business_id', businessId).eq('id', id).maybeSingle(), 'Gift card') as Row | null;
+    return row ? toGiftCard(row) : fail('No encontramos esa gift card.');
+  }
+  /**
+   * Idempotencia (atajo antes de validar): movimiento ya hecho con ese requestId. La garantía real está en SQL
+   * (gift_card_apply / gift_card_issue revisan el requestId con la fila bloqueada + índice único).
+   */
+  async function replayGift(businessId: string, requestId: string | undefined, giftCardId: string | null, kind: GiftCardMovement['kind']): Promise<GiftCardResult | null> {
+    if (!requestId) return null;
+    const mv = must(await db.from('gift_card_movements').select('*').eq('business_id', businessId).eq('request_id', requestId).maybeSingle(), 'Movimiento') as Row | null;
+    if (!mv) return null;
+    if ((giftCardId && mv.gift_card_id !== giftCardId) || mv.kind !== kind) fail(REQUEST_ID_REUSED);
+    return { giftCard: await giftRow(businessId, mv.gift_card_id), movement: toMovement(mv) };
+  }
+  /** Único camino para cambiar un saldo: la función atómica gift_card_apply. */
+  async function applyGift(
+    businessId: string, giftCardId: string, kind: GiftCardMovement['kind'], amountCents: number, staffId: string,
+    locationId: string | null, note: string | undefined, audit: string, requestId?: string
+  ): Promise<GiftCardResult> {
+    const r = await rpcOrThrow('gift_card_apply', {
+      p_business_id: businessId, p_gift_card_id: giftCardId, p_kind: kind, p_amount_cents: amountCents, p_staff_id: staffId,
+      p_location_id: locationId, p_note: note ?? null, p_audit_detail: audit, p_request_id: requestId ?? null
+    });
+    return giftResult(businessId, giftCardId, r.movement_id);
+  }
+  async function giftResult(businessId: string, giftCardId: string, movementId: string): Promise<GiftCardResult> {
+    const [g, m] = await Promise.all([
+      giftRow(businessId, giftCardId),
+      db.from('gift_card_movements').select('*').eq('business_id', businessId).eq('id', movementId).single()
+    ]);
+    return { giftCard: g, movement: toMovement(must(m, 'Movimiento')) };
+  }
+  const offerPatchRow = (o: ReturnType<typeof cleanOfferInput>): Row => ({
+    title: o.title, description: o.description, terms: o.terms ?? null, image_url: o.imageUrl ?? null, starts_at: o.startsAt, ends_at: o.endsAt
+  });
 
   /* ---------- Implementación ---------- */
 
@@ -1139,6 +1238,313 @@ export function createSupabaseRepo(): Repo {
       const rows = must(await db.from('businesses').update({ owner_phone: value }).eq('id', businessId).select('id'), 'Negocio') as Row[];
       if (!rows.length) fail('No encontramos ese negocio.');
       return value;
+    },
+
+    /* ---------- Cupones, gift cards, avisos y Apple (0010) ---------- */
+    async setLocationCoords(businessId, locationId, coords, actorId) {
+      if (coords) { const e = validateCoords(coords.latitude, coords.longitude); if (e) fail(e); }
+      const rows = must(await db.from('locations')
+        .update({ latitude: coords?.latitude ?? null, longitude: coords?.longitude ?? null })
+        .eq('business_id', businessId).eq('id', locationId).is('deleted_at', null).select('*'), 'Sucursal') as Row[];
+      if (!rows.length) return fail('No encontramos esa sucursal.');
+      const loc = toLocation(rows[0]);
+      await logAudit(businessId, actorId, 'location.coords', coords ? `Se ubicó la sucursal ${loc.name} en el mapa.` : `Se quitó la ubicación de la sucursal ${loc.name}.`);
+      return loc;
+    },
+
+    async listOffers(businessId) {
+      const rows = must(await db.from('offers').select('*').eq('business_id', businessId)
+        .order('created_at', { ascending: false }).order('id', { ascending: false }).limit(500), 'Cupones') as Row[];
+      return rows.map(toOffer);
+    },
+
+    async getOffer(businessId, id) {
+      const row = await offerRow(businessId, id);
+      return row ? toOffer(row) : null;
+    },
+
+    async createOffer(businessId, input, staffId) {
+      await needFeature(businessId, 'offers');
+      await member(businessId, staffId, true);
+      const clean = cleanOfferInput(input);
+      const err = validateOffer(clean, Date.now());
+      if (err) fail(err.error);
+      const row = must(await db.from('offers').insert({ business_id: businessId, ...offerPatchRow(clean), status: 'draft', created_by: staffId }).select('*').single(), 'Cupón') as Row;
+      const o = toOffer(row);
+      await logAudit(businessId, staffId, 'offer.create', `Cupón "${o.title}" creado.`);
+      return o;
+    },
+
+    async updateOffer(businessId, id, patch, staffId) {
+      await needFeature(businessId, 'offers');
+      await member(businessId, staffId, true);
+      const row = await offerRow(businessId, id);
+      if (!row) return fail('No encontramos ese cupón.');
+      const current = toOffer(row);
+      if (current.status !== 'draft') fail('Solo puedes editar cupones que aún no se enviaron.');
+      const clean = cleanOfferInput({ ...current, ...patch });
+      const err = validateOffer(clean, Date.now());
+      if (err) fail(err.error);
+      const rows = must(await db.from('offers').update(offerPatchRow(clean)).eq('business_id', businessId).eq('id', id).eq('status', 'draft').select('*'), 'Cupón') as Row[];
+      if (!rows.length) fail('Solo puedes editar cupones que aún no se enviaron.');
+      const o = toOffer(rows[0]);
+      await logAudit(businessId, staffId, 'offer.update', `Cupón "${o.title}" editado.`);
+      return o;
+    },
+
+    async sendOffer(businessId, id, staffId) {
+      const b = await needFeature(businessId, 'offers');
+      await member(businessId, staffId, true);
+      const r = await rpcOrThrow('offer_send', {
+        p_business_id: businessId, p_offer_id: id, p_staff_id: staffId, p_month_start: campaignMonthStartIso(Date.now()),
+        p_max_campaigns: features(b.plan).pushCampaigns, p_limit_error: campaignLimitError(b.plan)
+      });
+      const offer = toOffer((await offerRow(businessId, id))!);
+      return { offer, customerIds: Array.isArray(r.customer_ids) ? (r.customer_ids as string[]) : [] };
+    },
+
+    async endOffer(businessId, id, staffId) {
+      await member(businessId, staffId, true);
+      const row = await offerRow(businessId, id);
+      if (!row) return fail('No encontramos ese cupón.');
+      if (row.status === 'ended') return toOffer(row);
+      const updated = must(await db.from('offers').update({ status: 'ended' }).eq('business_id', businessId).eq('id', id).select('*').single(), 'Cupón') as Row;
+      await logAudit(businessId, staffId, 'offer.end', `Cupón "${row.title}" terminado.`);
+      return toOffer(updated);
+    },
+
+    async offerStats(businessId, offerId) {
+      const offers = must(await (offerId
+        ? db.from('offers').select('id').eq('business_id', businessId).eq('id', offerId)
+        : db.from('offers').select('id').eq('business_id', businessId)), 'Cupones') as Row[];
+      const out: Record<string, OfferStats> = {};
+      for (const o of offers) out[o.id] = { offerId: o.id, sent: 0, redeemed: 0, rate: 0 };
+      if (!offers.length) return out;
+      const rows = await fetchAll((f, t) => {
+        const q = db.from('customer_offers').select('offer_id,redeemed_at').eq('business_id', businessId);
+        return (offerId ? q.eq('offer_id', offerId) : q).order('id').range(f, t);
+      }, 'Cupones entregados');
+      for (const r of rows) {
+        const st = out[r.offer_id];
+        if (!st) continue;
+        st.sent++;
+        if (r.redeemed_at) st.redeemed++;
+      }
+      for (const st of Object.values(out)) st.rate = st.sent ? st.redeemed / st.sent : 0;
+      return out;
+    },
+
+    async findCustomerOffer(businessId, id) {
+      const key = (id ?? '').trim();
+      if (!key) return null;
+      const row = must(await db.from('customer_offers').select('*, offers!inner(*), customers!inner(name)').eq('business_id', businessId).eq('id', key).maybeSingle(), 'Cupón') as Row | null;
+      if (!row) return null;
+      return { ...toCustomerOffer(row), offer: toOffer(row.offers), customerName: row.customers?.name ?? 'Cliente' };
+    },
+
+    async redeemCustomerOffer(businessId, customerOfferId, staffId, locationId) {
+      await member(businessId, staffId);
+      const found = await repo.findCustomerOffer(businessId, customerOfferId);
+      if (!found) return fail('No encontramos ese cupón.');
+      const err = customerOfferRedeemError(found, found.offer, Date.now());
+      if (err) fail(err);
+      const loc = await liveLocId(businessId, locationId);
+      // Condicional: si otro canje llegó antes, no actualiza ninguna fila.
+      const rows = must(await db.from('customer_offers')
+        .update({ redeemed_at: new Date().toISOString(), redeemed_by: staffId, redeemed_location_id: loc })
+        .eq('business_id', businessId).eq('id', found.id).is('redeemed_at', null).select('*'), 'Cupón') as Row[];
+      if (!rows.length) fail('Este cupón ya se usó.');
+      await logAudit(businessId, staffId, 'offer.redeem', `Cupón canjeado a ${found.customerName}: ${found.offer.title}.`);
+      const out: CustomerOfferWithOffer = { ...toCustomerOffer(rows[0]), offer: found.offer };
+      return out;
+    },
+
+    async listGiftCards(businessId, q) {
+      const rows = await fetchAll((f, t) => {
+        let query = db.from('gift_cards').select('*').eq('business_id', businessId);
+        if (q?.customerId) query = query.eq('customer_id', q.customerId);
+        if (q?.status) query = query.eq('status', q.status);
+        return query.order('created_at', { ascending: false }).order('id', { ascending: false }).range(f, t);
+      }, 'Gift cards');
+      return rows.map(toGiftCard);
+    },
+
+    async getGiftCard(businessId, id) {
+      const row = must(await db.from('gift_cards').select('*').eq('business_id', businessId).eq('id', id).maybeSingle(), 'Gift card') as Row | null;
+      return row ? toGiftCard(row) : null;
+    },
+
+    async findGiftCardByCode(businessId, raw) {
+      const code = normalizeGiftCardCode(raw);
+      if (!code) return null;
+      const row = must(await db.from('gift_cards').select('*').eq('business_id', businessId).eq('code', code).maybeSingle(), 'Gift card') as Row | null;
+      return row ? toGiftCard(row) : null;
+    },
+
+    async issueGiftCard(businessId, input) {
+      await needFeature(businessId, 'giftCards');
+      await member(businessId, input.staffId, true);
+      const requestId = cleanRequestId(input.requestId);
+      const again = await replayGift(businessId, requestId, null, 'issue');
+      if (again) return again;
+      const e = validateGiftCardLoad(input.amountCents);
+      if (e) fail(e);
+      let customerName: string | undefined;
+      if (input.customerId) {
+        const c = must(await db.from('customers').select('name').eq('business_id', businessId).eq('id', input.customerId).maybeSingle(), 'Cliente') as Row | null;
+        if (!c) fail('No encontramos a ese cliente.');
+        customerName = c?.name;
+      }
+      const loc = await liveLocId(businessId, input.locationId);
+      for (let i = 0; i < 5; i++) {
+        const code = generateGiftCardCode();
+        const r = await rpc('gift_card_issue', {
+          p_business_id: businessId, p_code: code, p_customer_id: input.customerId ?? null, p_amount_cents: input.amountCents,
+          p_staff_id: input.staffId, p_location_id: loc, p_note: cleanGiftCardNote(input.note) ?? null,
+          p_audit_detail: `Gift card ${maskGiftCardCode(code)} vendida por ${formatCents(input.amountCents)}${customerName ? ` a ${customerName}` : ''}.`,
+          p_request_id: requestId ?? null
+        });
+        if (r.ok === false && r.code === 'code_taken') continue;
+        if (r.ok === false) fail(r.error ?? 'No se pudo vender la gift card.');
+        return giftResult(businessId, r.gift_card_id, r.movement_id);
+      }
+      return fail('No se pudo generar un código único. Vuelve a intentarlo.');
+    },
+
+    async topupGiftCard(businessId, giftCardId, amountCents, staffId, o) {
+      await needFeature(businessId, 'giftCards');
+      await member(businessId, staffId, true);
+      const g = await giftRow(businessId, giftCardId);
+      const requestId = cleanRequestId(o?.requestId);
+      const again = await replayGift(businessId, requestId, g.id, 'topup');
+      if (again) return again;
+      if (g.status !== 'active') fail('Esta gift card está anulada.');
+      const e = validateGiftCardLoad(amountCents, g.balanceCents);
+      if (e) fail(e);
+      return applyGift(businessId, g.id, 'topup', amountCents, staffId, await liveLocId(businessId, o?.locationId), cleanGiftCardNote(o?.note),
+        `Recarga de ${formatCents(amountCents)} a la gift card ${maskGiftCardCode(g.code)}.`, requestId);
+    },
+
+    async chargeGiftCard(businessId, giftCardId, amountCents, staffId, o) {
+      await member(businessId, staffId);
+      const g = await giftRow(businessId, giftCardId);
+      const requestId = cleanRequestId(o?.requestId);
+      const again = await replayGift(businessId, requestId, g.id, 'charge');
+      if (again) return again;
+      const e = validateGiftCardCharge(amountCents, g);
+      if (e) fail(e);
+      return applyGift(businessId, g.id, 'charge', -amountCents, staffId, await liveLocId(businessId, o?.locationId), cleanGiftCardNote(o?.note),
+        `Cobro de ${formatCents(amountCents)} con la gift card ${maskGiftCardCode(g.code)}.`, requestId);
+    },
+
+    async voidGiftCard(businessId, giftCardId, staffId, note, rid) {
+      await member(businessId, staffId, true);
+      const g = await giftRow(businessId, giftCardId);
+      const requestId = cleanRequestId(rid);
+      const again = await replayGift(businessId, requestId, g.id, 'void');
+      if (again) return again;
+      if (g.status !== 'active') fail('Esta gift card está anulada.');
+      return applyGift(businessId, g.id, 'void', 0, staffId, null, cleanGiftCardNote(note),
+        `Se anuló la gift card ${maskGiftCardCode(g.code)} (saldo ${formatCents(g.balanceCents)}).`, requestId);
+    },
+
+    async findGiftCardResultByRequest(businessId, rid) {
+      const requestId = cleanRequestId(rid);
+      if (!requestId) return null;
+      const mv = must(await db.from('gift_card_movements').select('*').eq('business_id', businessId).eq('request_id', requestId).maybeSingle(), 'Movimiento') as Row | null;
+      return mv ? { giftCard: await giftRow(businessId, mv.gift_card_id), movement: toMovement(mv) } : null;
+    },
+
+    async listGiftCardMovements(businessId, giftCardId, limit = 100) {
+      const rows = must(await db.from('gift_card_movements').select('*').eq('business_id', businessId).eq('gift_card_id', giftCardId)
+        .order('created_at', { ascending: false }).order('id', { ascending: false }).limit(limit), 'Movimientos') as Row[];
+      return rows.map(toMovement);
+    },
+
+    async countWalletNotifications(businessId, customerId, sinceIso) {
+      const { count, error } = await db.from('wallet_notifications').select('id', { count: 'exact', head: true })
+        .eq('business_id', businessId).eq('customer_id', customerId).gte('created_at', sinceIso);
+      if (error) throw new Error(`Avisos: ${error.message}`);
+      return count ?? 0;
+    },
+
+    async hasWalletNotification(businessId, customerId, kind) {
+      const rows = must(await db.from('wallet_notifications').select('id').eq('business_id', businessId).eq('customer_id', customerId)
+        .eq('kind', String(kind).slice(0, 40)).limit(1), 'Avisos') as Row[];
+      return rows.length > 0;
+    },
+
+    async listCustomerOfferPage(businessId, offerId, opts) {
+      const limit = Math.max(1, Math.min(100, opts.limit));
+      let q = db.from('customer_offers').select('id,customer_id', { count: 'exact' }).eq('business_id', businessId).eq('offer_id', offerId);
+      if (opts.unredeemedOnly) q = q.is('redeemed_at', null);
+      // total sin el cursor (para el progreso); la página con el cursor.
+      let page = db.from('customer_offers').select('id,customer_id').eq('business_id', businessId).eq('offer_id', offerId);
+      if (opts.unredeemedOnly) page = page.is('redeemed_at', null);
+      if (opts.afterId) page = page.gt('id', opts.afterId);
+      const [cnt, rows] = await Promise.all([q.limit(1), page.order('id').limit(limit)]);
+      if (cnt.error) throw new Error(`Cupones: ${cnt.error.message}`);
+      const items = (must(rows, 'Cupones') as Row[]).map((r) => ({ id: r.id as string, customerId: r.customer_id as string }));
+      return { items, total: cnt.count ?? items.length };
+    },
+
+    async logWalletNotification(n) {
+      must(await db.from('wallet_notifications').insert({
+        business_id: n.businessId, customer_id: n.customerId, platform: n.platform, kind: String(n.kind).slice(0, 40) || 'aviso'
+      }), 'Avisos');
+    },
+
+    async countCampaignsThisMonth(businessId, now) {
+      const { count, error } = await db.from('offers').select('id', { count: 'exact', head: true })
+        .eq('business_id', businessId).gte('sent_at', campaignMonthStartIso(now ? now.getTime() : Date.now()));
+      if (error) throw new Error(`Campañas: ${error.message}`);
+      return count ?? 0;
+    },
+
+    async appleRegister(reg) {
+      const at = new Date().toISOString();
+      must(await db.from('apple_devices').upsert({ device_library_id: reg.deviceLibraryId, push_token: reg.pushToken, updated_at: at }), 'Dispositivo');
+      // updated_at en milisegundos (como appleMarkUpdated): lastUpdated vuelve como passesUpdatedSince y, con los
+      // microsegundos de now(), `updated_at > tag` devolvería otra vez el mismo serial.
+      const res = await db.from('apple_registrations').insert({ device_library_id: reg.deviceLibraryId, pass_type_id: reg.passTypeId, serial: reg.serial, updated_at: at, created_at: at });
+      if (res.error?.code === '23505') return { created: false };   // ya estaba registrado
+      must(res, 'Registro');
+      // Tope por pase: si quedaron más de APPLE_MAX_REGISTRATIONS_PER_PASS, se borran los más antiguos (no el nuevo).
+      const regs = must(await db.from('apple_registrations').select('device_library_id,created_at').eq('pass_type_id', reg.passTypeId).eq('serial', reg.serial)
+        .order('created_at', { ascending: false }).order('device_library_id').limit(200), 'Registros') as Row[];
+      const extra = regs.filter((r) => r.device_library_id !== reg.deviceLibraryId).slice(APPLE_MAX_REGISTRATIONS_PER_PASS - 1);
+      for (const r of extra) await repo.appleUnregister(r.device_library_id, reg.passTypeId, reg.serial);
+      return { created: true };
+    },
+
+    async appleUnregister(deviceLibraryId, passTypeId, serial) {
+      must(await db.from('apple_registrations').delete().eq('device_library_id', deviceLibraryId).eq('pass_type_id', passTypeId).eq('serial', serial), 'Registro');
+      const { count, error } = await db.from('apple_registrations').select('serial', { count: 'exact', head: true }).eq('device_library_id', deviceLibraryId);
+      if (error) throw new Error(`Registros: ${error.message}`);
+      if (count === 0) must(await db.from('apple_devices').delete().eq('device_library_id', deviceLibraryId), 'Dispositivo');
+    },
+
+    async appleSerialsForDevice(deviceLibraryId, passTypeId, updatedSinceIso) {
+      let q = db.from('apple_registrations').select('serial,updated_at').eq('device_library_id', deviceLibraryId).eq('pass_type_id', passTypeId);
+      if (updatedSinceIso && Number.isFinite(Date.parse(updatedSinceIso))) q = q.gt('updated_at', new Date(updatedSinceIso).toISOString());
+      const rows = must(await q.limit(1000), 'Registros') as Row[];
+      const last = rows.reduce((mx, r) => Math.max(mx, Date.parse(r.updated_at)), -Infinity);
+      return { serials: rows.map((r) => r.serial as string), lastUpdated: Number.isFinite(last) ? new Date(last).toISOString() : null };
+    },
+
+    async applePushTokensForSerial(passTypeId, serial) {
+      const rows = must(await db.from('apple_registrations').select('apple_devices(push_token)').eq('pass_type_id', passTypeId).eq('serial', serial).limit(100), 'Registros') as Row[];
+      const tokens = rows.map((r) => (Array.isArray(r.apple_devices) ? r.apple_devices[0]?.push_token : r.apple_devices?.push_token)).filter((t): t is string => !!t);
+      return [...new Set(tokens)];
+    },
+
+    async appleMarkUpdated(passTypeId, serial) {
+      must(await db.from('apple_registrations').update({ updated_at: new Date().toISOString() }).eq('pass_type_id', passTypeId).eq('serial', serial), 'Registros');
+    },
+
+    async appleUnregisterToken(pushToken) {
+      // apple_registrations cae en cascada (FK on delete cascade).
+      must(await db.from('apple_devices').delete().eq('push_token', pushToken), 'Dispositivo');
     }
   };
 

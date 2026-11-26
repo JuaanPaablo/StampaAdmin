@@ -5,7 +5,9 @@ import type {
   AccessTokenInfo, AccessTokenKind, AdminAccount, AdminBusinessRow, BusinessSetupInput, BusinessStatus, CustomerCard,
   IssuedToken, NewBusinessAccessInput, OtpRequestResult, Plan, PlatformSummary, WalletKind,
   MarketingGeneration, MarketingKind, MarketingPhoto, MarketingUsage, NewMarketingGeneration,
-  AdminAction, AdminBusinessDetail, AdminInsights, AdminPayment, NewAdminActionInput, NewPaymentInput
+  AdminAction, AdminBusinessDetail, AdminInsights, AdminPayment, NewAdminActionInput, NewPaymentInput,
+  AppleRegistration, CustomerOfferDetail, CustomerOfferWithOffer, GiftCard, GiftCardMovement, GiftCardResult, GiftCardStatus,
+  GiftCardOpOptions, IssueGiftCardInput, NewOfferInput, NewWalletNotification, Offer, OfferStats
 } from '../contracts';
 import { createMemoryRepo } from './memory';
 import { createSupabaseRepo } from './supabase';
@@ -192,6 +194,97 @@ export interface Repo {
    * No registra la acción: la server action llama a logAdminAction('phone_changed').
    */
   setOwnerPhone(businessId: string, phone: string | null): Promise<string | null>;
+
+  /* ---------- Tarjetas extra en Wallet: cupones, gift cards, cercanía y Apple (0010_wallet_cards.sql, docs/TARJETAS.md) ----------
+   * Reglas comunes:
+   *  - Los errores de reglas de negocio lanzan Error con el mensaje en español listo para mostrar.
+   *  - `staffId` debe ser una persona ACTIVA del negocio. Crear/editar/enviar/terminar cupones y vender/recargar/anular
+   *    gift cards exige dueño o gerente; canjear cupones y cobrar gift cards, cualquier persona del equipo.
+   *  - Crear, enviar, vender y recargar exigen features(plan).offers / .giftCards; canjear, cobrar, anular y terminar
+   *    funcionan aunque el negocio haya bajado de plan (lo ya emitido sigue valiendo).
+   *  - Todo canje y movimiento queda en el registro de actividad (listAudit): offer.create, offer.update, offer.send,
+   *    offer.end, offer.redeem, gift.issue, gift.topup, gift.charge, gift.void, location.coords.
+   */
+
+  /** Coordenadas de una sucursal (null las borra). Valida rangos (lat -90..90, long -180..180). */
+  setLocationCoords(businessId: string, locationId: string, coords: { latitude: number; longitude: number } | null, actorId?: string): Promise<Location>;
+
+  /** Cupones del negocio, el más reciente primero. */
+  listOffers(businessId: string): Promise<Offer[]>;
+  getOffer(businessId: string, id: string): Promise<Offer | null>;
+  /** Crea un cupón en borrador (validateOffer). Exige plan con cupones y dueño o gerente. */
+  createOffer(businessId: string, input: NewOfferInput, staffId: string): Promise<Offer>;
+  /** Edita un borrador (los enviados no se editan). Exige plan con cupones y dueño o gerente. */
+  updateOffer(businessId: string, id: string, patch: Partial<NewOfferInput>, staffId: string): Promise<Offer>;
+  /**
+   * Envía un borrador: crea un cupón para CADA cliente del negocio (sin duplicar) y lo marca 'sent', de forma atómica.
+   * Exige plan con cupones, dueño o gerente, que no haya terminado ya su vigencia y que queden campañas este mes
+   * (features(plan).pushCampaigns menos countCampaignsThisMonth). Devuelve los ids de los clientes que lo recibieron
+   * (Wallet y avisos van después, por tandas: syncOfferBatch). No avisa ni sincroniza Wallet aquí.
+   */
+  sendOffer(businessId: string, id: string, staffId: string): Promise<{ offer: Offer; customerIds: string[] }>;
+  /**
+   * Página de cupones de clientes de una oferta, ordenados por id y después de `afterId` (cursor). `unredeemedOnly`:
+   * solo los sin usar. `total` = todos los que cumplen el filtro (para mostrar el progreso). Lo usa el envío por tandas
+   * de Wallet (syncOfferBatch).
+   */
+  listCustomerOfferPage(businessId: string, offerId: string, opts: { afterId?: string; limit: number; unredeemedOnly?: boolean }): Promise<{ items: { id: string; customerId: string }[]; total: number }>;
+  /** Termina un cupón (borrador o enviado): ya no se muestra ni se canjea. Dueño o gerente; no exige plan. */
+  endOffer(businessId: string, id: string, staffId: string): Promise<Offer>;
+  /** Entregados y canjeados por cupón (todas las ofertas del negocio, o solo `offerId`), por id de oferta. */
+  offerStats(businessId: string, offerId?: string): Promise<Record<string, OfferStats>>;
+  /** Cupón de un cliente por su id (lo que lee Caja del QR), con la oferta y el nombre del cliente, o null. */
+  findCustomerOffer(businessId: string, id: string): Promise<CustomerOfferDetail | null>;
+  /** Canjea un cupón de cliente una sola vez (atómico). Valida vigencia (customerOfferRedeemError). No exige plan. */
+  redeemCustomerOffer(businessId: string, customerOfferId: string, staffId: string, locationId?: string): Promise<CustomerOfferWithOffer>;
+
+  /** Gift cards del negocio, la más reciente primero. Filtros opcionales por cliente y estado. */
+  listGiftCards(businessId: string, opts?: { customerId?: string; status?: GiftCardStatus }): Promise<GiftCard[]>;
+  getGiftCard(businessId: string, id: string): Promise<GiftCard | null>;
+  /** Busca por código (acepta minúsculas, espacios y guiones: normalizeGiftCardCode). null si no es de este negocio. */
+  findGiftCardByCode(businessId: string, code: string): Promise<GiftCard | null>;
+  /** Vende una gift card con código nuevo único. Exige plan Pro (giftCards) y dueño o gerente. */
+  issueGiftCard(businessId: string, input: IssueGiftCardInput): Promise<GiftCardResult>;
+  /** Recarga (suma saldo, tope US$500). Exige plan con gift cards y dueño o gerente. */
+  topupGiftCard(businessId: string, giftCardId: string, amountCents: number, staffId: string, opts?: GiftCardOpOptions): Promise<GiftCardResult>;
+  /** Cobra (resta saldo; nunca queda negativo). Cualquier persona del equipo; no exige plan. */
+  chargeGiftCard(businessId: string, giftCardId: string, amountCents: number, staffId: string, opts?: GiftCardOpOptions): Promise<GiftCardResult>;
+  /** Anula: deja el saldo en 0 y el estado 'void'. Dueño o gerente; no exige plan. */
+  voidGiftCard(businessId: string, giftCardId: string, staffId: string, note?: string, requestId?: string): Promise<GiftCardResult>;
+  /**
+   * Idempotencia de venta, recarga, cobro y anulación: si ya existe un movimiento con ese requestId en el negocio,
+   * devuelve la gift card actual y ese movimiento (la operación ya se hizo); si no, null.
+   * Las cuatro operaciones de arriba hacen lo mismo por dentro: repetir un requestId nunca mueve el saldo dos veces.
+   */
+  findGiftCardResultByRequest(businessId: string, requestId: string): Promise<GiftCardResult | null>;
+  /** Movimientos de una gift card del negocio, el más reciente primero. limit por defecto 100. */
+  listGiftCardMovements(businessId: string, giftCardId: string, limit?: number): Promise<GiftCardMovement[]>;
+
+  /** Avisos enviados a un cliente desde `sinceIso` (todas las plataformas), para el tope de 3 cada 24 h. */
+  /** true si el cliente ya tiene un aviso registrado con ese `kind` (cualquier fecha). Evita repetir "Nuevo cupón". */
+  hasWalletNotification(businessId: string, customerId: string, kind: string): Promise<boolean>;
+  countWalletNotifications(businessId: string, customerId: string, sinceIso: string): Promise<number>;
+  /** Registra un aviso enviado (uno por plataforma que lo aceptó). */
+  logWalletNotification(n: NewWalletNotification): Promise<void>;
+  /** Cupones enviados (sentAt) en el mes calendario actual de Ecuador. `now` por defecto, el reloj del repo. */
+  countCampaignsThisMonth(businessId: string, now?: Date): Promise<number>;
+
+  /* Servicio web de Apple Wallet (sin negocio: el serial identifica el pase) */
+  /** Registra (o actualiza el push token de) un dispositivo para un pase. created = no existía ese registro. */
+  appleRegister(reg: Omit<AppleRegistration, 'updatedAt'>): Promise<{ created: boolean }>;
+  /** Borra el registro de ese dispositivo para ese pase (y el dispositivo si ya no tiene pases). */
+  appleUnregister(deviceLibraryId: string, passTypeId: string, serial: string): Promise<void>;
+  /**
+   * Seriales registrados en el dispositivo cuyo pase cambió después de `updatedSinceIso` (todos si no viene), y la
+   * fecha más reciente (lastUpdated, para el siguiente passesUpdatedSince). serials vacío = responder 204.
+   */
+  appleSerialsForDevice(deviceLibraryId: string, passTypeId: string, updatedSinceIso?: string): Promise<{ serials: string[]; lastUpdated: string | null }>;
+  /** Push tokens de los dispositivos que tienen ese pase (para el push APNs vacío). */
+  applePushTokensForSerial(passTypeId: string, serial: string): Promise<string[]>;
+  /** Marca que el pase cambió (antes del push APNs), para que appleSerialsForDevice lo devuelva. Sin registros no hace nada. */
+  appleMarkUpdated(passTypeId: string, serial: string): Promise<void>;
+  /** APNs dijo que ese push token ya no sirve (410): borra los dispositivos con ese token y sus registros. */
+  appleUnregisterToken(pushToken: string): Promise<void>;
 }
 
 const g = globalThis as unknown as { __stampaRepo?: Repo };

@@ -25,7 +25,7 @@ export interface PassModel {
   readyReward: string | null;
   customerName: string;
   cardUrl: string;
-  /** Hasta 10 sucursales con coordenadas (Apple las usa para avisos en la pantalla bloqueada). */
+  /** Hasta 10 sucursales con coordenadas: Apple `locations` (pantalla bloqueada) y Google `merchantLocations`. */
   locations: PassLocation[];
   terms?: string;
   updatedAt: string;
@@ -132,6 +132,7 @@ export function googleLoyaltyObject(m: PassModel, issuerId: string, classSuffix:
     hexBackgroundColor: m.colors.bg,
     textModulesData: [{ id: 'estado', header: m.programName, body: headline(m) }],
     linksModuleData: { uris: [{ id: 'tarjeta', uri: m.cardUrl, description: 'Abrir mi tarjeta' }] },
-    ...(m.locations.length ? { locations: m.locations.map((l) => ({ latitude: l.latitude, longitude: l.longitude })) } : {})
+    // merchantLocations (máx. 10): el campo `locations` de Google está obsoleto y no dispara avisos de cercanía.
+    ...(m.locations.length ? { merchantLocations: m.locations.slice(0, 10).map((l) => ({ latitude: l.latitude, longitude: l.longitude })) } : {})
   };
 }

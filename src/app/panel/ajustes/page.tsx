@@ -1,4 +1,4 @@
-import { planIncludes, planPrice } from '@/lib/plans';
+import { cheapestWith, features, planIncludes, planPrice } from '@/lib/plans';
 import { getContext } from '@/lib/context';
 import { requireRole } from '@/lib/auth';
 import { BUSINESS_TYPES } from '@/lib/templates';
@@ -13,6 +13,8 @@ import { maxLocations, maxStaff } from '@/lib/plan-rules';
 import { saveLocationAction, updateBusinessAction } from './actions';
 import { DeleteLocation } from './_components/DeleteLocation';
 import { CopyLink } from './_components/CopyLink';
+import { LocationCoords } from './_components/LocationCoords';
+import { PlanLock } from '@/components/shell/PlanLock';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Ajustes · Stampa' };
@@ -38,6 +40,7 @@ export default async function AjustesPage() {
   const limit = maxLocations(business.plan);
   const staffLimit = maxStaff(business.plan);
   const activeTeam = people.filter((p) => p.active && p.role !== 'owner').length;
+  const proximity = features(business.plan).proximity;
 
   return (
     <div className="flex flex-col gap-6">
@@ -66,6 +69,15 @@ export default async function AjustesPage() {
           <h2 className="font-display text-lg font-bold text-navy">Sucursales</h2>
           <Badge tone={locations.length >= limit ? 'warn' : 'info'}>{locations.length} de {limit} en tu plan</Badge>
         </div>
+        <p className="mt-1 text-sm text-muted">
+          Ubica cada sucursal en el mapa: cuando tus {template.vocab.customers} pasen cerca, el celular les recordará tu tarjeta. Incluido desde el plan {PLAN_LABEL[cheapestWith((f) => f.proximity) ?? 'standard']}.
+        </p>
+        {!proximity && locations.length > 0 && (
+          <div className="mt-3">
+            <PlanLock compact plan={cheapestWith((f) => f.proximity) ?? 'standard'} businessName={business.name} title="Avisos por cercanía"
+              text="El celular de tus clientes les recuerda tu tarjeta al pasar cerca de tu local." />
+          </div>
+        )}
 
         {locations.length === 0 ? (
           <p className="mt-4 rounded-xl border border-dashed border-[#C9D6E3] px-4 py-6 text-center text-sm text-muted">Aún no tienes sucursales.</p>
@@ -80,6 +92,12 @@ export default async function AjustesPage() {
                     <FormField name="address" label="Dirección" defaultValue={l.address ?? ''} maxLength={120} autoComplete="street-address" />
                   </div>
                 </ActionForm>
+                {proximity && (
+                  <div className="mt-3 border-t border-line pt-3">
+                    <LocationCoords key={'geo-' + l.id} locationId={l.id} locationName={l.name}
+                      initial={l.latitude !== undefined && l.longitude !== undefined ? { latitude: l.latitude, longitude: l.longitude } : null} />
+                  </div>
+                )}
                 {locations.length > 1 && (
                   <div className="mt-3 border-t border-line pt-3">
                     <DeleteLocation key={'del-' + l.id} id={l.id} name={l.name} staffCount={staffAt(l.id)} />

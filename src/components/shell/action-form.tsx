@@ -3,6 +3,7 @@
 import { createContext, useContext, useId, useRef, useState, useTransition, type FormEvent, type ReactNode } from 'react';
 import { btnClass, inputClass } from '@/components/ui';
 import { cn } from '@/lib/cn';
+import { newRequestId } from '@/lib/request-id';
 
 export interface ActionResult { ok: boolean; error?: string; message?: string; fieldErrors?: Record<string, string> }
 
@@ -12,7 +13,7 @@ const ErrorsCtx = createContext<Record<string, string>>({});
  * Formulario que llama a una server action con FormData y muestra el resultado ({ ok, error, fieldErrors, message }).
  * Los campos se escriben con <FormField/>, que toma sus errores del contexto.
  */
-export function ActionForm({ action, submitLabel, pendingLabel = 'Guardando…', variant = 'primary', size = 'md', className, actionsClassName, children, resetOnSuccess }: {
+export function ActionForm({ action, submitLabel, pendingLabel = 'Guardando…', variant = 'primary', size = 'md', className, actionsClassName, children, resetOnSuccess, idempotent }: {
   action: (fd: FormData) => Promise<ActionResult>;
   submitLabel: string;
   pendingLabel?: string;
@@ -22,17 +23,29 @@ export function ActionForm({ action, submitLabel, pendingLabel = 'Guardando…',
   actionsClassName?: string;
   children?: ReactNode;
   resetOnSuccess?: boolean;
+  /**
+   * Manda un `requestId` (dinero: recargas). Se mantiene en los reintentos tras un error y se cambia tras un éxito,
+   * así un doble envío o un reintento por red no se registra dos veces.
+   */
+  idempotent?: boolean;
 }) {
   const [pending, start] = useTransition();
   const [res, setRes] = useState<ActionResult | null>(null);
   const ref = useRef<HTMLFormElement>(null);
+  const requestId = useRef('');
 
   function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (pending) return;
     const fd = new FormData(e.currentTarget);
+    if (idempotent) {
+      if (!requestId.current) requestId.current = newRequestId();
+      fd.set('requestId', requestId.current);
+    }
     start(async () => {
       const r = await action(fd);
       setRes(r);
+      if (r.ok) requestId.current = '';
       if (r.ok && resetOnSuccess) ref.current?.reset();
     });
   }
