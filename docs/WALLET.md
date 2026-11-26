@@ -26,19 +26,44 @@ Objetivo: cuando el cliente se registra o abre su tarjeta, puede guardarla en Ap
 - **Probado en Android (Preview):** Google acepta el enlace firmado y reconoce el pase. Respondió "este pase solo se
   usa para realizar pruebas", que es la restricción del modo demo, no un fallo del código.
 
-### Falta (en orden)
-Hecho el 2026-11-25: Google aprobó el acceso de publicación; la ficha del cliente guarda `wallet = 'google'` al tocar
-el botón; botón oficial de Google en español (`public/wallet/agregar-a-google-wallet.svg`, es-419, sin modificar);
-logo de respaldo de 660×660 (`public/wallet/logo-660.png`); revisión de seguridad del flujo de guardado.
+### Dónde quedamos (2026-11-25)
+**Hecho hoy** (commit `47cf79c`, ya en stampaecu.app):
+- Google aprobó el acceso de publicación de Wallet (ya no debería salir "[TEST ONLY]").
+- Botón oficial "Agregar a Google Wallet" en español (`public/wallet/agregar-a-google-wallet.svg`, archivo es-419 del
+  zip oficial de Google, sin modificar: Google prohíbe botones propios). Mínimo 48 px de alto y 8 px libres alrededor.
+- Logo de respaldo cuadrado de 660×660 (`public/wallet/logo-660.png`) cuando el negocio no subió logo.
+- La ficha del cliente guarda `customers.wallet = 'google'` al tocar el botón (`repo.setCustomerWallet`, en memory y
+  supabase). Se marca al tocar porque Google no avisa si al final lo guardó.
+- Revisión de seguridad del flujo de guardado: sin hallazgos (el QR solo lleva a la página pública de la tarjeta).
+- `GOOGLE_WALLET_PUBLIC` ya existe en Vercel Production (Sensitive, su valor no se ve). Si el botón no aparece en
+  producción, revisar que valga `on` y volver a desplegar.
 
-1. **Activar en Production:** `GOOGLE_WALLET_PUBLIC=on` en Vercel (Production) y volver a desplegar.
-2. **Probar todo en Android:** guardar el pase, sumar un sello desde Caja y ver que el pase se actualiza solo; canjear
-   y ver que vuelve a empezar.
-3. **Tarjetas según el plan:** portada propia y cupones (Standard/Pro), avisos de campañas y niveles (Pro).
+### Falta (en orden)
+1. **Probar todo en Android:** guardar el pase (confirmar que ya no dice "[TEST ONLY]"), sumar un sello desde Caja y
+   ver que el pase se actualiza solo; canjear y ver que vuelve a empezar; revisar en Panel → Clientes que diga
+   "Tarjeta en el celular: Google Wallet".
+2. **Tarjetas según el plan** (propuesta aceptada; usar `src/lib/plans.ts` como fuente de lo que incluye cada plan):
+
+   | Plan | En Wallet |
+   |---|---|
+   | Básico | Tarjeta de sellos con logo y color (lo que ya existe). |
+   | Standard | + imagen de portada propia (`heroImage` de la clase), + cupones/ofertas (Google `offerClass`/`offerObject`) hasta `pushCampaigns` (2/mes), + aviso por cercanía (`proximity`). |
+   | Pro | + 8 campañas/mes como mensajes al pase (`addMessage` con notificación), + niveles de cliente (Plata/Oro según visitas). |
+
+   Orden sugerido: portada → cupones → mensajes/campañas → niveles.
+3. **Gift cards** (`giftCards` en Standard/Pro): al final, porque manejan saldo en dinero (cobro, cuadre y fraude).
 4. **Cercanía:** latitud y longitud por sucursal (migración + selector de mapa en Ajustes) y pasarlas al pase.
-5. **Apple Wallet:** `.pkpass` firmado y servicio web con APNs (esperando aprobación de Apple Developer).
+5. **Apple Wallet:** `.pkpass` firmado y servicio web con APNs. Esperando que Apple apruebe la cuenta de Apple
+   Developer (enviada el 2026-11-25). Sin Mac: certificados con OpenSSL de Git Bash. Siguiente paso tras la
+   aprobación: crear el Pass Type ID y el certificado (CSR con openssl).
 
 Nota: las clases ya creadas en Google conservan el logo con el que se crearon (solo se actualiza el pase del cliente).
+
+### Otros pendientes (fuera de Wallet)
+- **Panel de administrador:** desplegado (commit `e2468c1`, migración 0009 aplicada). En producción hay 12 negocios
+  inventados (`demo_biz_*`, slugs `demo-*`) para ver cómo se ve; se borran con `supabase/demo/admin_demo_clean.sql`.
+- Cambiar la contraseña temporal del administrador en /admin → Mi cuenta.
+- Confirmar los precios supuestos de DeepSeek en `AI_PRICES` (`src/lib/domain/admin-insights.ts`).
 
 ### Notas
 - En `localhost` el guardado falla (Google descarga el logo y necesita una URL pública): probar en Preview de Vercel.
