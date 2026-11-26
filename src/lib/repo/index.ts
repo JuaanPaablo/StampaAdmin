@@ -3,7 +3,7 @@ import type {
   CustomerRow, DashboardData, Location, NewBusinessInput, NewStampCodeInput, Program, RangeKey,
   Redemption, Staff, StaffReportRow, StampCode, Role,
   AccessTokenInfo, AccessTokenKind, AdminAccount, AdminBusinessRow, BusinessSetupInput, BusinessStatus, CustomerCard,
-  IssuedToken, NewBusinessAccessInput, OtpRequestResult, Plan, PlatformSummary,
+  IssuedToken, NewBusinessAccessInput, OtpRequestResult, Plan, PlatformSummary, WalletKind,
   MarketingGeneration, MarketingKind, MarketingPhoto, MarketingUsage, NewMarketingGeneration,
   AdminAction, AdminBusinessDetail, AdminInsights, AdminPayment, NewAdminActionInput, NewPaymentInput
 } from '../contracts';
@@ -137,6 +137,8 @@ export interface Repo {
   /** Tarjetas de ese correo en todos los negocios ACTIVOS o suspendidos (las suspendidas se muestran congeladas). */
   listCustomerCards(email: string): Promise<CustomerCard[]>;
   getCustomerCard(businessId: string, customerId: string): Promise<CustomerCard | null>;
+  /** Marca en la ficha del cliente que agregó la tarjeta a su billetera (Apple o Google). */
+  setCustomerWallet(businessId: string, customerId: string, wallet: WalletKind): Promise<void>;
   /**
    * Alta desde la página pública: contacto = correo ya verificado. Si ya existe en ese negocio devuelve el existente.
    * Guarda emailVerifiedAt y consentAt.

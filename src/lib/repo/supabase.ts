@@ -880,6 +880,10 @@ export function createSupabaseRepo(): Repo {
       return cards.sort((a, b) => when(b) - when(a));
     },
 
+    async setCustomerWallet(businessId, customerId, wallet) {
+      must(await db.from('customers').update({ wallet }).eq('business_id', businessId).eq('id', customerId), 'Cliente');
+    },
+
     async getCustomerCard(businessId, customerId) {
       const [b, c] = await Promise.all([
         repo.getBusiness(businessId),

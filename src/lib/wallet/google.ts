@@ -74,7 +74,7 @@ export const classSuffix = (businessId: string) => `stampa_${safeId(businessId)}
  * Logo de la clase: Google lo descarga, así que debe ser una URL https pública. El respaldo sale siempre del dominio de
  * producción: las versiones de prueba de Vercel piden inicio de sesión y Google no podría bajarlo.
  */
-const FALLBACK_LOGO = 'https://stampaecu.app/apple-touch-icon.png';
+const FALLBACK_LOGO = 'https://stampaecu.app/wallet/logo-660.png';
 function logoUri(card: CustomerCard): string {
   const url = card.program.logoUrl;
   return url && /^https:\/\//.test(url) ? url : FALLBACK_LOGO;

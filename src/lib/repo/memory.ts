@@ -837,6 +837,11 @@ export function createMemoryRepo(opts: MemoryRepoOptions = {}): Repo {
       return out.sort((a, b) => when(b) - when(a));
     },
 
+    async setCustomerWallet(businessId, customerId, wallet) {
+      const c = findCustomer(businessId, customerId) ?? fail('No encontramos a ese cliente.');
+      c.wallet = wallet;
+    },
+
     async getCustomerCard(businessId, customerId) {
       const b = businesses.find((x) => x.id === businessId);
       const c = findCustomer(businessId, customerId);

@@ -52,9 +52,10 @@ export default async function CustomerPage({ params, searchParams }: Props) {
           {!sealed && searchParams.hola === '1' && <Notice tone="info" title={`¡Qué bueno verte, ${mine.customer.name.split(' ')[0]}!`} />}
           <LoyaltyCard card={mine} frozen={frozen} pop={sealed} claimSlot={<ClaimForm slug={business.slug} />} />
           {googleWalletButtonVisible() && (
+            // Botón oficial de Google (es-419, sin modificar): Google exige su imagen, mínimo 48 px de alto y 8 px libres.
             <a href={`/u/${encodeURIComponent(business.slug)}/wallet/google`} rel="nofollow"
-              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-black px-5 py-3 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-navy/40 focus-visible:ring-offset-2">
-              Agregar a Google Wallet
+              className="mx-auto block w-fit rounded-full p-2 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-navy/40">
+              <img src="/wallet/agregar-a-google-wallet.svg" alt="Agregar a Google Wallet" width={239} height={55} className="h-[55px] w-auto" />
             </a>
           )}
         </div>

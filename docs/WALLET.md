@@ -27,22 +27,18 @@ Objetivo: cuando el cliente se registra o abre su tarjeta, puede guardarla en Ap
   usa para realizar pruebas", que es la restricción del modo demo, no un fallo del código.
 
 ### Falta (en orden)
-1. **Autorizar el Gmail del Android de prueba** (es lo que bloquea ahora): en la consola de Wallet → Google Wallet API
-   → cuentas de prueba, o Usuarios → invitar como Desarrollador. Revisar en la pantalla de Google qué Gmail usa el
-   teléfono.
+Hecho el 2026-11-25: Google aprobó el acceso de publicación; la ficha del cliente guarda `wallet = 'google'` al tocar
+el botón; botón oficial de Google en español (`public/wallet/agregar-a-google-wallet.svg`, es-419, sin modificar);
+logo de respaldo de 660×660 (`public/wallet/logo-660.png`); revisión de seguridad del flujo de guardado.
+
+1. **Activar en Production:** `GOOGLE_WALLET_PUBLIC=on` en Vercel (Production) y volver a desplegar.
 2. **Probar todo en Android:** guardar el pase, sumar un sello desde Caja y ver que el pase se actualiza solo; canjear
    y ver que vuelve a empezar.
-3. **Guardar en la ficha que el cliente agregó la tarjeta** (`customers.wallet = 'google'`): hoy el campo existe pero
-   nada lo escribe. Necesita un método en el repo (memory y supabase).
-4. **Botón oficial de Google** ("Add to Google Wallet" en español, imagen de sus guías de marca) en lugar del botón
-   negro de texto: Google lo exige para aprobar la publicación.
-5. **Logo de la clase:** Google recomienda PNG cuadrado de 660×660. Hoy usa el logo del negocio o, si no hay,
-   `https://stampaecu.app/apple-touch-icon.png` (180 px).
-6. **Pedir acceso de publicación:** completar el perfil de negocio en la consola y enviar la solicitud. Cuando lo
-   aprueben, poner `GOOGLE_WALLET_PUBLIC=on` en **Production** y volver a desplegar (muestra el botón a todos).
-7. **Revisión de seguridad** (`/security-review`) antes de activar en Production.
-8. **Cercanía:** latitud y longitud por sucursal (migración + selector de mapa en Ajustes) y pasarlas al pase.
-9. **Apple Wallet** (después de Google): cuenta Apple Developer, `.pkpass` firmado y servicio web con APNs.
+3. **Tarjetas según el plan:** portada propia y cupones (Standard/Pro), avisos de campañas y niveles (Pro).
+4. **Cercanía:** latitud y longitud por sucursal (migración + selector de mapa en Ajustes) y pasarlas al pase.
+5. **Apple Wallet:** `.pkpass` firmado y servicio web con APNs (esperando aprobación de Apple Developer).
+
+Nota: las clases ya creadas en Google conservan el logo con el que se crearon (solo se actualiza el pase del cliente).
 
 ### Notas
 - En `localhost` el guardado falla (Google descarga el logo y necesita una URL pública): probar en Preview de Vercel.
